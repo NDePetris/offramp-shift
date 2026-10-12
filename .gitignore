@@ -1,0 +1,5 @@
+.tools/
+**/bin/
+**/obj/
+spikes/VirtualDesktop/artifacts/
+spikes/VirtualDesktop/local-bindings.json
