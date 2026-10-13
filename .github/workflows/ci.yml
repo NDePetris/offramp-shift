@@ -9,6 +9,27 @@ permissions:
   contents: read
 
 jobs:
+  core-monitoring:
+    name: Core monitoring engine (synthetic only)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pinned .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Build and run deterministic core checks
+        shell: pwsh
+        run: ./run.ps1 test
+
+      - name: Verify core formatting
+        shell: pwsh
+        run: ./run.ps1 format
+
   virtual-desktop-probe:
     name: Virtual desktop probe (automated only)
     runs-on: windows-latest

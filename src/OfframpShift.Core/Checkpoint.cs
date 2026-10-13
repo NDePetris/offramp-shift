@@ -1,0 +1,41 @@
+namespace OfframpShift.Core;
+
+// Store must atomically replace the entire checkpoint and report failures to its caller.
+// The integration must commit a transition before delivering its advisory effects.
+public interface ICheckpointStore
+{
+    MonitoringCheckpoint? Load();
+    void Save(MonitoringCheckpoint checkpoint);
+}
+
+public sealed record MonitoringCheckpoint(
+    int Version, DateTimeOffset SavedUtc, MonitoringConfiguration Configuration, EngineState State)
+{
+    public const int CurrentVersion = 1;
+
+    public bool IsValid(DateTimeOffset now)
+    {
+        if (Configuration is null || State is null) return false;
+        try { Configuration.Validate(); }
+        catch (ArgumentException) { return false; }
+        var s = State;
+        // Age alone never expires confirmed usage. Future/default metadata is unusable.
+        return Version == CurrentVersion && SavedUtc != default && SavedUtc <= now &&
+            Enum.IsDefined(s.Intervention) && s.Recovery == RecoveryStatus.Ready &&
+            s.UsageMs >= 0 && (s.Exhausted ? s.UsageMs > 0 : s.UsageMs < Configuration.AllowanceMs) &&
+            s.BreakProgressMs >= 0 && s.BreakProgressMs <= Configuration.RequiredBreakMs &&
+            s.BreakCompleted == (s.BreakProgressMs == Configuration.RequiredBreakMs) &&
+            (!s.BreakCompleted || s.UsageMs == 0) &&
+            s.IdleProgressMs >= 0 && s.IdleProgressMs <= Configuration.IdleThresholdMs &&
+            (!s.Paused || (s.BreakProgressMs == 0 && s.IdleProgressMs == 0)) &&
+            s.EffectSequence >= 0 &&
+            s.ReminderRemainingMs >= 0 && s.SnoozeRemainingMs >= 0 &&
+            (s.Exhausted
+                ? s.Intervention != InterventionState.Normal &&
+                    s.ReminderRemainingMs <= (s.Intervention == InterventionState.Grace ? Configuration.GraceMs : Configuration.RepeatNudgeMs) &&
+                    (s.Intervention == InterventionState.Snoozed
+                        ? s.ReminderRemainingMs == 0 && s.SnoozeRemainingMs > 0 && s.SnoozeRemainingMs <= Configuration.SnoozeMs
+                        : s.SnoozeRemainingMs == 0)
+                : s.Intervention == InterventionState.Normal && s.ReminderRemainingMs == 0 && s.SnoozeRemainingMs == 0);
+    }
+}
