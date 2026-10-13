@@ -1,6 +1,6 @@
 # PR 0C — focused Chrome discovery investigation
 
-**Concrete manifest-generation defect corrected; owner reports Chrome transport, binding, positive attribution and focus-away fallback passed. The reviewed local capture does not corroborate the positive attribution. Production website attribution and automatic desktop switching remain NO-GO.** This report supplements the initial Phase 1 evidence without overwriting PR 0B history or initial failed attempts. No full matrix, seamless-binding redesign or MVP implementation was performed.
+**Concrete manifest-generation defect corrected; Chrome transport and Bound were owner-reported, but positive domain attribution remains UNVERIFIED after the owner's clarification. The reviewed local capture contains no domains. Production website attribution and automatic desktop switching remain NO-GO.** This report supplements the initial Phase 1 evidence without overwriting PR 0B history or initial failed attempts. No full matrix, seamless-binding redesign or MVP implementation was performed.
 
 ## Owner-reported live failure
 
@@ -29,23 +29,23 @@ Reviewed the source tag matching the previously observed installed Chrome file v
 | New manifest regression against corrected generator | PASS for equal/distinct IDs, deduplication, exact origins, host/type/launcher preservation | JSON generation only; no browser launch |
 | Full BrowserAttribution validation outside sandbox | PASS, exit 0; zero build warnings/errors, 2,053 policy/protocol assertions, 5 mocked extension groups, syntax and synthetic transport checks | No real browser binding |
 | Browser control inventory | Only Codex in-app browser and MCP Apps | No callable Chrome/native UI for owner extension actions |
-| Corrected real Chrome retest | Owner-reported transport PASS, Bound, correct domain and focus-away null | Positive attribution not corroborated by reviewed capture; see below |
+| Corrected real Chrome retest | Transport PASS and Bound owner-reported; positive domain attribution UNVERIFIED | Owner later expressed uncertainty; reviewed capture has no domains |
 
 The registration regression runs under the existing browser test command, including its Windows CI job. It evaluates the real hashtable via PowerShell AST to avoid running surrounding file/registry operations; no helper service, registry fixture installation or new diagnostic framework was introduced. Historical PR 0B evidence and the VirtualDesktop tree remain unchanged.
 
 ## Owner-reported retest and local capture review
 
-The owner initially said the correction appeared to work, then explicitly confirmed: transport passed, popup reported Bound, domain matched the foreground test page, and focus-away returned null. Record these as **owner-reported manual passes**, not automated passes or independently certified window identity. No exact transition count, independent parent-HWND/ancestry attestation, or running Chrome version/channel was supplied with that confirmation. Edge remains untested in this focused follow-up.
+The owner initially said the correction appeared to work, then selected a response confirming transport passed, popup reported Bound, domain matched the foreground test page, and focus-away returned null. After the capture discrepancy was raised, the owner clarified that perhaps the domains were not successfully captured. Preserve that sequence, but do not retain a positive-domain PASS on the uncertain response. Transport and Bound remain owner-reported; successful real domain attribution is **UNVERIFIED**. No exact transition count, independent parent-HWND/ancestry attestation, or running Chrome version/channel was supplied. Edge remains untested in this focused follow-up.
 
 Independent read-only inspection found the current local manifest now has a one-element `allowed_origins` array. The latest documented retest capture, ignored `artifacts/chrome-retest-20261012-225819-213/observations.jsonl`, contained 1,695 observation lines, zero malformed lines, and **zero Chrome observations with a domain**. Its 468 nonbrowser observations also all had null domain. Polling lines are not controlled transitions. This capture therefore supports application-only behavior during its recorded intervals, not the reported positive attribution; do not turn its all-null result into a positive pass or a zero-error validation claim.
 
-A clarification request asks whether the owner witnessed the positive without saving it or used a different ignored capture, and asks for the running Chrome version/channel. No additional test is requested. Until reconciled, retain both the owner's positive report and this capture limitation. No actual domain values, raw captures, extension IDs or profile paths were copied into this report.
+The clarification did not identify an alternate positive capture or running version/channel. The available evidence cannot distinguish failed attribution from a successful observation outside the recorded interval. No additional test is requested. No actual domain values, raw captures, extension IDs or profile paths were copied into this report.
 
 ## Retest boundary and recommendation
 
-The [one Chrome retest](pr0c-chrome-discovery-retest.md) is documented, and the owner has reported its transport, binding, positive-domain and focus-away outcomes. Do not repeat it simply to resolve the capture discrepancy. Keep all domain-bearing evidence ignored locally. Native transport success alone is not domain/HWND attribution; a “Bound” response alone is not independent proof of parent HWND/ancestry.
+The [one Chrome retest](pr0c-chrome-discovery-retest.md) is documented, and the owner has reported transport and binding outcomes, with positive-domain uncertainty as recorded above. Do not repeat it simply to resolve the capture discrepancy. Keep all domain-bearing evidence ignored locally. Native transport success alone is not domain/HWND attribution; a “Bound” response alone is not independent proof of parent HWND/ancestry.
 
-The owner report supports initial Chrome feasibility after the schema correction, with the saved-evidence gap above. Stop for review now. It does not establish Phase 1 acceptance across both browsers, seamless binding, profile/window isolation or production reliability. Recommend keeping website attribution deferred from the MVP and considering application-level context with manual-first desktop control only in a separately authorized task.
+The evidence supports the concrete manifest correction and owner-reported progress through transport/binding, but does not establish real Chrome domain-to-HWND attribution. Stop for review now. Phase 1 acceptance, seamless binding, profile/window isolation and production reliability remain unestablished. Recommend keeping website attribution deferred from the MVP and considering application-level context with manual-first desktop control only in a separately authorized task.
 
 Do not add speculative launcher changes or repeated retries if discovery remains unresolved. Stop for review and recommend deferring website attribution if this corrected attempt cannot establish credible attribution. Binding failures must be reported with uncertainty; absent corroboration is not proof that the HWND architecture fundamentally failed. Do not substitute title/position/latest-report heuristics.
 
