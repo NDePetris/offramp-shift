@@ -1,0 +1,31 @@
+{
+  "date": "2026-10-12",
+  "windowsBuild": "26200.9457",
+  "displayVersion": "25H2",
+  "architecture": "X64",
+  "monitorCount": 2,
+  "administratorToken": false,
+  "sdk": "10.0.401",
+  "provider": "shell-com-53f5ca0b-spike-v1",
+  "interfaceReferenceRevision": "ceb648849dcc5760a7f4ed223308ffe3de0b51c6",
+  "buildWarnings": 0,
+  "buildErrors": 0,
+  "policyTestsPassed": 58,
+  "policyTestsFailed": 0,
+  "simulatedTopologyPermutations": 1000,
+  "workerIsolationTestsPassed": 3,
+  "liveRejectionTestsPassed": 7,
+  "liveRejectedRequestsAttemptingSwitch": 0,
+  "capturedReadOnlySnapshots": 20,
+  "independentTaskViewVisualCertification": false,
+  "switches": [
+    { "revision": "initial", "destination": "Work", "status": "Verified", "internalElapsedMs": 122, "totalElapsedMs": 802 },
+    { "revision": "initial", "destination": "Personal", "status": "Verified", "internalElapsedMs": 93, "totalElapsedMs": 831 },
+    { "revision": "final", "destination": "Work", "status": "Verified", "internalElapsedMs": 83, "totalElapsedMs": 758 },
+    { "revision": "final", "destination": "Personal", "status": "Verified", "internalElapsedMs": 82, "totalElapsedMs": 727 }
+  ],
+  "observedWrongDestinationGuids": 0,
+  "productionAutomaticSwitchingGo": false,
+  "manualMatrix": "pending",
+  "recommendation": "Proceed to PR 0B only after owner approval; retain desktop candidate with automatic-switch gate closed."
+}
