@@ -1,0 +1,17 @@
+{
+  "date": "2026-10-12",
+  "browserAttributionDecision": "NO-GO-pending-live-validation",
+  "automaticDesktopSwitchingDecision": "NO-GO-unchanged",
+  "baseCommit": "9d10a8e",
+  "branch": "codex/browser-attribution-feasibility",
+  "releaseBuild": { "passed": true, "warnings": 0, "errors": 0 },
+  "policyProtocolAssertions": { "passed": 2053, "simulated": true },
+  "extensionTestGroups": { "passed": 5, "mocked": true },
+  "syntheticTransport": { "passed": true, "outsideCodexSandbox": true, "actualBrowserCaller": false },
+  "liveNonbrowserForegroundSnapshotsOutsideSandbox": 1,
+  "chrome": { "simulatedTransitions": 250, "simulatedPositiveObservations": 250, "actualControlledTransitions": 0, "actualWrongDomainCount": null, "actualLatencyMs": null, "actualVisibility": null },
+  "edge": { "simulatedTransitions": 250, "simulatedPositiveObservations": 250, "actualControlledTransitions": 0, "actualWrongDomainCount": null, "actualLatencyMs": null, "actualVisibility": null },
+  "nativeRegistrationTestedWithBrowser": false,
+  "extensionInstalledInBrowser": false,
+  "pr3WebsiteIntegrationRecommended": false
+}
