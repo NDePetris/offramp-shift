@@ -12,14 +12,14 @@ internal static class Program
         assertions++;
         if (!EqualityComparer<T>.Default.Equals(expected, actual)) throw new InvalidOperationException($"Expected {expected}, got {actual}.");
     }
-    private static void True(bool value) => Equal(true, value);
-    private static void Fails(StorageFailure failure, Action action)
+    internal static void True(bool value) => Equal(true, value);
+    internal static void Fails(StorageFailure failure, Action action)
     {
         try { action(); }
         catch (CheckpointStorageException e) { Equal(failure, e.Failure); return; }
         throw new InvalidOperationException("Expected a typed storage failure.");
     }
-    private static void Test(string name, Action test)
+    internal static void Test(string name, Action test)
     {
         test();
         tests++;
@@ -28,6 +28,8 @@ internal static class Program
 
     private static int Main(string[] args)
     {
+        if (args is ["termination-worker", var mode, var directory]) return ProcessTermination.Worker(mode, directory);
+        if (args is ["termination-verify", var scenario, var storage]) return ProcessTermination.Verify(scenario, storage);
         if (args is ["lease", var path])
         {
             using var store = new SqliteCheckpointStore(path);
@@ -348,7 +350,10 @@ internal static class Program
                 True(!payload.Contains(f.Clock.Now.Epoch.ToString(), StringComparison.Ordinal));
                 Equal(4, JsonNode.Parse(payload)!.AsObject().Count);
             });
-            Console.WriteLine($"Persistence: {tests} tests, {assertions} assertions passed (real local SQLite; injected faults are simulations).");
+            ReviewRegressions.Run();
+            if (OperatingSystem.IsWindows()) ProcessTermination.Run();
+            else Console.WriteLine("Windows process-termination checks NOT RUN on this platform.");
+            Console.WriteLine($"Persistence: {tests} tests, {assertions} assertions passed (real local SQLite; exception injection and forced termination reported separately).");
             return 0;
         }
         catch (Exception e) { Console.Error.WriteLine(e); return 1; }
@@ -403,9 +408,11 @@ internal static class Program
             cp with { Configuration = cp.Configuration with { AllowanceMs = 0 } }
         })
         {
-            Fails(StorageFailure.InvalidPayload, () => CheckpointCodec.Encode(invalid, f.Clock.UtcNow));
+            var category = invalid.SavedUtc > f.Clock.UtcNow && invalid.IsValid(invalid.SavedUtc)
+                ? StorageFailure.ClockUnavailable : StorageFailure.InvalidPayload;
+            Fails(category, () => CheckpointCodec.Encode(invalid, f.Clock.UtcNow));
             var serialized = System.Text.Json.JsonSerializer.Serialize(invalid);
-            Fails(StorageFailure.InvalidPayload, () => CheckpointCodec.Decode(serialized, f.Clock.UtcNow));
+            Fails(category, () => CheckpointCodec.Decode(serialized, f.Clock.UtcNow));
         }
         f.Initialize();
         foreach (var bad in new[] { "{", "{}", System.Text.Json.JsonSerializer.Serialize(cp with { State = cp.State with { UsageMs = -1 } }) })

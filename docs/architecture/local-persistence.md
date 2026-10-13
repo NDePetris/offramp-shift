@@ -41,6 +41,18 @@ unsupported versions become Incompatible. Unusable storage requires explicit
 reinitialization; busy/access failures retain the pending commit for another
 explicit retry. There is no application retry loop.
 
+Unexpected exceptions during transition/capture/save also fail closed. If capture
+did not complete, the session is Blocked and must be disposed/reopened to restore
+the last durable checkpoint; it never publishes mutated memory. If an exact
+checkpoint was captured, it remains pending for explicit retry. Retry tracks Save
+acknowledgment separately from restoration, so a later clock/restore exception
+cannot cause a second replacement of an already acknowledged checkpoint. A fresh
+Load rechecks revision/payload before restoration.
+
+The session rejects same-thread reentry from host clock getters, including state
+reads, nested commands and disposal. C# Monitor locks are reentrant, so the gate
+alone cannot protect these paths. Other threads still serialize through the gate.
+
 After retry success, restore the committed checkpoint through Core. Partial
 break/idle continuity and old monotonic evidence are discarded; confirmed usage,
 configuration, pause, suppression, timer remainders, completed-break latch and
@@ -79,10 +91,21 @@ before startup becomes Ready. Later access changes still fail closed on Save.
 The codec explicitly requires every version-1 field at every object level. It
 rejects duplicate/unknown/missing fields, null required values, incorrect JSON
 types, unsupported versions, invalid configuration, inconsistent domain state,
-default/future/non-UTC save metadata. Configuration defaults cannot fill gaps.
+default/non-UTC save metadata. Future timestamps are still rejected for restoration
+and writes, but otherwise domain-valid future metadata produces ClockUnavailable
+rather than InvalidPayload. Configuration defaults cannot fill gaps.
 Unknown versions are rejected before applying the version-1 layout. Public
 diagnostics contain only failure categories, never payloads, SQL or underlying
 exception text.
+
+A backward host UTC change can make previously committed metadata appear future.
+Startup then becomes Blocked, with destructive Reinitialize unavailable. Correct
+the host clock and dispose/reopen; a pending Save may be explicitly retried once
+the clock permits validation. No timestamp is rewritten, no checkpoint is accepted
+while future, and Core's IsValid/Restore contract is unchanged. A genuinely invalid
+domain checkpoint remains InvalidPayload even if its timestamp is also future.
+There is no way to prove why a structurally valid timestamp is future from this
+store alone; temporarily blocking either case is the conservative choice.
 
 ## Lease, initialization and recovery
 
@@ -107,10 +130,12 @@ operation produces replacement state and one checkpoint. The store retains its
 lease, with all connections closed, and performs the following protocol:
 
 1. Refuse detectable unsupported versions, including a version changed since
-   startup. Create a unique local `recovery-<guid>` directory.
+   startup. Choose a unique local `recovery-<guid>` directory name.
 2. Preserve an earlier recovery intent, if present, then write and flush
    `recovery.pending` containing the new archive directory name. It is durable
-   intent, not permission to resume automatically.
+   intent, not permission to resume automatically. For a new recovery, intent
+   precedes even archive directory creation; an earlier intent protects that
+   operation when an old intent must first be copied.
 3. Copy and flush the original database, journal/WAL/SHM companions and marker
    bytes into the archive. Flush its `preserved` record only after all copies
    succeed. If copying fails, keep original database/companion/marker files
@@ -121,10 +146,14 @@ lease, with all connections closed, and performs the following protocol:
 5. Restore the new committed checkpoint before publishing Ready.
 
 Recovery preflight uses a read-only connection so it does not roll back a journal
-in originals before archiving. If SQLite reports READONLY_ROLLBACK, only its fixed
-header version is checked without opening for writes; inaccessible payload history
-is preserved and abandoned only by explicit recovery. Detectable unsupported
-versions cannot be reinitialized. No archived checkpoint is automatically restored.
+in originals before archiving. If SQLite reports READONLY_ROLLBACK, its fixed
+header version is checked, then all originals are preserved before SQLite recovers
+a separate disposable copy in the archive's `journal-validation` subdirectory.
+That copy is checked for storage/domain compatibility before originals may be
+replaced. A future domain version obscured by a journal cannot bypass rejection.
+Original archive bytes remain unchanged; validation copies are retained locally
+with the archive. Detectable unsupported versions cannot be reinitialized. No
+archived checkpoint is automatically restored into active storage.
 
 Any recovery intent on startup, even malformed/empty, requires recovery. Surviving
 recovery directories with missing active artifacts also block first-launch
@@ -146,9 +175,11 @@ permissions remain the host's responsibility.
 SQLite durability and flushed marker/copy contents remain conditional on the
 filesystem and hardware honoring flushes. Multi-file initialization/recovery is
 guarded by intent rather than one filesystem transaction. Directory-entry
-durability, sudden process termination, reboot, actual power loss, disk-full and
-hardware faults need separate live validation. Injected exceptions execute normal
-disposal/rollback; they do not prove crash or power-loss behavior. Local filesystems
+durability, reboot, actual power loss, disk-full and hardware faults need separate
+live validation. Synchronized Windows process termination has been exercised at
+the documented barriers; mid-system-call/native-COMMIT termination remains untested.
+Injected exceptions execute normal disposal/rollback; they do not prove crash or
+power-loss behavior. Local filesystems
 that honor the lease and SQLite locking are assumed; remote/cloud-backed folders
 are not validated.
 

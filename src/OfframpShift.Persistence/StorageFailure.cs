@@ -3,7 +3,8 @@ namespace OfframpShift.Persistence;
 public enum StorageFailure
 {
     MissingEstablishedState, InvalidPayload, Corruption, UnsupportedVersion,
-    AccessFailure, Busy, StaleRevision, UncertainCommit, InterruptedRecovery
+    AccessFailure, Busy, StaleRevision, UncertainCommit, InterruptedRecovery,
+    ClockUnavailable, UnexpectedFailure
 }
 
 // Never include SQL, paths, serialized contents, or underlying exception messages.

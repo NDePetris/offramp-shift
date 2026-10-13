@@ -62,10 +62,14 @@ public static class CheckpointCodec
         return values;
     }
 
-    private static void Validate(MonitoringCheckpoint checkpoint, DateTimeOffset now)
+    internal static void Validate(MonitoringCheckpoint checkpoint, DateTimeOffset now)
     {
         if (checkpoint.Version != MonitoringCheckpoint.CurrentVersion) throw new CheckpointStorageException(StorageFailure.UnsupportedVersion);
-        if (!checkpoint.IsValid(now) || checkpoint.SavedUtc.Offset != TimeSpan.Zero) throw Invalid();
+        // Check structure/domain consistency first. A future timestamp alone may
+        // be a backward host clock adjustment; it still cannot be restored now.
+        if (checkpoint.SavedUtc == default || checkpoint.SavedUtc.Offset != TimeSpan.Zero ||
+            !checkpoint.IsValid(checkpoint.SavedUtc)) throw Invalid();
+        if (!checkpoint.IsValid(now)) throw new CheckpointStorageException(StorageFailure.ClockUnavailable);
     }
 
     private static CheckpointStorageException Invalid() => new(StorageFailure.InvalidPayload);

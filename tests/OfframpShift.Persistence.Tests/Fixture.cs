@@ -5,7 +5,9 @@ using OfframpShift.Persistence;
 internal sealed class Clock : IMonitoringClock
 {
     public MonotonicTime Now { get; set; } = new(Guid.NewGuid(), 0);
-    public DateTimeOffset UtcNow { get; set; } = new(2026, 10, 13, 12, 0, 0, TimeSpan.Zero);
+    private DateTimeOffset utcNow = new(2026, 10, 13, 12, 0, 0, TimeSpan.Zero);
+    public Func<DateTimeOffset, DateTimeOffset>? UtcRead { get; set; }
+    public DateTimeOffset UtcNow { get => UtcRead?.Invoke(utcNow) ?? utcNow; set => utcNow = value; }
     public MonitoringObservation Interval(long duration, DesktopScope desktop = DesktopScope.Personal,
         InputState input = InputState.Active, EvidenceConfidence confidence = EvidenceConfidence.Confirmed)
     {

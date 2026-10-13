@@ -136,7 +136,7 @@ public sealed class SqliteCheckpointStore : ICheckpointStore, IDisposable
                 committedPayload = payload;
                 pendingPayload = null;
             }
-            catch (Exception e) when (IsStorageError(e))
+            catch (Exception e) when (e is not CheckpointStorageException)
             {
                 // Once COMMIT is attempted, conservatively retain exact retry identity.
                 if (commitStarted)
@@ -144,7 +144,7 @@ public sealed class SqliteCheckpointStore : ICheckpointStore, IDisposable
                     pendingPayload = payload;
                     throw new CheckpointStorageException(StorageFailure.UncertainCommit);
                 }
-                throw Map(e);
+                throw IsStorageError(e) ? Map(e) : new CheckpointStorageException(StorageFailure.UnexpectedFailure);
             }
         }
     }
@@ -158,24 +158,38 @@ public sealed class SqliteCheckpointStore : ICheckpointStore, IDisposable
             var payload = CheckpointCodec.Encode(checkpoint, utcNow());
             try
             {
-                EnsureRecoveryCompatible();
+                var requiresJournalValidation = EnsureRecoveryCompatible(directory);
                 var archiveName = "recovery-" + Guid.NewGuid().ToString("N");
                 // Intent is flushed before any original is removed. A previous intent
                 // is itself preserved, never interpreted as permission to resume.
                 var originals = Artifacts.Where(name => Present(PathFor(name))).ToArray();
                 var archive = PathFor(archiveName);
-                Directory.CreateDirectory(archive);
                 // Preserve a previous recovery intent before replacing it. Establish
                 // the new intent before even the preservation phase can be interrupted.
                 if (originals.Contains(RecoveryName))
+                {
+                    Directory.CreateDirectory(archive);
                     CopyFlushed(PathFor(RecoveryName), Path.Combine(archive, RecoveryName));
+                }
                 WriteFlushed(PathFor(RecoveryName), archiveName + "\n", FileMode.Create);
+                Directory.CreateDirectory(archive);
                 Fault?.Invoke(StorageFault.BeforePreservation);
                 foreach (var name in originals.Where(name => name != RecoveryName))
                 {
                     CopyFlushed(PathFor(name), Path.Combine(archive, name));
                 }
                 WriteFlushed(Path.Combine(archive, "preserved"), "Original artifacts preserved.\n", FileMode.CreateNew);
+                if (requiresJournalValidation)
+                {
+                    // Recover only a disposable copy. Archives remain byte-for-byte
+                    // originals, and future domain versions hidden by a hot journal
+                    // cannot bypass the compatibility guard.
+                    var validation = Path.Combine(archive, "journal-validation");
+                    Directory.CreateDirectory(validation);
+                    foreach (var name in originals.Where(name => name.StartsWith(DatabaseName, StringComparison.Ordinal)))
+                        CopyFlushed(Path.Combine(archive, name), Path.Combine(validation, name));
+                    EnsureRecoveryCompatible(validation, recoverJournal: true);
+                }
                 Fault?.Invoke(StorageFault.AfterPreservation);
                 foreach (var name in originals.Where(name => name != RecoveryName)) File.Delete(PathFor(name));
                 expectedRevision = 0;
@@ -194,20 +208,23 @@ public sealed class SqliteCheckpointStore : ICheckpointStore, IDisposable
     {
         // Refuse accidental replacement even if the marker survived interrupted init.
         using (new FileStream(PathFor(DatabaseName), FileMode.CreateNew, FileAccess.Write, FileShare.None)) { }
-        using var connection = Open(true);
-        using var transaction = connection.BeginTransaction(deferred: false);
-        Execute(connection, transaction, $"PRAGMA application_id={ApplicationId}; PRAGMA user_version=1; {Schema};");
-        Fault?.Invoke(StorageFault.BeforeUpdate);
-        Replace(connection, transaction, 1, payload, true);
-        Fault?.Invoke(StorageFault.AfterUpdate);
+        var commitStarted = false;
         try
         {
+            using var connection = Open(true);
+            using var transaction = connection.BeginTransaction(deferred: false);
+            Execute(connection, transaction, $"PRAGMA application_id={ApplicationId}; PRAGMA user_version=1; {Schema};");
+            Fault?.Invoke(StorageFault.BeforeUpdate);
+            Replace(connection, transaction, 1, payload, true);
+            Fault?.Invoke(StorageFault.AfterUpdate);
+            commitStarted = true;
             transaction.Commit();
             Fault?.Invoke(StorageFault.AfterCommit);
         }
-        catch (Exception e) when (IsStorageError(e))
+        catch (Exception e) when (e is not CheckpointStorageException)
         {
-            throw new CheckpointStorageException(StorageFailure.UncertainCommit);
+            if (commitStarted) throw new CheckpointStorageException(StorageFailure.UncertainCommit);
+            throw IsStorageError(e) ? Map(e) : new CheckpointStorageException(StorageFailure.UnexpectedFailure);
         }
         expectedRevision = 1;
         committedPayload = payload;
@@ -323,15 +340,17 @@ public sealed class SqliteCheckpointStore : ICheckpointStore, IDisposable
         probe.Flush(flushToDisk: true);
     }
 
-    private void EnsureRecoveryCompatible()
+    private bool EnsureRecoveryCompatible(string sourceDirectory, bool recoverJournal = false)
     {
-        if (!Present(PathFor(DatabaseName))) return;
+        var source = Path.Combine(sourceDirectory, DatabaseName);
+        if (!Present(source)) return false;
+        RejectFutureHeader(source);
         try
         {
             using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
             {
-                DataSource = PathFor(DatabaseName),
-                Mode = SqliteOpenMode.ReadOnly,
+                DataSource = source,
+                Mode = recoverJournal ? SqliteOpenMode.ReadWrite : SqliteOpenMode.ReadOnly,
                 Cache = SqliteCacheMode.Private,
                 Pooling = false,
                 DefaultTimeout = 1
@@ -347,18 +366,26 @@ public sealed class SqliteCheckpointStore : ICheckpointStore, IDisposable
         }
         // A corrupt database is recoverable; an incompatible readable one is not.
         catch (SqliteException e) when (e.SqliteErrorCode is 1 or 11 or 26) { }
-        catch (SqliteException e) when (e.SqliteExtendedErrorCode == 776)
+        catch (SqliteException e) when (e.SqliteExtendedErrorCode == 776 && !recoverJournal)
         {
-            // SQLITE_READONLY_ROLLBACK: never recover a journal in the originals
-            // during preservation preflight. Still reject a known future header.
-            using var file = new FileStream(PathFor(DatabaseName), FileMode.Open, FileAccess.Read, FileShare.Read);
-            Span<byte> header = new byte[100];
-            if (file.ReadAtLeast(header, header.Length, throwOnEndOfStream: false) == header.Length &&
-                header[..16].SequenceEqual("SQLite format 3\0"u8))
-            {
-                var version = BinaryPrimitives.ReadInt32BigEndian(header[60..64]);
-                if (version is not 0 and not 1) throw new CheckpointStorageException(StorageFailure.UnsupportedVersion);
-            }
+            // SQLITE_READONLY_ROLLBACK: defer payload inspection until originals
+            // have been archived and SQLite can recover a disposable copy.
+            return true;
+        }
+        return false;
+    }
+
+    private static void RejectFutureHeader(string source)
+    {
+        // Reject a known future storage version even when damaged schema/journals
+        // prevent SQLite from evaluating PRAGMA user_version.
+        using var file = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read);
+        Span<byte> header = stackalloc byte[100];
+        if (file.ReadAtLeast(header, header.Length, throwOnEndOfStream: false) == header.Length &&
+            header[..16].SequenceEqual("SQLite format 3\0"u8))
+        {
+            var version = BinaryPrimitives.ReadInt32BigEndian(header[60..64]);
+            if (version is not 0 and not 1) throw new CheckpointStorageException(StorageFailure.UnsupportedVersion);
         }
     }
 
