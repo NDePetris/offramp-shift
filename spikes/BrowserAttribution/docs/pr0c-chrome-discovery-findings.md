@@ -41,6 +41,12 @@ Independent read-only inspection found the current local manifest now has a one-
 
 The clarification did not identify an alternate positive capture or running version/channel. The available evidence cannot distinguish failed attribution from a successful observation outside the recorded interval. No additional test is requested. No actual domain values, raw captures, extension IDs or profile paths were copied into this report.
 
+## Subsequent stable-page positive test
+
+The owner requested one more test and was given a fresh-capture, single-window Chrome procedure: reload after monitor startup, load a stable benign test page, bind once, then leave the browser foreground for ten seconds. The owner returned **524 Chrome observations, zero expected-domain observations and zero unexpected-domain observations** from the prescribed capture summary. The popup status, running browser version/channel and actual interval duration were not supplied with these counts.
+
+This attempt **fails the positive-attribution criterion**. All reported Chrome domains were null; no recorded observation establishes website visibility. Zero unexpected domains in an all-null run is not an attribution safety pass. The counts are polling observations, not 524 controlled transitions. These owner-reported counts do not identify the failure boundary or prove that the architecture is fundamentally unreliable. No new code, diagnostics or further test was initiated in response. Historical reports and earlier owner uncertainty remain preserved above.
+
 ## Retest boundary and recommendation
 
 The [one Chrome retest](pr0c-chrome-discovery-retest.md) is documented, and the owner has reported transport and binding outcomes, with positive-domain uncertainty as recorded above. Do not repeat it simply to resolve the capture discrepancy. Keep all domain-bearing evidence ignored locally. Native transport success alone is not domain/HWND attribution; a “Bound” response alone is not independent proof of parent HWND/ancestry.
