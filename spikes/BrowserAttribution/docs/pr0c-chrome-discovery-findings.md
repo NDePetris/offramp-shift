@@ -1,6 +1,6 @@
 # PR 0C — focused Chrome discovery investigation
 
-**Concrete manifest-generation defect corrected; real Chrome retest pending. Production website attribution and automatic desktop switching remain NO-GO.** This report supplements the initial Phase 1 evidence without overwriting PR 0B history or initial failed attempts. No full matrix, seamless-binding redesign or MVP implementation was performed.
+**Concrete manifest-generation defect corrected; owner reports Chrome transport, binding, positive attribution and focus-away fallback passed. The reviewed local capture does not corroborate the positive attribution. Production website attribution and automatic desktop switching remain NO-GO.** This report supplements the initial Phase 1 evidence without overwriting PR 0B history or initial failed attempts. No full matrix, seamless-binding redesign or MVP implementation was performed.
 
 ## Owner-reported live failure
 
@@ -17,7 +17,7 @@ The corrected expression wraps the deduplicated output in `@(...)`. It retains o
 Reviewed the source tag matching the previously observed installed Chrome file version, `154.0.8037.98`. That file-version observation is not independent confirmation of the owner's running version/channel.
 
 - [Manifest parser, `NativeMessagingHostManifest::Parse`](https://raw.githubusercontent.com/chromium/chromium/154.0.8037.98/chrome/browser/extensions/api/messaging/native_messaging_host_manifest.cc): `allowed_origins` must be a list of strings. A string fails parsing even when it contains the correct extension origin. The host name and `stdio` type used here satisfy the inspected checks.
-- [Common launch path, `LaunchInBackground`](https://raw.githubusercontent.com/chromium/chromium/154.0.8037.98/chrome/browser/extensions/api/messaging/launch_context.cc): manifest-load failure returns `RESULT_NOT_FOUND`. Origin authorization is checked later; launcher existence is also checked before process creation. Thus a schema failure explains “host not found” without a missing registry key/file. This is a source-backed explanation, not yet a successful real-browser retest.
+- [Common launch path, `LaunchInBackground`](https://raw.githubusercontent.com/chromium/chromium/154.0.8037.98/chrome/browser/extensions/api/messaging/launch_context.cc): manifest-load failure returns `RESULT_NOT_FOUND`. Origin authorization is checked later; launcher existence is also checked before process creation. Thus a schema failure explains “host not found” without a missing registry key/file. The source explanation and the owner's subsequent retest report are distinct evidence.
 - [Error mapping, `OnHostProcessLaunched`](https://raw.githubusercontent.com/chromium/chromium/154.0.8037.98/chrome/browser/extensions/api/messaging/native_message_process_host.cc): `RESULT_NOT_FOUND` maps to the native host not-found error; process-start failure has a separate result/error.
 - [Windows discovery and launch](https://raw.githubusercontent.com/chromium/chromium/154.0.8037.98/chrome/browser/extensions/api/messaging/launch_context_win.cc): when permitted, lookup tries HKCU before HKLM and the 32-bit view before the 64-bit view. The manifest registry path must be absolute. The non-executable launch path invokes `COMSPEC`; direct executable launch is conditional on `.exe` and configuration. The existing `.cmd` wrapper is therefore not inherently rejected as an unsupported host type. Host arguments include extension origin and parent HWND; the working directory is the launcher's directory. No evidence justifies replacing the wrapper, adding registry locations or changing parent-HWND checks in this attempt.
 
@@ -29,13 +29,23 @@ Reviewed the source tag matching the previously observed installed Chrome file v
 | New manifest regression against corrected generator | PASS for equal/distinct IDs, deduplication, exact origins, host/type/launcher preservation | JSON generation only; no browser launch |
 | Full BrowserAttribution validation outside sandbox | PASS, exit 0; zero build warnings/errors, 2,053 policy/protocol assertions, 5 mocked extension groups, syntax and synthetic transport checks | No real browser binding |
 | Browser control inventory | Only Codex in-app browser and MCP Apps | No callable Chrome/native UI for owner extension actions |
-| One corrected real Chrome transport/binding attempt | PENDING owner interaction | No positive attribution claimed |
+| Corrected real Chrome retest | Owner-reported transport PASS, Bound, correct domain and focus-away null | Positive attribution not corroborated by reviewed capture; see below |
 
 The registration regression runs under the existing browser test command, including its Windows CI job. It evaluates the real hashtable via PowerShell AST to avoid running surrounding file/registry operations; no helper service, registry fixture installation or new diagnostic framework was introduced. Historical PR 0B evidence and the VirtualDesktop tree remain unchanged.
 
+## Owner-reported retest and local capture review
+
+The owner initially said the correction appeared to work, then explicitly confirmed: transport passed, popup reported Bound, domain matched the foreground test page, and focus-away returned null. Record these as **owner-reported manual passes**, not automated passes or independently certified window identity. No exact transition count, independent parent-HWND/ancestry attestation, or running Chrome version/channel was supplied with that confirmation. Edge remains untested in this focused follow-up.
+
+Independent read-only inspection found the current local manifest now has a one-element `allowed_origins` array. The latest documented retest capture, ignored `artifacts/chrome-retest-20261012-225819-213/observations.jsonl`, contained 1,695 observation lines, zero malformed lines, and **zero Chrome observations with a domain**. Its 468 nonbrowser observations also all had null domain. Polling lines are not controlled transitions. This capture therefore supports application-only behavior during its recorded intervals, not the reported positive attribution; do not turn its all-null result into a positive pass or a zero-error validation claim.
+
+A clarification request asks whether the owner witnessed the positive without saving it or used a different ignored capture, and asks for the running Chrome version/channel. No additional test is requested. Until reconciled, retain both the owner's positive report and this capture limitation. No actual domain values, raw captures, extension IDs or profile paths were copied into this report.
+
 ## Retest boundary and recommendation
 
-Use the [one Chrome retest](pr0c-chrome-discovery-retest.md): preserve the old manifest, regenerate with real IDs, verify array shape, receive one genuine browser-launched challenge, then attempt one popup binding and positive domain observation if transport passes. Keep all domain-bearing evidence ignored locally. Native transport success alone is not domain/HWND attribution; a “Bound” response alone is not independent proof of parent HWND/ancestry.
+The [one Chrome retest](pr0c-chrome-discovery-retest.md) is documented, and the owner has reported its transport, binding, positive-domain and focus-away outcomes. Do not repeat it simply to resolve the capture discrepancy. Keep all domain-bearing evidence ignored locally. Native transport success alone is not domain/HWND attribution; a “Bound” response alone is not independent proof of parent HWND/ancestry.
+
+The owner report supports initial Chrome feasibility after the schema correction, with the saved-evidence gap above. Stop for review now. It does not establish Phase 1 acceptance across both browsers, seamless binding, profile/window isolation or production reliability. Recommend keeping website attribution deferred from the MVP and considering application-level context with manual-first desktop control only in a separately authorized task.
 
 Do not add speculative launcher changes or repeated retries if discovery remains unresolved. Stop for review and recommend deferring website attribution if this corrected attempt cannot establish credible attribution. Binding failures must be reported with uncertainty; absent corroboration is not proof that the HWND architecture fundamentally failed. Do not substitute title/position/latest-report heuristics.
 
