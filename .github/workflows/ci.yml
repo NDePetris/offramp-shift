@@ -72,3 +72,25 @@ jobs:
         run: |
           $env:DOTNET_ROOT = Split-Path (Get-Command dotnet).Source -Parent
           ./spikes/BrowserAttribution/run.ps1 test
+
+  windows-observation-probe:
+    name: Windows observation probe (synthetic only)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pinned .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      # Deterministic tests and formatting only; no live commands or desktop COM.
+      - name: Build and run synthetic observation tests
+        shell: pwsh
+        run: ./spikes/WindowsObservation/run.ps1 test
+
+      - name: Verify observation probe formatting
+        shell: pwsh
+        run: ./spikes/WindowsObservation/run.ps1 format
