@@ -2,7 +2,7 @@
 
 Offramp Shift is an early-stage, local-first Windows application concept for helping users keep personal and work contexts separate. It is part of the Offramp family, alongside Offramp Fade for Android.
 
-**Current state: an independently tested monitoring domain engine and isolated feasibility probes.** There is no Windows monitoring adapter or production tray app, and no approved automatic switching or production website attribution.
+**Current state: an independently tested monitoring domain engine, transactional local checkpoint persistence and isolated feasibility probes.** There is no Windows monitoring adapter or production tray app, and no approved automatic switching or production website attribution.
 
 ## Development
 
@@ -19,12 +19,15 @@ Offramp Shift is an early-stage, local-first Windows application concept for hel
 
 CI uses these automated test commands on Windows runners, with Node.js 24 for the browser probe. Browser tests use mocked extension APIs and synthetic native callers; neither job interacts with a live browser or switches desktops. CI cannot establish actual virtual-desktop or browser-to-window compatibility.
 
-The core targets platform-independent `net10.0` and uses synthetic observations and a fake clock. Its PowerShell runner follows the probes' package-free build conventions; it performs no Windows integration. See [core monitoring architecture](docs/architecture/core-monitoring.md) for certified interval, advisory intervention, and recovery contracts.
+Core and persistence target platform-independent `net10.0`. Core tests use synthetic observations and a fake clock; persistence tests use real temporary SQLite databases and injected interruption faults. The root runner builds/tests both projects and verifies their formatting. Persistence introduces pinned Microsoft.Data.Sqlite with bundled native SQLite and locked transitive dependencies; initial restore/audit needs NuGet access, and subsequent locked restores can use cached packages. No runtime network or Windows monitoring integration is added. See [core monitoring architecture](docs/architecture/core-monitoring.md), [local persistence architecture](docs/architecture/local-persistence.md) and [dependency notices](THIRD-PARTY-NOTICES.md).
 
 ## Architecture and decisions
 
 - [Virtual-desktop feasibility results](spikes/VirtualDesktop/docs/pr0-results.md)
 - [Core monitoring domain architecture](docs/architecture/core-monitoring.md)
+- [Transactional local persistence architecture](docs/architecture/local-persistence.md)
+- [Local storage decision](docs/decisions/local-storage.md)
+- [PR 2 validation and remaining durability checks](docs/validation/pr2-persistence.md)
 - [Manual Windows validation plan](spikes/VirtualDesktop/docs/manual-validation.md)
 - [Browser-attribution feasibility probe](spikes/BrowserAttribution/README.md)
 - [PR 0C Phase 1 owner-assisted smoke test](spikes/BrowserAttribution/docs/pr0c-phase1-smoke.md)

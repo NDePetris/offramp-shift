@@ -12,8 +12,9 @@ attribution remain **NO-GO**; see their existing validation documents.
 immutable `EngineState` and `TransitionResult` values. It does not run callbacks,
 poll, schedule timers, deliver notifications, or perform storage I/O. A future
 adapter supplies `IMonitoringClock` and immutable `MonitoringObservation` values.
-An integration must serialize the whole observe/command, checkpoint, and effect
-delivery transaction, not only individual coordinator calls. Do not run a second
+An integration must serialize the whole observe/command and checkpoint commit,
+not only individual coordinator calls. PR 2's durable session returns effects
+after commit; the future host orders delivery outside the session lock. Do not run a second
 observation between capturing a transition and saving its matching checkpoint.
 
 `ApplicationClassifier` uses an adapter-verified, stable opaque application key
@@ -119,8 +120,8 @@ and suppress obsolete effects if current monitoring no longer supports them.
 checkpoint stores configuration, confirmed usage/exhaustion, break progress and
 completion latch, pause, intervention timer remainders, effect sequence, and UTC
 save metadata. It stores no observation history, foreground identity, clock
-epoch, Windows handle, COM object, or absolute reminder deadline. No concrete
-persistence implementation is included.
+epoch, Windows handle, COM object, or absolute reminder deadline. PR 2 adds a concrete
+[SQLite implementation and durable session](local-persistence.md) outside Core.
 
 Any accounting or durable state change requires a checkpoint: usage, break/idle
 progress or invalidation, reset, exhaustion/nudge, pause/resume, snooze/expiry,
@@ -154,26 +155,26 @@ file fallback. Exhaustion of the effect sequence also requires explicit recovery
 
 Persist-before-deliver gives at-most-once advisory delivery across restart when
 the integration follows the contract: a crash after commit but before delivery
-may lose a reminder. Exactly-once notification delivery, storage corruption
-handling/serialization, and preserving changes never committed before a crash
-are outside this PR. Storage implementations must report load/parse failures,
+may lose a reminder. Exactly-once notification delivery and preserving changes
+never committed before a crash remain outside scope. PR 2 supplies storage
+corruption handling and strict serialization. Storage implementations must report load/parse failures,
 validate input, and avoid substituting a fresh first run on errors.
 
 ## Validation and remaining integration work
 
-Run `./run.ps1 test` for the package-free synthetic harness, and
+Run `./run.ps1 test` for the synthetic Core harness and real local SQLite tests, and
 `./run.ps1 format` for SDK formatting verification. Release builds enable SDK
-analyzers and warnings-as-errors. Tests use a fake clock with no elapsed waiting,
+analyzers and warnings-as-errors. Core tests use a fake clock with no elapsed waiting,
 OS access, browsers, or UI; generated sequences check invariants as well as exact
 boundaries, recovery failures, and the representative 30-minute session.
 
 Existing validation remains `./spikes/VirtualDesktop/run.ps1 test` and
 `./spikes/BrowserAttribution/run.ps1 test`. Those are fake, mocked, and synthetic
 transport checks, not live Windows compatibility evidence. CI adds a separate
-core job without changing either probe job or feasibility gate.
+core job, now extended narrowly for persistence, without changing either probe job or feasibility gate.
 
-The next slice is adapter observation/certification and transactional local
-storage integration, followed by advisory UI. Stable application identity,
+PR 2 supplies transactional local storage integration. The next slice is adapter
+observation/certification, followed by advisory UI. Stable application identity,
 foreground/session/idle coverage, missed events, elevated apps, pinned windows,
 lock/suspend, shell restart, and monitor configurations require separate live
 Windows validation. Neither successful core simulations nor future adapter work
