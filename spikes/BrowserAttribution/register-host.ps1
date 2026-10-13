@@ -34,7 +34,8 @@ if (Test-Path -LiteralPath (Join-Path $runtime 'dotnet.exe')) {
     $launcher = Join-Path $artifactRoot 'host.cmd'
     @('@echo off', "set `"DOTNET_ROOT=$runtime`"", "`"$exe`" %*") | Set-Content -LiteralPath $launcher -Encoding ascii
 }
-@{ name=$name; description='Offramp Shift PR 0B only'; path=$launcher; type='stdio'; allowed_origins=@("chrome-extension://$ChromeId/", "chrome-extension://$EdgeId/") | Select-Object -Unique } |
+# Keep a JSON array even when both browsers load the same extension ID.
+@{ name=$name; description='Offramp Shift PR 0B only'; path=$launcher; type='stdio'; allowed_origins=@(@("chrome-extension://$ChromeId/", "chrome-extension://$EdgeId/") | Select-Object -Unique) } |
     ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $manifestPath -Encoding utf8NoBOM
 foreach ($subkey in $keys) {
     $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($subkey)

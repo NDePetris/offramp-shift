@@ -29,6 +29,8 @@ CI uses these automated test commands on Windows runners, with Node.js 24 for th
 
 The virtual-desktop feasibility spike is intentionally gated to the tested Windows build. Automatic desktop switching remains **NO-GO** until outstanding live validation gates are satisfied. Browser domain-to-window attribution is a separate experimental track and is likewise **NO-GO** for production use pending live proof.
 
+Website-level attribution is no longer an MVP prerequisite. Application-level context detection with manual-first desktop control is under consideration; this repository has not begun that MVP implementation.
+
 ## Project conventions
 
 Offramp uses clear conventional navigation and action labels, with occasional subtle driving-inspired supporting copy. The intended experience is private, understandable, reversible, and accessible. App-specific architecture, tests, and release decisions live in this repository rather than in shared cross-platform code.

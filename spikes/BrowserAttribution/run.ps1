@@ -12,6 +12,8 @@ if ($Command -in @('build','test')) {
     & $dotnet build $project -c Release --configfile (Join-Path $PSScriptRoot 'NuGet.Config')
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     if ($Command -eq 'test') {
+        & (Join-Path $PSScriptRoot 'Tests/registration.test.ps1')
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         & $dotnet restore (Join-Path $PSScriptRoot 'Tests/Tests.csproj') --configfile (Join-Path $PSScriptRoot 'NuGet.Config')
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         & $dotnet run --project (Join-Path $PSScriptRoot 'Tests/Tests.csproj') -c Release --no-launch-profile --no-restore

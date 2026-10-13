@@ -4,6 +4,8 @@ Experimental Windows-only probe. **Browser attribution is NO-GO pending live val
 
 PR 0C starts with the [Phase 1 real-browser smoke test](docs/pr0c-phase1-smoke.md) and [separate Phase 1 evidence](docs/pr0c-phase1-results.md). Stop for review after Phase 1; do not run the full 200-transition matrix until the binding approach and Phase 1 evidence have been reviewed. Manual popup pairing is diagnostic, not the intended production experience. Historical PR 0B references to “PR 3 website integration” mean the future production website-integration phase, not GitHub PR #3 (the engineering harness). Historical evidence is retained unchanged.
 
+For the owner-reported Chrome discovery failure, see the [focused findings](docs/pr0c-chrome-discovery-findings.md) and use only the [one focused Chrome retest](docs/pr0c-chrome-discovery-retest.md). Registration now retains `allowed_origins` as a JSON array even when both extension IDs are identical. Website attribution is no longer an MVP prerequisite; application-level context detection with manual-first desktop control is under consideration, not implemented here.
+
 ## Build and automated tests
 
 Windows x64, PowerShell 7, .NET SDK 10.0.401 (root `global.json`), Node.js 24. No NuGet/npm packages or downloads needed. The ignored `.tools/dotnet` SDK from PR 0 is supported.
@@ -13,7 +15,7 @@ Windows x64, PowerShell 7, .NET SDK 10.0.401 (root `global.json`), Node.js 24. N
 ./spikes/BrowserAttribution/run.ps1 snapshot
 ```
 
-`test` builds with warnings as errors, runs pure policy/framing assertions, mocked extension tests and JavaScript syntax checks, then runs real child-process/Native Messaging stdio/current-user named-pipe transport tests with a **synthetic caller**. It does not drive Chrome or Edge. The transport test temporarily starts and stops only its own processes. Run in ordinary Windows PowerShell outside the Codex filesystem/process sandbox: process inspection and the pipe bridge were restricted inside that sandbox. Do not run as administrator.
+`test` builds with warnings as errors, checks generated native manifest JSON without registration, runs pure policy/framing assertions, mocked extension tests and JavaScript syntax checks, then runs real child-process/Native Messaging stdio/current-user named-pipe transport tests with a **synthetic caller**. It does not drive Chrome or Edge. The transport test temporarily starts and stops only its own processes. Run in ordinary Windows PowerShell outside the Codex filesystem/process sandbox: process inspection and the pipe bridge were restricted inside that sandbox. Do not run as administrator.
 
 ## Install locally for manual validation
 
