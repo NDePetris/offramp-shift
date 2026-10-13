@@ -2,6 +2,8 @@
 
 Experimental Windows-only probe. **Browser attribution is NO-GO pending live validation. PR 0 automatic desktop switching remains NO-GO.** Nothing in this directory switches desktops, records timers, connects SQLite, or implements a production extension/dashboard/rules UI.
 
+PR 0C starts with the [Phase 1 real-browser smoke test](docs/pr0c-phase1-smoke.md) and [separate Phase 1 evidence](docs/pr0c-phase1-results.md). Stop for review after Phase 1; do not run the full 200-transition matrix until the binding approach and Phase 1 evidence have been reviewed. Manual popup pairing is diagnostic, not the intended production experience. Historical PR 0B references to “PR 3 website integration” mean the future production website-integration phase, not GitHub PR #3 (the engineering harness). Historical evidence is retained unchanged.
+
 ## Build and automated tests
 
 Windows x64, PowerShell 7, .NET SDK 10.0.401 (root `global.json`), Node.js 24. No NuGet/npm packages or downloads needed. The ignored `.tools/dotnet` SDK from PR 0 is supported.

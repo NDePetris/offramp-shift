@@ -12,14 +12,18 @@ Offramp Shift is an early-stage, local-first Windows application concept for hel
 
 ```powershell
 ./spikes/VirtualDesktop/run.ps1 test
+./spikes/BrowserAttribution/run.ps1 test
 ```
 
-CI uses the same automated test command on a Windows runner. CI cannot establish actual virtual-desktop or browser-to-window compatibility.
+CI uses these automated test commands on Windows runners, with Node.js 24 for the browser probe. Browser tests use mocked extension APIs and synthetic native callers; neither job interacts with a live browser or switches desktops. CI cannot establish actual virtual-desktop or browser-to-window compatibility.
 
 ## Architecture and decisions
 
 - [Virtual-desktop feasibility results](spikes/VirtualDesktop/docs/pr0-results.md)
 - [Manual Windows validation plan](spikes/VirtualDesktop/docs/manual-validation.md)
+- [Browser-attribution feasibility probe](spikes/BrowserAttribution/README.md)
+- [PR 0C Phase 1 owner-assisted smoke test](spikes/BrowserAttribution/docs/pr0c-phase1-smoke.md)
+- [PR 0C Phase 1 evidence and pending gates](spikes/BrowserAttribution/docs/pr0c-phase1-results.md)
 - [Development licensing and distribution decision](docs/decisions/licensing.md)
 - [Agent and contributor engineering conventions](AGENTS.md)
 

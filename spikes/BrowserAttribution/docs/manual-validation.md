@@ -1,14 +1,16 @@
 # Windows PC validation checklist
 
-Run separately for Chrome and Edge, then together. **At least 200 controlled transitions per browser**; count a browser's foreground entry/tab/navigation as one transition, not every polling line. A failed transition remains in the denominator. Stop on the first incorrect domain, preserve sanitized evidence, and keep NO-GO.
+For PR 0C, first run only the [Phase 1 smoke test](pr0c-phase1-smoke.md) and stop for review. The matrix below is conditional on reviewed Phase 1 evidence and a credible binding approach; it is not authorized by an automated pass or a single successful popup pairing.
+
+When the full matrix is separately authorized, run separately for Chrome and Edge, then together. **At least 200 controlled transitions per browser**; count a browser's foreground entry/tab/navigation as one transition, not every polling line. A failed transition remains in the denominator. Stop on the first incorrect domain, preserve sanitized evidence, and keep NO-GO.
 
 ## Setup and first positive gate
 
 - [ ] Record exact Windows build, browser versions/channels, .NET/Node versions, ordinary privilege level, monitors/DPI, test profile labels and desktop labels. No profile paths/names from real personal accounts in committed evidence.
 - [ ] Follow README setup with disposable test profiles. Start a fresh capture filename; never overwrite earlier evidence. Run tests from normal PowerShell outside Codex sandbox.
 - [ ] Prepare distinct public test hostnames: `example.com`, `example.org`, `example.net` (or other benign HTTP(S) hosts you control). Record expected hostnames only. Avoid personal browsing; do not record full URLs, titles or page contents.
-- [ ] In Chrome window A, require binding success, close popup, load a test domain and verify native output is `application:chrome`, correct HWND/PID and the expected domain. Repeat in Edge with `application:msedge`.
-- [ ] Verify the popup can bind while open and the domain appears after closing it. Record actual parent HWND correspondence and process ancestry by successful binding plus foreground output. If binding never works, stop: this strategy failed its first feasibility gate.
+- [ ] In Chrome window A, require binding success, close popup, load a test domain and verify native output has `application:"chrome"`, correct HWND/PID and the expected domain. Repeat in Edge with `application:"msedge"`.
+- [ ] Verify the popup can bind while open and the domain appears after closing it. Corroborate actual parent HWND correspondence and process ancestry independently when claiming those assumptions established; a successful binding plus foreground output only establishes that the implemented checks accepted the observation. If binding never works, stop for diagnosis/review; do not loosen identity checks or declare a fundamental architecture failure without identifying the cause.
 - [ ] Missing tabs permission can be tested in a disposable copy of the extension with `tabs` removed, loaded/re-registered under its new ID. Require null domain; unload it afterward and restore the original IDs. Never widen permissions to make tests pass.
 
 ## 200 transitions for each browser
@@ -46,7 +48,7 @@ Show each ordinary scenario has repeatable positive attribution. Report `positiv
 - [ ] No background website becomes foreground activity; rapid-transition samples reviewed for transient errors.
 - [ ] Domain-only native payload/output verified with sanitized test inputs; full URL/title/page data absent from saved evidence.
 - [ ] CPU/memory/profile fanout observations and hook/ancestry/bootstrap limitations recorded, not assumed solved.
-- [ ] If any wrong domain appears or useful coverage cannot be demonstrated: NO-GO; revise identity/temporal architecture before PR 3 website integration.
+- [ ] If any wrong domain appears or useful coverage cannot be demonstrated: NO-GO; revise identity/temporal architecture before the future production website-integration phase.
 - [ ] Sanitize summary; do not commit raw logs. Unregister host, unload extensions and stop monitor when finished.
 
 PR 0B passing later would not change PR 0's separate automatic-switch NO-GO. No push/PR/merge without owner approval.

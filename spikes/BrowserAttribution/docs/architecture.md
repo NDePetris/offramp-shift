@@ -36,7 +36,9 @@ An ordinary same-user process can impersonate parts of this experiment, read its
 
 Keep native foreground/window observation authoritative in a single app-owned correlator. Receive typed versioned domain-only observations from per-profile extension sessions through stdio hosts and authenticated local IPC. Enforce positive identity, freshness, disconnect invalidation and application-only fallback there; do not attach the newest extension report directly to a timer. Pass nullable domain plus reason/observation lease into a future classification boundary. Do not integrate PR 0 desktop switching with this experiment.
 
-First validate popup pairing across both browsers. If explicit per-window pairing/rebinding is unacceptable for PR 3, this candidate **requires an architectural change or a validated automatic identity bootstrap** before production website attribution. A zero-parent worker cannot silently infer an HWND. Consider browser-specific supported identity mechanisms only after evidence; do not substitute title/geometry heuristics. Application-only behavior can remain the safe baseline. None of those production components are implemented here.
+First validate popup pairing across both browsers. Manual per-window pairing/rebinding is acceptable as a diagnostic technique, not as the intended production experience. This candidate **requires an architectural change or a validated automatic identity bootstrap** before seamless production website attribution. A zero-parent worker cannot silently infer an HWND. Consider browser-specific supported identity mechanisms only after evidence; do not substitute title/geometry heuristics. Application-only behavior can remain the safe baseline. None of those production components are implemented here.
+
+PR 0C is limited initially to [Phase 1 real-browser feasibility](pr0c-phase1-smoke.md). Review its evidence before assessing seamless binding or running the full matrix. Historical “PR 3 website integration” references in PR 0B evidence mean the future production website-integration phase, not merged GitHub PR #3 (the engineering harness).
 
 ## Primary references checked October 12, 2026
 
