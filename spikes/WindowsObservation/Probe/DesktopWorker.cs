@@ -64,10 +64,13 @@ internal sealed class DesktopWorker : IDisposable
 
     public void Dispose()
     {
-        if (process is null) return;
-        try { if (!process.HasExited) { process.Kill(); if (!process.WaitForExit(1_000)) throw new InvalidOperationException("WorkerShutdownTimeout"); } }
-        catch (InvalidOperationException) { }
-        finally { process.Dispose(); process = null; failed = true; }
+        var owned = process;
+        if (owned is null) return;
+        try
+        {
+            WorkerShutdown.Stop(() => owned.HasExited, owned.Kill, () => owned.WaitForExit(1_000));
+        }
+        finally { owned.Dispose(); process = null; failed = true; }
     }
 
     // Private stdin protocol has one read command; no binding or mutation operation.

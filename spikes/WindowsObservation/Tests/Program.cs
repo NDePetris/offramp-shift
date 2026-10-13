@@ -181,6 +181,26 @@ Test("unknown live adapter output interrupts simulated partial break without res
     Check(result.State.UsageMs == 1_000 && result.State.BreakProgressMs == 0 && result.Effects.Length == 0);
 });
 
+Test("worker shutdown timeout is reported rather than swallowed", () =>
+{
+    var kills = 0;
+    try { WorkerShutdown.Stop(() => false, () => kills++, () => false); Check(false); }
+    catch (TimeoutException) { Check(kills == 1); }
+    WorkerShutdown.Stop(() => true, () => Check(false), () => { Check(false); return false; });
+    Check(kills == 1);
+});
+Test("worker kill race is tolerated only after verified process exit", () =>
+{
+    var reads = 0;
+    var waits = 0;
+    WorkerShutdown.Stop(() => ++reads > 1, () => throw new InvalidOperationException(), () => { waits++; return true; });
+    Check(reads == 2 && waits == 1);
+    var rejected = false;
+    try { WorkerShutdown.Stop(() => false, () => throw new InvalidOperationException(), () => { waits++; return true; }); }
+    catch (InvalidOperationException) { rejected = true; }
+    Check(rejected && waits == 1);
+});
+
 Console.WriteLine($"{passed} tests, {assertions} assertions, {failed} failures; synthetic only, no Windows APIs invoked.");
 return failed == 0 ? 0 : 1;
 

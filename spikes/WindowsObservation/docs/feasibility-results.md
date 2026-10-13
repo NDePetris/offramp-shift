@@ -8,8 +8,10 @@ website attribution remain NO-GO independently.
 
 PR 2 [#5](https://github.com/NDePetris/offramp-shift/pull/5) was verified merged.
 Remote `main` was verified and fetched at `4cf5237dc94b9a865249c7754522a60ebe5c5b22`.
-Branch: `feat/windows-observation-certification`. The containing local commit is the
-implementation/evidence revision; no remote publication is authorized.
+Branch: `feat/windows-observation-certification`. Original implementation/evidence
+revision: `3901648`. The subsequent closeout authorizes validation, necessary corrections,
+pushing this branch and opening a PR against `main`. Merge, deployment, publishing,
+release and PR 4 implementation remain unauthorized.
 
 The owner approved a staged investigation, with a feasibility stop before broader
 integration. Added two projects under `spikes/WindowsObservation`, with a separate
@@ -150,7 +152,7 @@ Release builds had zero warnings/errors. Initial sandbox compilation failed with
 diagnostic; the real outside-sandbox compiler then identified a nullable error, corrected before
 successful tests. Both are development failures, not Windows observation compatibility claims.
 
-Final checks at the containing implementation revision:
+Final investigation checks at implementation revision `3901648`:
 
 | Check | Result | Boundary |
 |---|---|---|
@@ -166,3 +168,34 @@ Final checks at the containing implementation revision:
 Cleanup succeeded on these short exercises; this is not a long-running leak or hardware
 compatibility claim. Public native APIs were observed on one host only. Undocumented
 desktop observation remains disabled on every other build/revision or architecture.
+
+## Closeout review and revalidation — October 13, 2026
+
+Reviewed the complete diff against refreshed `origin/main` and the repository instructions.
+All requested evidence boundaries above are retained. The original `3901648` live results
+remain historical observations; no foreground pass, role binding, complete coverage,
+durable integration or full matrix is added by this closeout.
+
+One correctness correction makes owned-helper shutdown failures explicit. Previously,
+Dispose threw an InvalidOperationException for its own WaitForExit timeout and immediately
+caught it. The corrected cleanup reports timeout and suppresses a kill race only after
+confirming the process exited. Two portable regression tests cover timeout and exit-race
+decisions; these are synthetic fault injections, not a real unkillable-process experiment.
+The real owned-worker hang/malformed-output isolation checks also pass after the correction.
+
+Closeout validation on the unchanged Professional 25H2 / 26200.9457 / x64 host:
+
+| Check | Result | Evidence boundary |
+|---|---|---|
+| Observation `test` | 18 tests / 10,084 assertions PASS | Synthetic evidence, Core uncertainty and cleanup decisions; no Windows API invoked |
+| Root `test` | Core 58 tests / 38,654 assertions; Persistence 56 tests / 544 assertions PASS | Synthetic Core; real SQLite plus injected faults and 5 owned actual Windows termination scenarios |
+| VirtualDesktop `test` | 58 policy tests + 3 isolation checks PASS | No live switching or COM desktop behavior exercised |
+| BrowserAttribution `test` | 2,053 assertions + 5 mocked groups; manifest/syntax/transport PASS | Synthetic caller, no real Chrome/Edge attribution |
+| Observation `isolation-test` | Both fault workers PASS | Real owned child processes, no COM activation in fault workers |
+| Observation and root `format` | PASS | SDK verify-no-changes; Release builds with zero warnings/errors |
+| Scope and whitespace review | PASS | Core/Persistence contracts, old spikes, allowlists, CI and SDK pin unchanged |
+
+No additional manual/live monitoring acceptance was performed during closeout. The failed
+foreground stimulus, NOT RUN scenarios, zero live certification, and decision to stop before
+durable accounting remain unchanged. Push and PR creation are now authorized; merging,
+deployment, publishing, release, best-effort accounting and PR 4 implementation are not.

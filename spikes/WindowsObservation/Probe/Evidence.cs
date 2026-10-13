@@ -17,6 +17,18 @@ public static class DesktopObservationPolicy
     public static bool IsSupported(string build, string architecture) => build == "26200.9457" && architecture == "X64";
 }
 
+// Portable cleanup decision, with native process operations supplied by the owner.
+public static class WorkerShutdown
+{
+    public static void Stop(Func<bool> exited, Action kill, Func<bool> wait)
+    {
+        if (exited()) return;
+        try { kill(); }
+        catch (InvalidOperationException) when (exited()) { } // Exit raced our kill.
+        if (!wait()) throw new TimeoutException("WorkerShutdownTimeout");
+    }
+}
+
 // Native evidence does not establish complete cross-provider interval coverage.
 // There is deliberately no flag, CLI option or heuristic that can turn this into Confirmed.
 public sealed class EvidenceInvestigation
