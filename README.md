@@ -2,7 +2,7 @@
 
 Offramp Shift is an early-stage, local-first Windows application concept for helping users keep personal and work contexts separate. It is part of the Offramp family, alongside Offramp Fade for Android.
 
-**Current state: feasibility work only.** This repository presently contains an experimental Windows virtual-desktop probe, not a production tray app. There is no approved automatic switching or production website attribution.
+**Current state: an independently tested monitoring domain engine and isolated feasibility probes.** There is no Windows monitoring adapter or production tray app, and no approved automatic switching or production website attribution.
 
 ## Development
 
@@ -13,13 +13,18 @@ Offramp Shift is an early-stage, local-first Windows application concept for hel
 ```powershell
 ./spikes/VirtualDesktop/run.ps1 test
 ./spikes/BrowserAttribution/run.ps1 test
+./run.ps1 test
+./run.ps1 format
 ```
 
 CI uses these automated test commands on Windows runners, with Node.js 24 for the browser probe. Browser tests use mocked extension APIs and synthetic native callers; neither job interacts with a live browser or switches desktops. CI cannot establish actual virtual-desktop or browser-to-window compatibility.
 
+The core targets platform-independent `net10.0` and uses synthetic observations and a fake clock. Its PowerShell runner follows the probes' package-free build conventions; it performs no Windows integration. See [core monitoring architecture](docs/architecture/core-monitoring.md) for certified interval, advisory intervention, and recovery contracts.
+
 ## Architecture and decisions
 
 - [Virtual-desktop feasibility results](spikes/VirtualDesktop/docs/pr0-results.md)
+- [Core monitoring domain architecture](docs/architecture/core-monitoring.md)
 - [Manual Windows validation plan](spikes/VirtualDesktop/docs/manual-validation.md)
 - [Browser-attribution feasibility probe](spikes/BrowserAttribution/README.md)
 - [PR 0C Phase 1 owner-assisted smoke test](spikes/BrowserAttribution/docs/pr0c-phase1-smoke.md)
@@ -29,7 +34,7 @@ CI uses these automated test commands on Windows runners, with Node.js 24 for th
 
 The virtual-desktop feasibility spike is intentionally gated to the tested Windows build. Automatic desktop switching remains **NO-GO** until outstanding live validation gates are satisfied. Browser domain-to-window attribution is a separate experimental track and is likewise **NO-GO** for production use pending live proof.
 
-Website-level attribution is no longer an MVP prerequisite. Application-level context detection with manual-first desktop control is under consideration; this repository has not begun that MVP implementation.
+Website-level attribution is not an MVP prerequisite. The core provides application-level classification, accounting, break resets, and advisory decisions; live context detection and manual desktop control remain future integration work.
 
 ## Project conventions
 
