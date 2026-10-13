@@ -28,6 +28,7 @@ Core and persistence target platform-independent `net10.0`. Core tests use synth
 - [Transactional local persistence architecture](docs/architecture/local-persistence.md)
 - [Local storage decision](docs/decisions/local-storage.md)
 - [PR 2 validation and remaining durability checks](docs/validation/pr2-persistence.md)
+- [PR 3 Windows observation investigation and certification checkpoint](spikes/WindowsObservation/README.md)
 - [Manual Windows validation plan](spikes/VirtualDesktop/docs/manual-validation.md)
 - [Browser-attribution feasibility probe](spikes/BrowserAttribution/README.md)
 - [PR 0C Phase 1 owner-assisted smoke test](spikes/BrowserAttribution/docs/pr0c-phase1-smoke.md)
