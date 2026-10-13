@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+  <ItemGroup><ProjectReference Include="../../src/OfframpShift.Persistence/OfframpShift.Persistence.csproj" /></ItemGroup>
+</Project>
