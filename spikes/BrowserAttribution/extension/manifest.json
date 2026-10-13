@@ -1,0 +1,9 @@
+{
+  "manifest_version": 3,
+  "name": "Offramp Shift attribution probe (PR 0B)",
+  "version": "0.0.1",
+  "permissions": ["tabs", "nativeMessaging"],
+  "incognito": "not_allowed",
+  "background": { "service_worker": "worker.js", "type": "module" },
+  "action": { "default_popup": "bind.html", "default_title": "Bind this window for the feasibility probe" }
+}
