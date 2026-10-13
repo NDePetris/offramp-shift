@@ -48,8 +48,8 @@ In each disposable browser: enable developer mode, choose **Load unpacked**, sel
 In the same PowerShell session, replace the two placeholders with those IDs:
 
 ```powershell
-$chromeProbeId = '<actual Chrome extension ID>'
-$edgeProbeId = '<actual Edge extension ID>'
+$chromeProbeId = 'iohkegejabkcbefpdhlcomnflafpcecg'
+$edgeProbeId = 'iohkegejabkcbefpdhlcomnflafpcecg'
 ./spikes/BrowserAttribution/register-host.ps1 -ChromeId $chromeProbeId -EdgeId $edgeProbeId
 if ($LASTEXITCODE -ne 0) { throw 'Registration failed; stop.' }
 ./spikes/BrowserAttribution/run.ps1 monitor |

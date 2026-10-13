@@ -10,8 +10,8 @@ Stop any running monitor with Ctrl+C first. From `G:\Projects\offramp-shift`, us
 
 ```powershell
 $ErrorActionPreference = 'Stop'
-$chromeProbeId = '<actual Chrome extension ID>'
-$edgeProbeId = '<previously registered Edge extension ID>'
+$chromeProbeId = 'iohkegejabkcbefpdhlcomnflafpcecg'
+$edgeProbeId = 'iohkegejabkcbefpdhlcomnflafpcecg'
 $retestRoot = Join-Path (Get-Location) ('spikes/BrowserAttribution/artifacts/chrome-retest-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff'))
 New-Item -ItemType Directory -Path $retestRoot -ErrorAction Stop | Out-Null
 $manifestFile = Join-Path (Get-Location) 'spikes/BrowserAttribution/artifacts/native-host.json'
