@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('build', 'test', 'format', 'snapshot', 'watch', 'foreground-test', 'delivery-test', 'isolation-test', 'help')]
+    [ValidateSet('build', 'test', 'format', 'snapshot', 'watch', 'foreground-test', 'user-test', 'monitor', 'delivery-test', 'isolation-test', 'help')]
     [string]$Command = 'help',
     [Parameter(ValueFromRemainingArguments = $true)] [string[]]$ProbeArguments
 )
@@ -14,7 +14,7 @@ if (Test-Path -LiteralPath $localDotnet) { $env:DOTNET_ROOT = Split-Path $localD
 $project = Join-Path $PSScriptRoot 'Probe/Probe.csproj'
 $tests = Join-Path $PSScriptRoot 'Tests/Tests.csproj'
 if ($Command -in @('build', 'test', 'format')) {
-    & $dotnet restore $tests --configfile (Join-Path $PSScriptRoot 'NuGet.Config')
+    & $dotnet restore $tests --configfile (Join-Path $taskRoot 'src/NuGet.Config') --locked-mode
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     & $dotnet build $tests -c Release --no-restore
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -23,7 +23,9 @@ if ($Command -in @('build', 'test', 'format')) {
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     }
     if ($Command -eq 'format') {
-        foreach ($item in @($project, $tests)) {
+        foreach ($item in @($project, $tests,
+            (Join-Path $taskRoot 'src/OfframpShift.WindowsObservation/OfframpShift.WindowsObservation.csproj'),
+            (Join-Path $taskRoot 'src/OfframpShift.ActivityMonitoring/OfframpShift.ActivityMonitoring.csproj'))) {
             & $dotnet format $item --verify-no-changes --no-restore
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         }

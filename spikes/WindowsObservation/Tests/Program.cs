@@ -201,7 +201,66 @@ Test("worker kill race is tolerated only after verified process exit", () =>
     Check(rejected && waits == 1);
 });
 
-Console.WriteLine($"{passed} tests, {assertions} assertions, {failed} failures; synthetic only, no Windows APIs invoked.");
+Test("operator foreground gate requires twenty alternating observed transitions", () =>
+{
+    var gate = new UserObservationGate(false);
+    for (var i = 0; i < UserObservationGate.RequiredConfirmations; i++)
+        Check(gate.Confirm(i % 2 == 0, true, true, true, true, null, []));
+    Check(gate.Complete && gate.Confirmations == 21);
+    Check(!gate.Confirm(false, true, true, true, true, null, []));
+});
+Test("operator foreground gate refuses missing hook, identity, focus or health", () =>
+{
+    foreach (var missing in Enumerable.Range(0, 4))
+    {
+        var gate = new UserObservationGate(false);
+        Check(!gate.Confirm(true, missing != 0, missing != 1, missing != 2, missing != 3, null, []));
+        Check(!gate.Complete && gate.Failure is not null && gate.Confirmations == 0);
+        Check(!gate.Confirm(true, true, true, true, true, null, []));
+    }
+    var repeated = new UserObservationGate(false);
+    Check(repeated.Confirm(true, true, true, true, true, null, []));
+    Check(!repeated.Confirm(true, true, true, true, true, null, []));
+});
+Test("operator desktop gate checks distinct stable GUIDs independent of foreground events", () =>
+{
+    var personal = Guid.NewGuid(); var work = Guid.NewGuid();
+    var gate = new UserObservationGate(true);
+    for (var i = 0; i < UserObservationGate.RequiredConfirmations; i++)
+        Check(gate.Confirm(true, true, true, false, true, i % 2 == 0 ? personal : work, [work, personal]));
+    Check(gate.Complete);
+    var unchanged = new UserObservationGate(true);
+    Check(unchanged.Confirm(true, true, true, false, true, personal, [personal, work]));
+    Check(!unchanged.Confirm(true, true, true, false, true, personal, [personal, work]));
+});
+Test("operator desktop gate fails on missing bindings, invalid topology and wrong destination", () =>
+{
+    var personal = Guid.NewGuid(); var work = Guid.NewGuid(); var other = Guid.NewGuid();
+    foreach (var topology in new Guid[][] { [], [personal], [personal, personal], [Guid.Empty, personal] })
+    {
+        var gate = new UserObservationGate(true);
+        Check(!gate.Confirm(true, true, true, false, true, personal, topology));
+    }
+    foreach (var missing in new[] { true, false })
+    {
+        var gate = new UserObservationGate(true);
+        Check(gate.Confirm(true, true, true, false, true, personal, [personal, work]));
+        Check(gate.Confirm(true, true, true, false, true, work, [personal, work]));
+        Check(!gate.Confirm(true, true, true, false, true, missing ? personal : other,
+            missing ? [personal, other] : [personal, work, other]));
+    }
+});
+Test("operator cancellation invalidates an otherwise completed gate", () =>
+{
+    var gate = new UserObservationGate(false);
+    for (var i = 0; i < 21; i++) Check(gate.Confirm(i % 2 == 0, true, true, true, true, null, []));
+    gate.Stop("CleanupFailed");
+    Check(!gate.Complete);
+});
+
+EstimatorRegressions.Run(Test, Check);
+DurableEstimatorRegression.Run(Test, Check);
+Console.WriteLine($"{passed} tests, {assertions} assertions, {failed} failures; synthetic observation evidence and real local SQLite integration; no native observation APIs.");
 return failed == 0 ? 0 : 1;
 
 internal sealed class FakeClock : IMonitoringClock

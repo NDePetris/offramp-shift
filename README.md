@@ -2,7 +2,7 @@
 
 Offramp Shift is an early-stage, local-first Windows application concept for helping users keep personal and work contexts separate. It is part of the Offramp family, alongside Offramp Fade for Android.
 
-**Current state: an independently tested monitoring domain engine, transactional local checkpoint persistence and isolated feasibility probes.** There is no Windows monitoring adapter or production tray app, and no approved automatic switching or production website attribution.
+**Current state: an independently tested monitoring domain engine, transactional local checkpoint persistence, experimental best-effort Windows monitoring and isolated feasibility probes.** PR 4's bounded headless investigation has partial live evidence; full acceptance remains unproven. There is no production tray app, approved automatic switching or production website attribution.
 
 ## Development
 
@@ -26,6 +26,9 @@ Core and persistence target platform-independent `net10.0`. Core tests use synth
 - [Virtual-desktop feasibility results](spikes/VirtualDesktop/docs/pr0-results.md)
 - [Core monitoring domain architecture](docs/architecture/core-monitoring.md)
 - [Transactional local persistence architecture](docs/architecture/local-persistence.md)
+- [Best-effort monitoring architecture and checkpoint migration](docs/architecture/best-effort-monitoring.md)
+- [PR 4 live accounting and resource validation](docs/validation/pr4-accounting.md)
+- [PR 4 bounded investigation closeout and remaining limitations](docs/validation/pr4-closeout.md)
 - [Local storage decision](docs/decisions/local-storage.md)
 - [PR 2 validation and remaining durability checks](docs/validation/pr2-persistence.md)
 - [PR 3 Windows observation investigation and certification checkpoint](spikes/WindowsObservation/README.md)

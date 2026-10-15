@@ -1,4 +1,5 @@
 using OfframpShift.Core;
+using System.Diagnostics;
 
 namespace OfframpShift.Persistence;
 
@@ -18,6 +19,31 @@ public sealed class DurableMonitoringSession : IDisposable
     private bool operationInProgress;
     private PersistenceStatus status;
     private CheckpointStorageException? failure;
+    private readonly LatencyHistogram commitLatency = new();
+    private long commitAttempts, commitAcknowledgments, commitFailures, noOpTransitions;
+
+    public object CommitDiagnostics
+    {
+        get
+        {
+            lock (gate) return new
+            {
+                commitAttempts,
+                commitAcknowledgments,
+                commitFailures,
+                noOpTransitions,
+                preparedPayloadBytes = store?.PreparedPayloadBytes ?? 0,
+                latency = commitLatency.Snapshot()
+            };
+        }
+    }
+    private void SaveCheckpoint(MonitoringCheckpoint checkpoint)
+    {
+        var started = Stopwatch.GetTimestamp(); commitAttempts++;
+        try { store!.Save(checkpoint); commitAcknowledgments++; }
+        catch { commitFailures++; throw; }
+        finally { commitLatency.Record(Stopwatch.GetElapsedTime(started).Ticks / 10); }
+    }
 
     public PersistenceStatus Status { get { lock (gate) return status; } }
     public StorageFailure? Failure { get { lock (gate) return failure?.Failure; } }
@@ -43,12 +69,31 @@ public sealed class DurableMonitoringSession : IDisposable
             if (checkpoint is null)
             {
                 coordinator = new(clock, fallback);
-                store.Save(coordinator.CreateCheckpoint());
+                SaveCheckpoint(coordinator.CreateCheckpoint());
+            }
+            else if (checkpoint.Version == 1)
+            {
+                // Validate the original before producing a version-2 replacement.
+                // The existing store revision and exact pending payload protect migration.
+                coordinator = MonitoringCoordinator.Restore(clock, fallback, checkpoint);
+                if (coordinator.State.Recovery != RecoveryStatus.Ready)
+                    throw new CheckpointStorageException(StorageFailure.ClockUnavailable);
+                pending = coordinator.CreateCheckpoint();
+                SaveCheckpoint(pending);
+                pendingSaved = true;
+                RestoreCommitted(pending);
+                pending = null;
+                pendingSaved = false;
             }
             else RestoreCommitted(checkpoint);
             status = PersistenceStatus.Ready;
         }
-        catch (Exception e) { SetStartupFailure(StorageException(e)); }
+        catch (Exception e)
+        {
+            if (pending is not null)
+            { failure = StorageException(e); status = PersistenceStatus.PendingCommit; }
+            else SetStartupFailure(StorageException(e));
+        }
     }
 
     public TransitionResult Observe(MonitoringObservation observation)
@@ -79,9 +124,9 @@ public sealed class DurableMonitoringSession : IDisposable
                     SetStartupFailure(new(StorageFailure.InvalidPayload));
                     throw failure!;
                 }
-                if (!result.CheckpointRequired) return result;
+                if (!result.CheckpointRequired) { noOpTransitions++; return result; }
                 pending = coordinator.CreateCheckpoint();
-                store!.Save(pending);
+                SaveCheckpoint(pending);
                 pending = null;
                 return result;
             }
@@ -111,7 +156,7 @@ public sealed class DurableMonitoringSession : IDisposable
             {
                 if (!pendingSaved)
                 {
-                    store!.Save(pending);
+                    SaveCheckpoint(pending);
                     pendingSaved = true;
                 }
                 // A restore/clock failure after Save acknowledgment must retry only

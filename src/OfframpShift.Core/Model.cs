@@ -4,9 +4,11 @@ namespace OfframpShift.Core;
 
 public enum DesktopScope { Unknown, Personal, Work, Other }
 public enum SessionState { Unknown, Active, Locked, Suspended }
-public enum InputState { Unknown, Active, Idle }
+public enum InputState { Unknown, Active, Idle, QualifiedIdle }
 public enum MonitoringAvailability { Unknown, Available, Unavailable, Unsupported }
-public enum EvidenceConfidence { Unknown, Confirmed, Conflicting }
+public enum EvidenceConfidence { Unknown, Confirmed, Conflicting, Estimated }
+public enum AccountingMode { CertifiedOnly, BestEffort }
+public enum ContinuityDisposition { Invalidate, PreserveTransient }
 public enum ClassificationMode { CountByDefault, BlocklistOnly }
 public enum ActivityKind { Uncertain, CountedPersonal, Neutral, Work, Idle, Locked }
 public enum InterventionState { Normal, Grace, Nudging, Snoozed }
@@ -24,12 +26,25 @@ public interface IMonitoringClock
 // The adapter owns identity normalization and verification. No title, PID, or HWND.
 public sealed record ApplicationIdentity(string Key, bool Verified);
 
-// This certifies the entire half-open [Start, End) interval, not just its endpoint.
-// An OS event or two equal snapshots alone cannot certify continuity.
+// Confirmed certifies [Start, End); Estimated explicitly describes a bounded estimate.
+// An OS event or matching snapshots cannot establish certification.
 public sealed record MonitoringObservation(
     MonotonicTime Start, MonotonicTime End,
     DesktopScope Desktop, SessionState Session, ApplicationIdentity? Application,
-    InputState Input, MonitoringAvailability Availability, EvidenceConfidence Confidence);
+    InputState Input, MonitoringAvailability Availability, EvidenceConfidence Confidence)
+{
+    public ContinuityDisposition Continuity { get; init; }
+}
+
+public static class EstimationPolicy
+{
+    public const int Version = 1;
+    public const long MaximumIntervalMs = 1_500;
+    public const long MaximumAgeMs = 2_000;
+    public const long HoldbackMs = 1_000;
+    public const long MaximumConsecutiveUncertaintyMs = 5_000;
+    public const long MaximumBreakUncertaintyMs = 15_000;
+}
 
 public sealed record MonitoringConfiguration
 {
@@ -41,6 +56,8 @@ public sealed record MonitoringConfiguration
     public long SnoozeMs { get; init; } = 10 * 60_000;
     // Receipt freshness is independent of certified interval duration.
     public long MaximumEvidenceAgeMs { get; init; } = 5_000;
+    public AccountingMode Accounting { get; init; }
+    public int EstimationPolicyVersion { get; init; } = EstimationPolicy.Version;
     public ClassificationMode Mode { get; init; } = ClassificationMode.CountByDefault;
     // Excluded in CountByDefault; included in BlocklistOnly. Exact ordinal keys.
     public ImmutableArray<string> Applications { get; init; } = [];
@@ -48,7 +65,8 @@ public sealed record MonitoringConfiguration
     public void Validate()
     {
         if (AllowanceMs <= 0 || RequiredBreakMs <= 0 || IdleThresholdMs < 0 || GraceMs < 0 ||
-            RepeatNudgeMs <= 0 || SnoozeMs <= 0 || MaximumEvidenceAgeMs <= 0 || !Enum.IsDefined(Mode))
+            RepeatNudgeMs <= 0 || SnoozeMs <= 0 || MaximumEvidenceAgeMs <= 0 || !Enum.IsDefined(Mode) ||
+            !Enum.IsDefined(Accounting) || EstimationPolicyVersion != EstimationPolicy.Version)
             throw new ArgumentException("Invalid monitoring configuration.");
         if (Applications.IsDefault || Applications.Any(string.IsNullOrWhiteSpace) ||
             Applications.Distinct(StringComparer.Ordinal).Count() != Applications.Length)
@@ -62,13 +80,17 @@ public static class ApplicationClassifier
     {
         if (!Enum.IsDefined(observation.Desktop) || !Enum.IsDefined(observation.Session) ||
             !Enum.IsDefined(observation.Input) || observation.Availability != MonitoringAvailability.Available ||
-            observation.Confidence != EvidenceConfidence.Confirmed || observation.Desktop == DesktopScope.Unknown)
+            (observation.Confidence != EvidenceConfidence.Confirmed &&
+                !(observation.Confidence == EvidenceConfidence.Estimated && configuration.Accounting == AccountingMode.BestEffort)) ||
+            observation.Desktop == DesktopScope.Unknown ||
+            (observation.Input == InputState.QualifiedIdle && observation.Confidence != EvidenceConfidence.Estimated) ||
+            (observation.Input == InputState.Idle && observation.Confidence == EvidenceConfidence.Estimated))
             return ActivityKind.Uncertain;
         if (observation.Session == SessionState.Locked) return ActivityKind.Locked;
         if (observation.Session != SessionState.Active || observation.Input == InputState.Unknown)
             return ActivityKind.Uncertain;
         if (observation.Desktop == DesktopScope.Work) return ActivityKind.Work;
-        if (observation.Input == InputState.Idle) return ActivityKind.Idle;
+        if (observation.Input is InputState.Idle or InputState.QualifiedIdle) return ActivityKind.Idle;
         if (observation.Desktop == DesktopScope.Other) return ActivityKind.Neutral;
         if (observation.Application is not { Verified: true } app || string.IsNullOrWhiteSpace(app.Key))
             return ActivityKind.Uncertain;
@@ -82,7 +104,12 @@ public sealed record EngineState(
     long UsageMs, bool Exhausted, long BreakProgressMs, bool BreakCompleted,
     long IdleProgressMs, bool Paused, InterventionState Intervention,
     long ReminderRemainingMs, long SnoozeRemainingMs, long EffectSequence,
-    RecoveryStatus Recovery);
+    RecoveryStatus Recovery)
+{
+    public long EstimatedUsageMs { get; init; }
+    public long BreakUncertaintyMs { get; init; }
+    public long ConsecutiveUncertaintyMs { get; init; }
+}
 public sealed record AdvisoryEffect(long Sequence, EffectKind Kind);
 public sealed record TransitionResult(
     EngineState State, ActivityKind Activity, string Reason,

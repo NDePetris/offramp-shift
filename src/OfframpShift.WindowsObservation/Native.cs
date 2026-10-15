@@ -28,32 +28,43 @@ internal static class Native
     [StructLayout(LayoutKind.Sequential)]
     internal struct LastInput { public uint Size, Time; }
 
-    internal static (nint Window, uint Process, ApplicationIdentity? Application) Foreground()
+    internal static (nint Window, uint Process, ApplicationIdentity? Application, ForegroundFailure Failure, int? IdentityQueryCode) Foreground()
     {
         var window = GetForegroundWindow();
-        if (window == 0 || GetWindowThreadProcessId(window, out var process) == 0 || process == 0) return (0, 0, null);
+        if (window == 0 || GetWindowThreadProcessId(window, out var process) == 0 || process == 0) return (0, 0, null, ForegroundFailure.NoWindowOrProcess, null);
         using var handle = OpenProcess(0x1000, false, process); // PROCESS_QUERY_LIMITED_INFORMATION
-        if (handle.IsInvalid) return (window, process, null);
+        if (handle.IsInvalid) return (window, process, null, ForegroundFailure.ProcessQueryUnavailable, null);
+        if (!GetProcessTimes(handle, out var created, out _, out _, out _)) return (window, process, null, ForegroundFailure.ProcessTimesUnavailable, null);
         var image = new StringBuilder(32_768);
         var size = (uint)image.Capacity;
-        if (!QueryFullProcessImageName(handle, 0, image, ref size) || size == 0) return (window, process, null);
+        if (!QueryFullProcessImageName(handle, 0, image, ref size) || size == 0) return (window, process, null, ForegroundFailure.ProcessImageUnavailable, null);
+        // Known generic hosts do not establish the foreground application's identity.
+        // Do not attribute the broker to a hosted app or inspect window titles/content.
+        var executable = Path.GetFileName(image.ToString());
+        if (executable.Equals("ApplicationFrameHost.exe", StringComparison.OrdinalIgnoreCase) ||
+            executable.Equals("RuntimeBroker.exe", StringComparison.OrdinalIgnoreCase) ||
+            executable.Equals("dllhost.exe", StringComparison.OrdinalIgnoreCase)) return (window, process, null, ForegroundFailure.GenericHostUnsupported, null);
         uint length = 0;
         var code = GetApplicationUserModelId(handle, ref length, null);
         string key;
         if (code == 122 && length is > 1 and <= 4096) // ERROR_INSUFFICIENT_BUFFER
         {
             var aumid = new StringBuilder((int)length);
-            if (GetApplicationUserModelId(handle, ref length, aumid) != 0) return (window, process, null);
+            var identityCode = GetApplicationUserModelId(handle, ref length, aumid);
+            if (identityCode != 0) return (window, process, null, ForegroundFailure.PackagedIdentityUnavailable, identityCode);
             key = "aumid:v1:" + Hash(aumid.ToString());
         }
         else if (code == 15703) // APPMODEL_ERROR_NO_APPLICATION
             key = "exe:v1:" + Hash(image.ToString().ToUpperInvariant());
-        else return (window, process, null);
+        else return (window, process, null, ForegroundFailure.ApplicationIdentityQueryUnavailable, code);
         if (!GetExitCodeProcess(handle, out var exit) || exit != 259 ||
             GetForegroundWindow() != window || GetWindowThreadProcessId(window, out var after) == 0 || after != process)
-            return (window, process, null);
+            return (window, process, null, ForegroundFailure.ProcessExitedOrForegroundChanged, null);
+        using var corroboration = OpenProcess(0x1000, false, process);
+        if (corroboration.IsInvalid || !GetProcessTimes(corroboration, out var stillCreated, out _, out _, out _) ||
+            created != stillCreated || GetForegroundWindow() != window) return (window, process, null, ForegroundFailure.IdentityCorroborationFailed, null);
         // Identifies the process, not a hosted app behind a broker. No Core classification is asserted.
-        return (window, process, new(key, true));
+        return (window, process, new(key, true), ForegroundFailure.None, null);
     }
     private static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
 
@@ -93,11 +104,15 @@ internal static class Native
     [DllImport("user32.dll")] internal static extern bool GetLastInputInfo(ref LastInput value);
     [DllImport("user32.dll")] internal static extern int GetSystemMetrics(int index);
     [DllImport("user32.dll")] internal static extern bool SetForegroundWindow(nint window);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] internal static extern bool SetWindowText(nint window, string text);
     [DllImport("kernel32.dll")] internal static extern bool QueryUnbiasedInterruptTime(out ulong time);
     [DllImport("kernel32.dll")] internal static extern SafeProcessHandle OpenProcess(uint access, [MarshalAs(UnmanagedType.Bool)] bool inherit, uint process);
     [DllImport("kernel32.dll", EntryPoint = "QueryFullProcessImageNameW", CharSet = CharSet.Unicode)] internal static extern bool QueryFullProcessImageName(SafeProcessHandle process, uint flags, StringBuilder image, ref uint size);
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)] internal static extern int GetApplicationUserModelId(SafeProcessHandle process, ref uint length, StringBuilder? id);
     [DllImport("kernel32.dll")] internal static extern bool GetExitCodeProcess(SafeProcessHandle process, out uint exit);
+    [DllImport("kernel32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool GetProcessTimes(SafeProcessHandle process, out long created, out long exited, out long kernel, out long user);
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] internal static extern nint GetModuleHandle(string? name);
     [DllImport("wtsapi32.dll")] internal static extern bool WTSRegisterSessionNotification(nint window, uint flags);
     [DllImport("wtsapi32.dll")] internal static extern bool WTSUnRegisterSessionNotification(nint window);
