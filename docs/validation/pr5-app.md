@@ -3,14 +3,16 @@
 Base: `e73fe57` (merged PR 4), branch `feat/first-usable-windows-app`.
 This record distinguishes automated work from live Windows acceptance. No actual
 monitoring session, desktop switch, Explorer restart, lock or suspend exercise
-was performed during implementation.
+was performed by the agent during implementation or closeout. Later owner-reported
+live evidence is recorded separately below.
 
 ## Automated results
 
 Windows 11 25H2 **26200.9711/x64**, pinned .NET SDK 10.0.401, Release,
-warnings as errors. This machine is now outside the unchanged 26200.9457/x64
-observation allowlist. Native monitoring acceptance is blocked here; the build
-and noninteractive results below do not expand that gate.
+warnings as errors. The PR #11 branch alone retains the 26200.9457/x64 observation
+allowlist. Native monitoring on 26200.9711 is blocked in that unmodified branch;
+the later owner smoke used a detached checkout with the separately approved
+PR #13 predicate. The automated results below do not expand the gate.
 
 | Check | Result | Evidence boundary |
 |---|---|---|
@@ -34,7 +36,38 @@ Synthetic light/dark Home/Settings renders were inspected locally under ignored
 binding and Fluent brush/style inheritance. These are render checks, not real
 desktop, tray interaction, keyboard, Narrator or high-contrast acceptance.
 
-## Manual acceptance — NOT RUN
+## Owner-reported bounded smoke — closeout October 15, 2026
+
+Windows 11 25H2 Professional **26200.9711/x64**; two side-by-side monitors,
+**2560x1440 at 150%** and **1920x1080 at 100%**. The owner reported the integrated
+WPF smoke successful using detached PR #11 source
+`7026b55517c36cd73fc91fce093cc6c9011a7586` plus the approved compatibility predicate.
+This is a combined working tree, not a single tested PR #11 commit. The exact
+overlay commit/digest and a separate full runtime/hardware/privilege transcript
+were not returned. No live monitoring or cleanup was independently run by the
+agent. Procedure and diagnostic provenance are in PR #13's
+[compatibility record](https://github.com/NDePetris/offramp-shift/blob/spike/windows-26200-9711-compatibility/docs/validation/windows-26200-9711.md).
+
+| Check | Owner-reported result | Limit |
+|---|---|---|
+| Main setup, Personal/Work observations | PASS, bounded smoke | No separate distinct-ID rejection, role restoration or topology-mutation acceptance supplied |
+| Dashboard, tray and application interactions | PASS, bounded smoke | Does not establish every lifecycle, fault or accessibility case below |
+| Pause/Resume | PASS, bounded smoke | Durable Pause across restart and no downtime credit not separately reported |
+| Home visual review | Reviewed by owner | No separate Narrator, keyboard, high-contrast or per-monitor scaling acceptance supplied |
+| Production observation probe | PASS, bounded smoke | Desktop Available (2); foreground/input/hooks/session/power Available; pump Responsive; 10 samples, 0 drops/callback errors; accounting Gated, 0 certified ms, MatchingEndpointsAreNotCoverage; exit 0 |
+| Probe/app/owned-worker cleanup after the later smokes | NOT REPORTED | Diagnostic cleanup is separate evidence and cannot certify these runs |
+
+The owner observed passive video playback without keyboard/mouse input eventually
+earning break credit on Personal. This is known current idle-based product-policy
+behavior, not evidence of observer or PR 5 implementation failure. Changing break
+eligibility needs a new product-policy decision and separate work; this closeout
+does not alter accounting or add media/browser observation.
+
+## Remaining original manual acceptance — not established by the report
+
+The broad checklist items below remain unchecked when only part was covered by
+the bounded smoke above. Unreported steps are pending, not failures. Do not infer
+cleanup, persistence, accessibility or fault-path passes from ordinary interaction.
 
 For each exercise record exact app revision, Windows build/UBR and x64, runtime,
 privileges, CPU/RAM, storage/filesystem, power mode and monitor layout/DPI. Use an
@@ -74,7 +107,8 @@ not altered, archive scripts were not executed, and proposed semantic mappings
 were not promoted. The executable/window/tray use the family ICOs provisionally;
 a differentiated Shift-specific icon remains pending. Light/dark header render
 checks and synthetic high-contrast decorative-art exclusion pass. Actual shell
-icon appearance, high contrast and DPI acceptance remain NOT RUN.
+icon appearance beyond the reported Home/tray review, high contrast and detailed
+DPI acceptance remain unreported.
 
 Both supplied ICOs retain all seven 16/24/32/48/64/128/256 frames, verified with
 WPF decoding. Drawing.Icon decodes the tray sizes through 128px correctly here;
@@ -85,4 +119,43 @@ Issue #8 (Explorer recovery) and #9 (independent accuracy/sustained reliability)
 remain OPEN. No new two-hour measurement or mature transition matrix was run.
 All prior automatic-switching/browser-attribution gates remain NO-GO. This PR does
 not establish certified accounting, unattended daily use or production readiness.
-No merge, deployment, release or license change is authorized or performed.
+
+## Review verdict and integration
+
+The first usable owner-evaluation path is demonstrated by the reported integrated
+smoke. The original issue #10 acceptance checklist is **not fully closed**:
+Exit/owned-helper cleanup, restart restoring assignments/totals/Pause, lifecycle,
+keyboard/Narrator/high-contrast/scaling, lock/suspend, provider Retry after Explorer
+failure and storage-fault/recovery UI acceptance remain unconfirmed. Retain draft
+status pending that acceptance or an explicit owner decision narrowing the
+milestone's manual acceptance. These are actual missing original checks; revised
+accounting policy, actionable interventions and switching are subsequent product
+work and are not PR 5 feature blockers. Issues #8/#9 remain open independently.
+
+Review covered the serialized host/shared runtime, consent and exact-build gates,
+fresh GUID assignment, durable commands/settings, stale UI projection, worker
+dispatch and shutdown reporting. No new blocking implementation defect was
+identified in that review. The hard-coded 26200.9457 unsupported-build explanation
+in `MonitoringApplication.Snapshot` must be reconciled when integrating #13;
+this is an integration copy correction, not permission to broaden support.
+Original-head CI run 38677854810 passed all four jobs; automated assertions do not
+complete the manual checks above.
+
+Agent-executed closeout: `./run.ps1 test` PASS outside the constrained sandbox
+(Core 67 / 38,679 assertions; Persistence 65 / 618, including five owned Windows
+forced-termination scenarios; host 25 / 103; WPF 9 / 70). Release builds reported
+zero warnings/errors. The first constrained attempt passed Core, then stopped at
+the persistence build with `Build FAILED`, zero warnings/errors and no diagnostic;
+the unchanged suite passed outside. Retain that tooling failure separately from
+the successful rerun. `git diff --check` also passed. No live observation was run;
+only this Markdown record changed and no new behavior tests were needed.
+
+Recommend #13 before #11, with separate explicit owner merge authorization. After
+#13 merges, merge updated `main` into this branch, preserving the WPF/runtime/asset
+commits and both CI additions. Reconcile overlapping architecture/observation docs,
+keep the two exact read-only builds and compatibility regressions, and update the
+build explanation and architecture documentation. Run root, observation,
+compatibility, VirtualDesktop and BrowserAttribution tests plus formatting; verify
+CI and repeat a deliberate WPF smoke on the actual integrated head. Avoid replacing
+the branch with `main` or copying only the predicate and losing its tests/evidence.
+No integration, merge, deployment, release or license change was performed here.
