@@ -45,7 +45,9 @@ public sealed class MonitoringCoordinator
         {
             // Retain the completed-break latch, never resume an unfinished streak.
             BreakProgressMs = checkpoint.State.BreakCompleted ? checkpoint.Configuration.RequiredBreakMs : 0,
-            IdleProgressMs = 0
+            IdleProgressMs = 0,
+            BreakUncertaintyMs = 0,
+            ConsecutiveUncertaintyMs = 0
         };
         return engine;
     }
@@ -96,16 +98,25 @@ public sealed class MonitoringCoordinator
                 observation.Start.Epoch != now.Epoch || observation.End.Epoch != now.Epoch ||
                 observation.End.Milliseconds <= observation.Start.Milliseconds ||
                 observation.Start.Milliseconds < boundary.Milliseconds || observation.End.Milliseconds > now.Milliseconds ||
-                now.Milliseconds - observation.End.Milliseconds > configuration.MaximumEvidenceAgeMs)
+                now.Milliseconds - observation.End.Milliseconds > configuration.MaximumEvidenceAgeMs ||
+                !Enum.IsDefined(observation.Continuity) ||
+                observation.Confidence == EvidenceConfidence.Estimated &&
+                (observation.End.Milliseconds - observation.Start.Milliseconds > EstimationPolicy.MaximumIntervalMs ||
+                    now.Milliseconds - observation.End.Milliseconds > EstimationPolicy.MaximumAgeMs))
                 return Reject("Invalid, overlapping, delayed or out-of-order interval.", now, before);
 
-            if (observation.Start != boundary) ClearContinuity();
+            var contiguous = observation.Start == boundary;
+            if (!contiguous) InvalidateObservationContinuity();
             boundary = observation.End;
             lastObservation = observation;
             var activity = ApplicationClassifier.Classify(observation, configuration);
             if (activity == ActivityKind.Uncertain)
             {
-                ClearContinuity();
+                if (contiguous && !state.Paused && configuration.Accounting == AccountingMode.BestEffort &&
+                    observation.Confidence == EvidenceConfidence.Unknown && observation.Session != SessionState.Suspended &&
+                    observation.Continuity == ContinuityDisposition.PreserveTransient)
+                    PreserveTransient(observation.End.Milliseconds - observation.Start.Milliseconds);
+                else InvalidateObservationContinuity();
                 return Result(activity, "Unverified evidence; no accounting.", [], state != before);
             }
             if (state.Paused)
@@ -121,6 +132,7 @@ public sealed class MonitoringCoordinator
 
             var effects = ImmutableArray.CreateBuilder<AdvisoryEffect>();
             var duration = observation.End.Milliseconds - observation.Start.Milliseconds;
+            state = state with { ConsecutiveUncertaintyMs = 0 };
             // Snooze consumes verified time of every known classification, not gaps.
             var snoozedAtStart = state.Intervention == InterventionState.Snoozed;
             var suppressedDuration = snoozedAtStart ? Math.Min(duration, state.SnoozeRemainingMs) : 0;
@@ -142,13 +154,15 @@ public sealed class MonitoringCoordinator
                 case ActivityKind.CountedPersonal:
                     ClearBreak();
                     CountPersonal(duration, suppressedDuration, effects);
+                    if (observation.Confidence == EvidenceConfidence.Estimated)
+                        state = state with { EstimatedUsageMs = AddCapped(state.EstimatedUsageMs, duration, state.UsageMs) };
                     break;
                 case ActivityKind.Work:
                 case ActivityKind.Locked:
                     EarnBreak(duration, effects);
                     break;
                 case ActivityKind.Idle:
-                    var qualificationRemaining = configuration.IdleThresholdMs - idleBefore;
+                    var qualificationRemaining = observation.Input == InputState.QualifiedIdle ? 0 : configuration.IdleThresholdMs - idleBefore;
                     // A restored completed break needs no new credit. Keep its latch
                     // while idle is requalified so restart cannot repeat that reset.
                     if (qualificationRemaining > 0 && !state.BreakCompleted) ClearBreak();
@@ -159,7 +173,8 @@ public sealed class MonitoringCoordinator
                     ClearBreak();
                     break;
             }
-            return Result(activity, "Certified interval accepted.", effects.ToImmutable(), state != before);
+            return Result(activity, observation.Confidence == EvidenceConfidence.Estimated ? "Estimated interval accepted." :
+                "Certified interval accepted.", effects.ToImmutable(), state != before);
         }
     }
 
@@ -202,8 +217,12 @@ public sealed class MonitoringCoordinator
                 state = state with { Recovery = RecoveryStatus.Required };
                 return Result(ActivityKind.Uncertain, "Effect sequence exhausted; explicit recovery required.", [], false);
             }
+            var preserveCompleted = state.BreakCompleted &&
+                replacement with { Accounting = configuration.Accounting } == configuration;
             CommandBoundary();
             ClearContinuity();
+            if (preserveCompleted)
+                state = state with { BreakCompleted = true, BreakProgressMs = replacement.RequiredBreakMs };
             configuration = replacement;
             var effects = ImmutableArray.CreateBuilder<AdvisoryEffect>();
             if (!state.Exhausted && state.UsageMs >= configuration.AllowanceMs) Exhaust(effects);
@@ -249,6 +268,9 @@ public sealed class MonitoringCoordinator
         state = state with
         {
             UsageMs = 0,
+            EstimatedUsageMs = 0,
+            BreakUncertaintyMs = 0,
+            ConsecutiveUncertaintyMs = 0,
             Exhausted = false,
             BreakCompleted = true,
             Intervention = InterventionState.Normal,
@@ -268,7 +290,7 @@ public sealed class MonitoringCoordinator
 
     private TransitionResult Reject(string reason, MonotonicTime now, EngineState before)
     {
-        ClearContinuity();
+        InvalidateObservationContinuity();
         lastObservation = null;
         if (ValidTime(now) && (now.Epoch != boundary.Epoch || now.Milliseconds >= boundary.Milliseconds)) boundary = now;
         return Result(ActivityKind.Uncertain, reason, [], state != before);
@@ -285,7 +307,26 @@ public sealed class MonitoringCoordinator
         lastObservation = null;
     }
 
-    private void ClearBreak() => state = state with { BreakProgressMs = 0, BreakCompleted = false };
+    private void ClearBreak() => state = state with
+    { BreakProgressMs = 0, BreakCompleted = false, BreakUncertaintyMs = 0, ConsecutiveUncertaintyMs = 0 };
+    private void InvalidateObservationContinuity()
+    {
+        if (configuration.Accounting == AccountingMode.BestEffort && state.BreakCompleted)
+            state = state with { IdleProgressMs = 0 };
+        else ClearContinuity();
+    }
+    private void PreserveTransient(long duration)
+    {
+        if (state.BreakProgressMs == 0 || state.BreakCompleted) return;
+        if (duration > EstimationPolicy.MaximumConsecutiveUncertaintyMs - state.ConsecutiveUncertaintyMs ||
+            duration > EstimationPolicy.MaximumBreakUncertaintyMs - state.BreakUncertaintyMs)
+        { InvalidateObservationContinuity(); return; }
+        state = state with
+        {
+            BreakUncertaintyMs = state.BreakUncertaintyMs + duration,
+            ConsecutiveUncertaintyMs = state.ConsecutiveUncertaintyMs + duration
+        };
+    }
     private void ClearContinuity()
     {
         ClearBreak();

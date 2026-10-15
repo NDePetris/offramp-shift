@@ -3,13 +3,26 @@ using OfframpShift.Core;
 namespace WindowsObservation;
 
 public enum Capability { Available, Unavailable, Unsupported }
+public enum ForegroundFailure
+{
+    None, NoWindowOrProcess, ProcessQueryUnavailable, ProcessTimesUnavailable,
+    ProcessImageUnavailable, GenericHostUnsupported, ApplicationIdentityQueryUnavailable,
+    PackagedIdentityUnavailable, ProcessExitedOrForegroundChanged,
+    IdentityCorroborationFailed, ForegroundChangedDuringCollection
+}
 public enum SignalKind { Foreground, Destroyed, InputDesktopChanged, Session, Power, Tick, PumpStall, Stopped }
 public sealed record NativeSignal(long Sequence, SignalKind Kind, MonotonicTime Receipt,
     long ReceiptUptimeMs, uint? GeneratedTick, nint Window = 0, uint Detail = 0);
 public sealed record DesktopReading(Capability Health, Guid? Current, Guid[] Desktops, uint ShellProcess);
 public sealed record EvidencePoint(MonotonicTime Time, long UptimeMs, ulong? Awake100ns,
     nint Window, uint Process, ApplicationIdentity? Application, long? IdleAgeMs,
-    SessionState Session, DesktopReading Desktop, Capability Foreground, Capability Input, Capability SessionHealth);
+    SessionState Session, DesktopReading Desktop, Capability Foreground, Capability Input, Capability SessionHealth)
+{
+    public long CollectionMs { get; init; }
+    public bool InputDiscontinuity { get; init; }
+    public ForegroundFailure ForegroundFailure { get; init; }
+    public int? ForegroundIdentityQueryCode { get; init; }
+}
 public sealed record EvidenceResult(MonitoringObservation? Interval, string Reason);
 
 public static class DesktopObservationPolicy
@@ -110,12 +123,14 @@ public static class TickMath
 public sealed class LastInputTracker
 {
     private long? previousTick;
+    public bool LastReadDiscontinuous { get; private set; }
     public long? Read(uint tick, long uptime)
     {
         var age = TickMath.Age(tick, uptime);
-        if (age is null) { previousTick = null; return null; }
+        LastReadDiscontinuous = false;
+        if (age is null) { previousTick = null; LastReadDiscontinuous = true; return null; }
         var absolute = uptime - age.Value;
-        if (previousTick is { } previous && absolute < previous) { previousTick = null; return null; }
+        if (previousTick is { } previous && absolute < previous) { previousTick = null; LastReadDiscontinuous = true; return null; }
         previousTick = absolute;
         return age;
     }

@@ -25,6 +25,7 @@ internal sealed class NativeLoop : IDisposable
     public Capability LoopHealth { get; private set; } = Capability.Unavailable;
     public long Dropped => Interlocked.Read(ref dropped);
     public long CallbackErrors => Interlocked.Read(ref callbackErrors);
+    public int QueueDepth => queue.Count;
 
     public NativeLoop(ObservationClock clock)
     {

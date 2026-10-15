@@ -1,5 +1,12 @@
 # Core monitoring engine (PR 1)
 
+PR 4 adds explicit BestEffort opt-in, Estimated confidence, QualifiedIdle and
+bounded transient break preservation. CertifiedOnly retains the PR 1 behavior
+described below. Checkpoint payloads now write version 2 and strictly migrate
+version 1 through the durable session. See [the current best-effort contract](best-effort-monitoring.md)
+for the added fields and where uncertainty/idle semantics differ; the original
+certification limitations remain true for Confirmed evidence.
+
 The domain library in `src/OfframpShift.Core` implements application classification,
 usage, continuous breaks, advisory reminders, and recovery contracts. It has no
 Windows, UI, browser, networking, or database dependency. The two feasibility

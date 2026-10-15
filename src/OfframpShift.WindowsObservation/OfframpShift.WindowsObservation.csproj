@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup><ProjectReference Include="../OfframpShift.Core/OfframpShift.Core.csproj" /></ItemGroup>
+  <ItemGroup><InternalsVisibleTo Include="ObservationProbe" /></ItemGroup>
+</Project>

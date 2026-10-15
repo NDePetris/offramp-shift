@@ -12,6 +12,7 @@ internal sealed class DesktopWorker : IDisposable
 {
     private Process? process;
     private bool failed;
+    public Process? OwnedProcess => process;
     public static bool IsSupported(string build, Architecture architecture) => DesktopObservationPolicy.IsSupported(build, architecture.ToString());
     public static string Build
     {
@@ -35,7 +36,7 @@ internal sealed class DesktopWorker : IDisposable
             RedirectStandardError = true
         };
         if (string.Equals(Path.GetFileNameWithoutExtension(executable), "dotnet", StringComparison.OrdinalIgnoreCase))
-            start.ArgumentList.Add(Assembly.GetExecutingAssembly().Location);
+            start.ArgumentList.Add(Assembly.GetEntryAssembly()!.Location);
         start.ArgumentList.Add(mode);
         try { process = Process.Start(start) ?? throw new InvalidOperationException(); }
         catch { failed = true; }

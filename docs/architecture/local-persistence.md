@@ -1,5 +1,11 @@
 # Transactional local checkpoint persistence (PR 2)
 
+PR 4 extends payload compatibility to strict version-1 reads and version-2 writes,
+with atomic migration before Ready and exact pending migration retry. SQLite
+schema/user_version remains 1, and transaction/integrity/delivery guarantees below
+are retained. See [migration and current domain state](best-effort-monitoring.md).
+Aggregate Save diagnostics do not change persistence ordering or buffer writes.
+
 `OfframpShift.Persistence` is a platform-independent `net10.0` integration around
 the unchanged Core contracts. It adds strict checkpoint JSON, a local SQLite
 store and a durable monitoring session. It adds no host, live observation,

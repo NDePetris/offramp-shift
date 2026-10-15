@@ -1,0 +1,3 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup><ProjectReference Include="../OfframpShift.WindowsObservation/OfframpShift.WindowsObservation.csproj" /></ItemGroup>
+</Project>

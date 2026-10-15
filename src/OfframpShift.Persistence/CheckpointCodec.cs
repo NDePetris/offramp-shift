@@ -21,12 +21,18 @@ public static class CheckpointCodec
             var versions = document.RootElement.EnumerateObject().Where(x => x.Name == "Version").ToArray();
             if (versions.Length != 1) throw Invalid();
             var version = versions[0].Value.GetInt32();
-            if (version != MonitoringCheckpoint.CurrentVersion) throw new CheckpointStorageException(StorageFailure.UnsupportedVersion);
+            if (version is not 1 and not MonitoringCheckpoint.CurrentVersion) throw new CheckpointStorageException(StorageFailure.UnsupportedVersion);
             var root = Object(document.RootElement, "Version", "SavedUtc", "Configuration", "State");
-            var c = Object(root["Configuration"], "AllowanceMs", "RequiredBreakMs", "IdleThresholdMs", "GraceMs",
-                "RepeatNudgeMs", "SnoozeMs", "MaximumEvidenceAgeMs", "Mode", "Applications");
-            var s = Object(root["State"], "UsageMs", "Exhausted", "BreakProgressMs", "BreakCompleted", "IdleProgressMs",
-                "Paused", "Intervention", "ReminderRemainingMs", "SnoozeRemainingMs", "EffectSequence", "Recovery");
+            string[] configurationFields = ["AllowanceMs", "RequiredBreakMs", "IdleThresholdMs", "GraceMs",
+                "RepeatNudgeMs", "SnoozeMs", "MaximumEvidenceAgeMs", "Mode", "Applications"];
+            string[] stateFields = ["UsageMs", "Exhausted", "BreakProgressMs", "BreakCompleted", "IdleProgressMs",
+                "Paused", "Intervention", "ReminderRemainingMs", "SnoozeRemainingMs", "EffectSequence", "Recovery"];
+            var c = Object(root["Configuration"], version == 1 ? configurationFields :
+                [.. configurationFields, "Accounting", "EstimationPolicyVersion"]);
+            var s = Object(root["State"], version == 1 ? stateFields :
+                [.. stateFields, "EstimatedUsageMs", "BreakUncertaintyMs", "ConsecutiveUncertaintyMs"]);
+            if (version == 2 && c["EstimationPolicyVersion"].GetInt32() > EstimationPolicy.Version)
+                throw new CheckpointStorageException(StorageFailure.UnsupportedVersion);
             var configuration = new MonitoringConfiguration
             {
                 AllowanceMs = c["AllowanceMs"].GetInt64(),
@@ -36,15 +42,22 @@ public static class CheckpointCodec
                 RepeatNudgeMs = c["RepeatNudgeMs"].GetInt64(),
                 SnoozeMs = c["SnoozeMs"].GetInt64(),
                 MaximumEvidenceAgeMs = c["MaximumEvidenceAgeMs"].GetInt64(),
+                Accounting = version == 1 ? AccountingMode.CertifiedOnly : (AccountingMode)c["Accounting"].GetInt32(),
+                EstimationPolicyVersion = version == 1 ? EstimationPolicy.Version : c["EstimationPolicyVersion"].GetInt32(),
                 Mode = (ClassificationMode)c["Mode"].GetInt32(),
                 Applications = c["Applications"].EnumerateArray().Select(x => x.GetString() ?? throw Invalid()).ToImmutableArray()
             };
             var state = new EngineState(s["UsageMs"].GetInt64(), s["Exhausted"].GetBoolean(), s["BreakProgressMs"].GetInt64(),
                 s["BreakCompleted"].GetBoolean(), s["IdleProgressMs"].GetInt64(), s["Paused"].GetBoolean(),
                 (InterventionState)s["Intervention"].GetInt32(), s["ReminderRemainingMs"].GetInt64(),
-                s["SnoozeRemainingMs"].GetInt64(), s["EffectSequence"].GetInt64(), (RecoveryStatus)s["Recovery"].GetInt32());
+                s["SnoozeRemainingMs"].GetInt64(), s["EffectSequence"].GetInt64(), (RecoveryStatus)s["Recovery"].GetInt32())
+            {
+                EstimatedUsageMs = version == 1 ? 0 : s["EstimatedUsageMs"].GetInt64(),
+                BreakUncertaintyMs = version == 1 ? 0 : s["BreakUncertaintyMs"].GetInt64(),
+                ConsecutiveUncertaintyMs = version == 1 ? 0 : s["ConsecutiveUncertaintyMs"].GetInt64()
+            };
             var checkpoint = new MonitoringCheckpoint(version, root["SavedUtc"].GetDateTimeOffset(), configuration, state);
-            Validate(checkpoint, now);
+            ValidateReadable(checkpoint, now);
             return checkpoint;
         }
         catch (Exception e) when (e is JsonException or InvalidOperationException or FormatException or OverflowException or ArgumentException)
@@ -65,6 +78,13 @@ public static class CheckpointCodec
     internal static void Validate(MonitoringCheckpoint checkpoint, DateTimeOffset now)
     {
         if (checkpoint.Version != MonitoringCheckpoint.CurrentVersion) throw new CheckpointStorageException(StorageFailure.UnsupportedVersion);
+        if (checkpoint.Configuration?.EstimationPolicyVersion > EstimationPolicy.Version)
+            throw new CheckpointStorageException(StorageFailure.UnsupportedVersion);
+        ValidateReadable(checkpoint, now);
+    }
+
+    private static void ValidateReadable(MonitoringCheckpoint checkpoint, DateTimeOffset now)
+    {
         // Check structure/domain consistency first. A future timestamp alone may
         // be a backward host clock adjustment; it still cannot be restored now.
         if (checkpoint.SavedUtc == default || checkpoint.SavedUtc.Offset != TimeSpan.Zero ||

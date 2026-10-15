@@ -13,7 +13,7 @@ internal static class Program
         if (!OperatingSystem.IsWindows() || RuntimeInformation.ProcessArchitecture != Architecture.X64)
         { Console.Error.WriteLine("Unsupported: Windows x64 required."); return 2; }
         try { return Commands.Run(args); }
-        catch { Console.Error.WriteLine("ObservationProbeFailure; no accounting or state manipulation."); return 1; }
+        catch { Console.Error.WriteLine("ObservationProbeFailure; no implicit recovery or effect replay."); return 1; }
     }
 }
 
@@ -37,12 +37,17 @@ internal static class Commands
             return 0;
         }
         if (args is ["foreground-test"]) return ForegroundExercise.Run();
+        if (args is ["user-test", "foreground"]) return UserObservationExercise.Run(false);
+        if (args is ["user-test", "desktop"]) return UserObservationExercise.Run(true);
         if (args is ["delivery-test"]) return ForegroundExercise.DeliveryTest();
+        if (args.Length > 0 && args[0] == "monitor") return MonitoringHost.Run(args);
         if (args.Length == 0 || args is ["help"])
         {
             Console.WriteLine("Windows observation investigation; live accounting disabled.\n" +
                 "snapshot [--desktop]\nwatch <1..600 seconds> [--desktop] [--personal <GUID> --work <GUID>]\n" +
                 "foreground-test (briefly shows two owned test windows; tests delayed hook delivery)\n" +
+                "user-test foreground|desktop (operator-confirmed live endpoints; desktop is explicitly build-gated)\n" +
+                "monitor <1..86400 seconds> --desktop --personal <GUID> --work <GUID> --store <directory>\n" +
                 "delivery-test (hidden owned window; delays only our pump)\nisolation-test");
             return 0;
         }
@@ -160,20 +165,48 @@ internal static class Commands
 internal sealed class Sampler(ObservationClock clock, DesktopWorker? worker)
 {
     private readonly LastInputTracker input = new();
+    public OfframpShift.Persistence.LatencyHistogram DesktopLatency { get; } = new();
+    public OfframpShift.Persistence.LatencyHistogram ForegroundLatency { get; } = new();
+    public OfframpShift.Persistence.LatencyHistogram SessionLatency { get; } = new();
+    public OfframpShift.Persistence.LatencyHistogram InputLatency { get; } = new();
     public EvidencePoint Read()
     {
+        var started = Stopwatch.GetTimestamp();
+        var batchStarted = started;
+        var initialForeground = Native.GetForegroundWindow();
+        var initialSession = Native.Session();
+        SessionLatency.Record(Stopwatch.GetElapsedTime(started).Ticks / 10);
+        started = Stopwatch.GetTimestamp();
         var desktop = worker?.Read() ?? new(Capability.Unavailable, null, [], 0);
+        DesktopLatency.Record(Stopwatch.GetElapsedTime(started).Ticks / 10);
+        started = Stopwatch.GetTimestamp();
         var foreground = Native.Foreground();
+        ForegroundLatency.Record(Stopwatch.GetElapsedTime(started).Ticks / 10);
+        started = Stopwatch.GetTimestamp();
         var session = Native.Session();
+        SessionLatency.Record(Stopwatch.GetElapsedTime(started).Ticks / 10);
+        started = Stopwatch.GetTimestamp();
         var value = new Native.LastInput { Size = (uint)Marshal.SizeOf<Native.LastInput>() };
         var succeeded = Native.GetLastInputInfo(ref value);
         var uptime = Environment.TickCount64;
         var idle = succeeded ? input.Read(value.Time, uptime) : null;
         ulong? awake = Native.QueryUnbiasedInterruptTime(out var awakeTime) ? awakeTime : null;
-        if (Native.GetForegroundWindow() != foreground.Window) foreground.Application = null;
+        InputLatency.Record(Stopwatch.GetElapsedTime(started).Ticks / 10);
+        if (initialForeground != foreground.Window || Native.GetForegroundWindow() != foreground.Window)
+        {
+            if (foreground.Application is not null) foreground.Failure = ForegroundFailure.ForegroundChangedDuringCollection;
+            foreground.Application = null;
+        }
+        if (initialSession != session) session = SessionState.Unknown;
         return new(clock.Now, uptime, awake, foreground.Window, foreground.Process, foreground.Application,
             idle, session, desktop, foreground.Application is not null ? Capability.Available : Capability.Unavailable,
             idle is not null ? Capability.Available : Capability.Unavailable,
-            session != SessionState.Unknown ? Capability.Available : Capability.Unavailable);
+            session != SessionState.Unknown ? Capability.Available : Capability.Unavailable)
+        {
+            CollectionMs = Stopwatch.GetElapsedTime(batchStarted).Ticks / TimeSpan.TicksPerMillisecond,
+            InputDiscontinuity = succeeded && input.LastReadDiscontinuous,
+            ForegroundFailure = foreground.Failure,
+            ForegroundIdentityQueryCode = foreground.IdentityQueryCode
+        };
     }
 }

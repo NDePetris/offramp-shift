@@ -5,17 +5,31 @@ strict continuous interval certification remains NO-GO. Live accounting is gated
 Automatic desktop switching and production browser attribution remain NO-GO.
 This directory neither references nor changes either existing feasibility spike.
 
-The approved scope stops before durable-session integration, a production host,
+PR 4 now adds an explicitly invoked best-effort `monitor` command after the owner
+accepted Stage 1. It opens a durable session only for that command, uses Estimated
+rather than Confirmed intervals. The bounded investigation is now closed with
+partial functional evidence; full acceptance remains unproven. See
+[the closeout](../../docs/validation/pr4-closeout.md) for failures and NOT RUN checks.
+See [the architecture](../../docs/architecture/best-effort-monitoring.md) and
+[live procedure](../../docs/validation/pr4-accounting.md). Original snapshot/watch
+commands still emit uncertain diagnostic evidence and open no accounting session.
+The read-only native mechanisms now live in `src/OfframpShift.WindowsObservation`.
+The monitor host reuses the existing pinned SQLite dependency; its runner uses
+root NuGet source mapping and locked restore. New host/test lock files pin transitives.
+
+The original PR 3 approved scope stops before durable-session integration, a production host,
 notifications, or the full acceptance matrix when useful certified intervals cannot
 be justified. See [the evidence and decision](docs/feasibility-results.md).
 
 ## Build and run
 
 Windows x64, ordinary user, pinned .NET SDK from the root `global.json`.
-Two projects only: an executable probe and package-free assertion tests. The probe
-references Core for its existing immutable types. It has no Persistence dependency.
+The executable probe and assertion tests share extracted observation/estimation
+libraries. The monitor command references Persistence and its existing pinned
+SQLite dependency; the diagnostic commands do not open storage. Locked build
+restore uses the root NuGet source mapping and may download these existing packages.
 No service, installation, registry writes, startup task, browser integration,
-networking or package download is introduced.
+runtime networking is introduced.
 
 ```powershell
 ./spikes/WindowsObservation/run.ps1 test
@@ -27,8 +41,9 @@ networking or package download is introduced.
 ./spikes/WindowsObservation/run.ps1 isolation-test
 ```
 
-`test` is synthetic, including Core uncertainty integration; no Windows API is invoked
-by the assertion executable. `format` verifies both new projects without edits.
+`test` uses deterministic observation/Core evidence plus a real local SQLite
+integration check; no native observation API is invoked by the assertion executable.
+`format` verifies the probe, tests and extracted libraries without edits.
 `snapshot` and `watch` deliberately exercise real native APIs. Run outside the Codex
 filesystem/process sandbox when its build/process restrictions prevent operation.
 `watch` prints only its final current state and aggregate counters, not a sample
@@ -64,6 +79,13 @@ activation in those fault workers. There is no helper retry loop.
 
 ## Components and evidence boundary
 
+PR 4 Stage 1 adds `user-test foreground` and `user-test desktop` for explicit
+owner-assisted endpoint checks without forced foreground activation. See the
+[procedure and evidence boundary](../../docs/validation/pr4-stage1.md). These
+commands create temporary visible test windows and print aggregate results only;
+they do not open an accounting or durable session. Desktop testing retains the
+exact build gate and requires the operator to switch and pin the test window.
+
 - `NativeLoop`: dedicated STA thread, hidden top-level window, foreground/destroy/input-desktop
   WinEvent hooks, this-session WTS notifications, suspend/resume subscription and timer.
   Callbacks enqueue immutable signals; they never resolve identity or mutate Core.
@@ -93,7 +115,7 @@ fresh epochs. Awake uptime can reveal some missing power transitions, but is onl
 diagnostic cross-check. No interval crosses epochs. Same-epoch rollback preserves the
 high-water boundary. Every reported elapsed gap remains uncertain; none fills accounting.
 
-**No coordinator or durable session is opened by live commands.** The only Core accounting
+**No coordinator or durable session is opened by the original diagnostic live commands.** Before PR 4, the only Core accounting
 exercise occurs in synthetic tests: uncertain adapter output earns no usage/break credit,
 and interrupts an artificially established partial break without resetting confirmed usage.
 No live sample can become `EvidenceConfidence.Confirmed`, even with all capabilities healthy.

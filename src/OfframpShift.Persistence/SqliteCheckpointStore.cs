@@ -26,6 +26,7 @@ public sealed class SqliteCheckpointStore : ICheckpointStore, IDisposable
     private bool fresh;
     private bool disposed;
     internal Action<StorageFault>? Fault { get; set; }
+    public long PreparedPayloadBytes { get; private set; }
 
     public static string DefaultDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Offramp", "Shift");
 
@@ -89,6 +90,8 @@ public sealed class SqliteCheckpointStore : ICheckpointStore, IDisposable
         {
             ThrowDisposed();
             var payload = CheckpointCodec.Encode(checkpoint, utcNow());
+            var bytes = Encoding.UTF8.GetByteCount(payload);
+            PreparedPayloadBytes = bytes > long.MaxValue - PreparedPayloadBytes ? long.MaxValue : PreparedPayloadBytes + bytes;
             if (expectedRevision is null) throw new CheckpointStorageException(StorageFailure.MissingEstablishedState);
             if (pendingPayload is not null && pendingPayload != payload) throw new CheckpointStorageException(StorageFailure.StaleRevision);
             var commitStarted = false;
