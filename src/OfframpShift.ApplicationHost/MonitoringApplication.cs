@@ -66,7 +66,7 @@ internal sealed class MonitoringApplication : IDisposable
         catch { providerFault = true; throw; }
     }
 
-    public string Execute(HostCommand command)
+    public HostCommandResult Execute(HostCommand command)
     {
         message = "";
         try
@@ -78,7 +78,7 @@ internal sealed class MonitoringApplication : IDisposable
                     SaveSettings(settings with { Consent = true, Build = build });
                     EnsureRuntime(); break;
                 case HostCommandKind.Start:
-                    Require(Ready && settings.Complete && BindingsValid(), "Assign two distinct, currently observed desktops before starting.");
+                    Require(CanObserve && !providerFault && settings.Complete && BindingsValid(), "Review consent and assign two distinct, currently observed desktops before starting.");
                     // Settings intent alone cannot enable accounting in CertifiedOnly mode.
                     SaveSettings(settings with { MonitoringEnabled = true });
                     if (session.Configuration.Accounting != AccountingMode.BestEffort)
@@ -104,14 +104,18 @@ internal sealed class MonitoringApplication : IDisposable
                     {
                         if (providerFault)
                         { ResetRuntime(); providerFault = false; EnsureRuntime(); }
-                        else if (runtime is not null) runtime.RetryProviders();
+                        else if (runtime is not null) Require(runtime.RetryProviders(), "Wait ten seconds between provider retries.");
                         else EnsureRuntime();
                     }
                     catch { providerFault = true; throw; }
+                    Require(!providerFault && runtime is not null,
+                        "Observation providers could not be restarted. Wait ten seconds, then retry monitoring after Windows settles. Accounting remains unavailable.");
+                    message = "Observation providers restarted. Waiting for fresh evidence; monitoring availability is not yet confirmed.";
                     break;
                 case HostCommandKind.AssignPersonal:
                 case HostCommandKind.AssignWork:
-                    Require(CanObserve && !providerFault && runtime is not null, "Desktop observation is unavailable.");
+                    Require(CanObserve && !providerFault && runtime is not null,
+                        "Desktop observation is unavailable. Review consent and storage in Settings; retry monitoring after Windows settles.");
                     // Fresh capture at command execution; never activate the main window first.
                     var point = runtime!.CaptureCurrent();
                     Require(point is not null && Fresh(point) && point.Desktop.Health == Capability.Available &&
@@ -120,6 +124,8 @@ internal sealed class MonitoringApplication : IDisposable
                     var replacement = command.Kind == HostCommandKind.AssignPersonal
                         ? settings with { Personal = point!.Desktop.Current, MonitoringEnabled = false }
                         : settings with { Work = point!.Desktop.Current, MonitoringEnabled = false };
+                    Require(replacement.Personal != replacement.Work,
+                        "Personal and Work must use different desktops. Choose the other desktop in Task View, then assign it through the tray menu.");
                     replacement.Validate();
                     ResetRuntime();
                     SaveSettings(replacement);
@@ -139,6 +145,9 @@ internal sealed class MonitoringApplication : IDisposable
                     session.ChangeConfiguration(configuration); runtime?.ResetConfiguration(); break;
                 case HostCommandKind.ChangeAppearance:
                     SaveSettings(settings with { Theme = command.Theme, CloseToTray = command.CloseToTray }); break;
+                case HostCommandKind.ChangeCloseBehavior:
+                    Require(command.CloseToTray is not null, "Choose whether closing keeps the app in the tray or exits.");
+                    SaveSettings(settings with { CloseToTray = command.CloseToTray }); break;
                 case HostCommandKind.ReopenStorage:
                     Require(session.Status == PersistenceStatus.Blocked, "Reopen is only available for blocked storage.");
                     ResetRuntime(); session.Dispose(); session = openSession(); EnsureRuntime(); break;
@@ -156,13 +165,16 @@ internal sealed class MonitoringApplication : IDisposable
             }
         }
         catch (CheckpointStorageException e)
-        { message = StorageDetail(session.Status, e.Failure); }
+        { message = StorageDetail(session.Status, e.Failure); return HostCommandResult.Failure(message); }
         catch (Exception e) when (e is ArgumentException or InvalidOperationException or IOException or UnauthorizedAccessException)
         {
-            message = e is ArgumentException ? "Check the settings: durations must be valid and desktop assignments must be distinct." :
-            e is IOException or UnauthorizedAccessException ? "Windows settings could not be saved. Existing saved settings remain in effect." : e.Message;
+            message = providerFault && command.Kind == HostCommandKind.RetryMonitoring ?
+                "Observation providers could not be restarted. Wait ten seconds, then retry monitoring after Windows settles. Accounting remains unavailable." :
+                e is ArgumentException ? "Check the settings: durations must be valid and desktop assignments must be distinct." :
+                e is IOException or UnauthorizedAccessException ? "Windows settings could not be saved. Existing saved settings remain in effect. Check local storage access and try again." : e.Message;
+            return HostCommandResult.Failure(message);
         }
-        return message;
+        return HostCommandResult.Success(message);
     }
 
     private static void Require(bool condition, string detail) { if (!condition) throw new InvalidOperationException(detail); }
@@ -172,6 +184,16 @@ internal sealed class MonitoringApplication : IDisposable
         p.Desktop.ShellProcess != 0 && p.Desktop.Current is { } current && p.Desktop.Desktops.Contains(current) &&
         settings.Personal is { } personal && settings.Work is { } work && personal != work &&
         p.Desktop.Desktops.Contains(personal) && p.Desktop.Desktops.Contains(work);
+
+    private bool DesktopObserved => CanObserve && !providerFault && runtime?.Latest is { } p && Fresh(p) &&
+        p.Desktop.Health == Capability.Available && p.Desktop.ShellProcess != 0 &&
+        p.Desktop.Current is { } current && current != Guid.Empty && p.Desktop.Desktops.Contains(current);
+
+    private AssignmentStatus Assignment(Guid? id) => settingsStore.Status is not (SettingsStatus.Ready or SettingsStatus.Missing) ? AssignmentStatus.Unavailable :
+        id is null ? AssignmentStatus.Unassigned :
+        id == Guid.Empty || settings.Personal == settings.Work ? AssignmentStatus.Invalid :
+        !DesktopObserved ? AssignmentStatus.Unavailable :
+        runtime!.Latest!.Desktop.Desktops.Contains(id.Value) ? AssignmentStatus.Valid : AssignmentStatus.Missing;
 
     public HostSnapshot Snapshot()
     {
@@ -197,7 +219,7 @@ internal sealed class MonitoringApplication : IDisposable
             settings.Build != build && settings.Consent ? "The saved desktop provider build differs. Explicitly review setup again." :
             providerFault ? "Observation provider failed. Retry monitoring explicitly after Windows settles." :
             !settings.Consent ? "Opt in to experimental Estimated monitoring to observe and assign desktops." :
-            !bindings ? "Both assigned desktop GUIDs must be present in a fresh observation. Deleted desktops are never substituted." :
+            !bindings ? "Both assigned desktops must be present in a fresh observation. Use Task View and the tray menu to assign distinct desktops; deleted desktops are never substituted." :
             point?.Foreground == Capability.Unavailable && context == DesktopScope.Personal && point.Session == SessionState.Active ?
             $"Foreground identity unavailable: {point.ForegroundFailure}. This interval earns no credit." :
             state!.Paused ? "Monitoring is paused. Usage and break progress do not advance." :
@@ -206,7 +228,10 @@ internal sealed class MonitoringApplication : IDisposable
             "Estimated monitoring; owner evaluation only. Explorer recovery and sustained accounting reliability remain unresolved.";
         return new(++sequence, Environment.TickCount64, session.Status, session.Failure, settingsStore.Status, settings,
             state, config, context, status, message.Length > 0 ? message + " " + detail : detail,
-            available, bindings, Math.Max(runtime?.RetryInMs ?? 0, Math.Max(0, 10_000 - (elapsed() - lastProviderAttempt))), CanObserve);
+            available, bindings, Math.Max(runtime?.RetryInMs ?? 0, Math.Max(0, 10_000 - (elapsed() - lastProviderAttempt))), CanObserve,
+            supported && Ready && settingsStore.Status is SettingsStatus.Ready or SettingsStatus.Missing &&
+                (!settings.Consent || settings.Build != build), DesktopObserved,
+            Assignment(settings.Personal), Assignment(settings.Work), settings.Consent && settings.Build != build);
     }
 
     private static string StorageDetail(PersistenceStatus status, StorageFailure? failure) => status switch

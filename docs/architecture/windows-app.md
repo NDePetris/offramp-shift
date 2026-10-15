@@ -1,4 +1,4 @@
-# PR 5 owner-evaluation Windows app
+# Owner-evaluation Windows app
 
 This is the first launchable WPF/tray app, not production readiness, certified
 accounting or approval for unattended daily use. Explorer recovery [#8](https://github.com/NDePetris/offramp-shift/issues/8)
@@ -8,6 +8,11 @@ are absent. The shared read-only COM gate accepts exactly **26200.9457/x64** and
 **26200.9711/x64**, as approved in merged PR #13. Both worker entry guards and
 the read-only ABI remain unchanged. The separate switching gate is unchanged.
 See [integration validation and owner checklist](../validation/pr5-app.md).
+PR #11 completed the accepted PR 5 owner-evaluation scope; the owner reported
+Tests 1–7 PASS and deferred Tests 8–12 / NOT RUN. PR #13 completed the bounded
+exact-build read-only compatibility work. Historical evidence and its limitations
+remain unchanged. See [PR 6 setup and feedback validation](../validation/pr6-setup-feedback.md)
+for the subsequent focused UI changes.
 
 ## Ownership
 
@@ -59,6 +64,32 @@ session to discard unfinished continuity, and requires explicit Start again.
 Duration edits retain unrelated configuration and rebuild estimation only after
 the committed change. Pause/Resume use durable Core commands and fresh baselines.
 
+PR 6 projects a four-part setup checklist from immutable host snapshots: consent,
+Personal assignment, Work assignment, and explicit Start. Home expands it when
+setup needs attention; Settings retains the details. Individual assignment states
+distinguish unassigned, freshly validated, missing/invalid, and temporarily
+unverifiable identities without displaying GUIDs. Consent and assignment controls
+use host eligibility plus UI snapshot freshness; commands still revalidate on the
+owner thread. Names/indices never substitute for GUIDs.
+
+Commands return `HostCommandResult` with explicit success and a user-facing message;
+nonempty successful assignment messages cannot be mistaken for failures. Provider
+recreation failure is unsuccessful even when construction catches its exception
+internally. Successful recreation only claims that providers restarted, with fresh
+evidence still required. The queue, provider cooldown and automatic recovery policy
+are unchanged.
+
+Tray failures retain one in-memory message behind **Action needs attention…** and
+mirror the explanation into Home/Settings. A native NotifyIcon balloon advises of a
+new failure without opening/activating the main window. Windows can suppress the
+balloon; the menu remains the dependable discovery path. Choosing the menu item or
+balloon explicitly opens a native keyboard/screen-reader-accessible details dialog;
+OK dismisses it. Repeated identical failures for the same command do not repeat the
+balloon. A successful retry of that command clears its failure; other successes
+stay quiet. This retains only the latest failure, not an action history, durable
+notification store or toast framework. Real shell/Narrator behavior needs owner
+smoke validation; automation/property checks alone do not establish accessibility.
+
 Retry monitoring replaces read-only providers after the existing ten-second
 cooldown. Shell generation changes retain the existing one replacement attempt
 per generation. Failed construction/cleanup stops accounting, with no unbounded
@@ -103,6 +134,13 @@ checkpoint lease remains the final exclusion against another storage owner.
 Activation obeys ordinary Windows foreground restrictions; it does not move
 windows or switch desktops. First close explains tray continuation versus Exit;
 the chosen behavior is saved. Tray initialization failure prevents hiding the UI.
+The first-close choice uses a dedicated `ChangeCloseBehavior` command that patches
+only that preference against the owner's current settings. The window hides/exits
+only after a successful result. A rejected or failed save leaves it open with an
+explanation: close again to retry/choose differently, or explicitly Exit without
+saving a preference. Cancellation saves nothing. Theme, consent, assignments and
+monitoring intent are preserved. PendingCommit/Exit and worker cleanup paths remain
+separate and unchanged.
 Exit stops the owner and disposes providers/session before removing the tray.
 Pending-save Exit explicitly offers retry, cancel or potential loss of the pending
 change. Windows session ending requests best-effort stop without postponing logout.

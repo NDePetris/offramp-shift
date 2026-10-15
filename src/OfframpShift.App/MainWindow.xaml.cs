@@ -9,7 +9,7 @@ namespace OfframpShift.App;
 public partial class MainWindow : Window
 {
     public DashboardModel Model { get; } = new();
-    private readonly Func<HostCommand, Task<string>> execute;
+    private readonly Func<HostCommand, Task<HostCommandResult>> execute;
     private readonly Func<Task> exit;
     private readonly Func<Task> close;
     private MonitoringConfiguration? displayedConfiguration;
@@ -17,7 +17,7 @@ public partial class MainWindow : Window
     private bool busy;
     private (bool Dark, bool HighContrast)? artwork;
 
-    internal MainWindow(Func<HostCommand, Task<string>> execute, Func<Task> exit, Func<Task> close)
+    internal MainWindow(Func<HostCommand, Task<HostCommandResult>> execute, Func<Task> exit, Func<Task> close)
     {
         InitializeComponent(); DataContext = Model;
         this.execute = execute; this.exit = exit; this.close = close;
@@ -59,9 +59,27 @@ public partial class MainWindow : Window
         {
             ActionResult.Text = SettingsResult.Text = "Applying…";
             var result = await execute(command);
-            ActionResult.Text = SettingsResult.Text = result.Length == 0 ? "Saved action completed." : result;
+            ReportAction(result.Message.Length == 0 ? "Saved action completed." : result.Message);
         }
         finally { busy = false; }
+    }
+    internal void ReportAction(string message)
+    {
+        if (ActionResult.Text == message && SettingsResult.Text == message) return;
+        ActionResult.Text = SettingsResult.Text = message;
+        // WPF LiveSetting alone does not raise a UIA live-region event for TextBlock changes.
+        var target = Navigation.SelectedIndex == 1 ? SettingsResult : ActionResult;
+        if (System.Windows.Automation.Peers.UIElementAutomationPeer.FromElement(target) is { } peer)
+            peer.RaiseAutomationEvent(System.Windows.Automation.Peers.AutomationEvents.LiveRegionChanged);
+    }
+    private void OpenSetup(object sender, RoutedEventArgs e)
+    {
+        Navigation.SelectedIndex = 1;
+        SetupHeading.BringIntoView();
+        if (Model.CanConsent) ConsentButton.Focus();
+        else if (Model.CanStart) SetupStartButton.Focus();
+        else if (Model.CanAssign) PersonalButton.Focus();
+        else if (Navigation.SelectedItem is System.Windows.Controls.TabItem tab) tab.Focus();
     }
     private async void Start(object sender, RoutedEventArgs e) => await Run(new(HostCommandKind.Start));
     private async void Pause(object sender, RoutedEventArgs e) => await Run(new(HostCommandKind.Pause));

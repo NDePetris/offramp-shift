@@ -4,7 +4,7 @@ namespace OfframpShift.ApplicationHost;
 
 public sealed class MonitoringController
 {
-    private readonly BlockingCollection<(HostCommand Command, TaskCompletionSource<string> Completion)> commands = new(16);
+    private readonly BlockingCollection<(HostCommand Command, TaskCompletionSource<HostCommandResult> Completion)> commands = new(16);
     private readonly TaskCompletionSource stopped = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly object submissionGate = new();
     private HostSnapshot? latest;
@@ -18,12 +18,12 @@ public sealed class MonitoringController
         thread.Start();
     }
 
-    public Task<string> ExecuteAsync(HostCommand command)
+    public Task<HostCommandResult> ExecuteAsync(HostCommand command)
     {
-        var completion = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var completion = new TaskCompletionSource<HostCommandResult>(TaskCreationOptions.RunContinuationsAsynchronously);
         lock (submissionGate)
             if (stopping || stopped.Task.IsCompleted || !commands.TryAdd((command, completion)))
-                completion.SetResult("The application is stopping or busy. Try again after the current action completes.");
+                completion.SetResult(HostCommandResult.Failure("The application is stopping or busy. Try again after the current action completes."));
         return completion.Task;
     }
 
@@ -41,9 +41,9 @@ public sealed class MonitoringController
                 // One command per turn: a burst cannot starve observation indefinitely.
                 if (commands.TryTake(out var request, 10))
                 {
-                    if (stopping) { request.Completion.TrySetResult("The monitoring owner is stopping."); break; }
+                    if (stopping) { request.Completion.TrySetResult(HostCommandResult.Failure("The monitoring owner is stopping.")); break; }
                     try { var result = application.Execute(request.Command); Volatile.Write(ref latest, application.Snapshot()); request.Completion.TrySetResult(result); }
-                    catch { request.Completion.TrySetResult("Application action failed. Accounting stopped; restart the app."); throw; }
+                    catch { request.Completion.TrySetResult(HostCommandResult.Failure("Application action failed. Accounting stopped; restart the app.")); throw; }
                 }
                 if (stopping) break;
                 application.Step();
@@ -60,7 +60,7 @@ public sealed class MonitoringController
             lock (submissionGate)
             {
                 stopping = true;
-                while (commands.TryTake(out var pending)) pending.Completion.TrySetResult("The monitoring owner stopped.");
+                while (commands.TryTake(out var pending)) pending.Completion.TrySetResult(HostCommandResult.Failure("The monitoring owner stopped."));
             }
             if (failure is null) stopped.TrySetResult();
             else stopped.TrySetException(new InvalidOperationException("Monitoring owner or cleanup failed. No recovery was performed."));

@@ -7,6 +7,7 @@
    <ResourceDictionary.MergedDictionaries>
     <ResourceDictionary Source="/PresentationFramework.Fluent;component/Themes/Fluent.xaml" />
    </ResourceDictionary.MergedDictionaries>
+   <BooleanToVisibilityConverter x:Key="BooleanToVisibility" />
    <SolidColorBrush x:Key="DeepMoss" Color="#2E5A4F" />
    <SolidColorBrush x:Key="WarmPaper" Color="#F6F3EC" />
    <SolidColorBrush x:Key="SoftSky" Color="#79AFC9" />

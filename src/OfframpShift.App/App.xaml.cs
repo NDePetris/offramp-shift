@@ -72,10 +72,12 @@ public partial class ShiftApplication : Application
     internal void ApplyTheme(AppTheme value) => ThemeMode = value switch
     { AppTheme.Light => System.Windows.ThemeMode.Light, AppTheme.Dark => System.Windows.ThemeMode.Dark, _ => System.Windows.ThemeMode.System };
 #pragma warning restore WPF0001
-    private async Task<string> Execute(HostCommand command)
+    private async Task<HostCommandResult> Execute(HostCommand command)
     {
-        if (controller is null || exiting) return "The app is stopping.";
-        var result = await controller.ExecuteAsync(command); Refresh(); return result;
+        if (controller is null || exiting) return HostCommandResult.Failure("The app is stopping.");
+        var result = await controller.ExecuteAsync(command);
+        window?.ReportAction(result.Message.Length == 0 ? "Saved action completed." : result.Message);
+        Refresh(); return result;
     }
     private async Task CloseAsync()
     {
@@ -85,14 +87,20 @@ public partial class ShiftApplication : Application
         {
             if (tray is null) { await ExitAsync(); return; }
             var choice = controller?.Latest?.Settings.CloseToTray;
+            bool? selected = null;
             if (choice is null)
             {
                 var answer = MessageBox.Show(window, "Keep monitoring in the system tray when this window closes? Yes keeps the app running; No exits. You can change this in Settings. Tray Exit always stops the app.",
                     "Close Offramp Shift", MessageBoxButton.YesNoCancel, MessageBoxImage.Question, MessageBoxResult.Cancel);
                 if (answer == MessageBoxResult.Cancel) return;
-                choice = answer == MessageBoxResult.Yes;
-                await Execute(new(HostCommandKind.ChangeAppearance) { Theme = theme ?? AppTheme.System, CloseToTray = choice });
+                selected = answer == MessageBoxResult.Yes;
             }
+            choice = await ClosePreference.ResolveAsync(choice, selected, Execute, detail =>
+            {
+                window.ReportAction(detail);
+                MessageBox.Show(window, detail, "Close preference not saved", MessageBoxButton.OK, MessageBoxImage.Warning);
+            });
+            if (choice is null) return;
             if (choice == true) window.Hide(); else await ExitAsync();
         }
         finally { closing = false; }

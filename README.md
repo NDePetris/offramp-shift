@@ -2,7 +2,7 @@
 
 Offramp Shift is an early-stage, local-first Windows application concept for helping users keep personal and work contexts separate. It is part of the Offramp family, alongside Offramp Fade for Android.
 
-**Current state: an owner-evaluation WPF/tray app, a shared monitoring host, transactional local checkpoints and isolated feasibility probes.** Accounting is experimental and Estimated. PR 4's partial live evidence does not establish production readiness or unattended daily-use acceptance; Explorer recovery and sustained reliability remain unresolved. Automatic switching and production website attribution remain NO-GO.
+**Current state: an owner-evaluation WPF/tray app, a shared monitoring host, transactional local checkpoints and isolated feasibility probes.** PR #11 completed the accepted PR 5 milestone: owner acceptance Tests 1–7 were reported PASS; Tests 8–12 remain deferred / NOT RUN. Accounting is experimental and Estimated. This does not establish production readiness, certified accounting or unattended daily-use acceptance; Explorer recovery (#8) and sustained reliability (#9) remain unresolved. PR #13 completed the bounded exact-build read-only compatibility work. Automatic switching and production website attribution remain NO-GO.
 
 ## Development
 
@@ -31,6 +31,9 @@ desktop observer remains restricted to the two approved exact builds,
 See [Windows app architecture](docs/architecture/windows-app.md) and
 [PR 5 validation](docs/validation/pr5-app.md) and the
 [prioritized owner acceptance checklist](docs/validation/pr5-owner-acceptance.md).
+The [PR 6 setup and feedback checklist](docs/validation/pr6-setup-feedback.md)
+tracks the focused setup, tray-error and first-close changes separately from the
+deferred PR 5 acceptance exercises.
 
 CI uses these automated test commands on Windows runners, with Node.js 24 for the browser probe. Browser tests use mocked extension APIs and synthetic native callers; neither job interacts with a live browser or switches desktops. CI cannot establish actual virtual-desktop or browser-to-window compatibility.
 
