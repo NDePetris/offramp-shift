@@ -161,6 +161,15 @@ wrapping/scrolling support accessibility; real Narrator/high-contrast/DPI accept
 is separate. Dashboard/tray distinguish primary availability/pause from the saved
 exhaustion/advisory state. No toast notification infrastructure is added.
 
+PR 7 adds read-only native tray rows for current context, saved remaining allowance
+and saved qualifying break progress/requirement, plus a concise status tooltip.
+The dashboard's existing refresh/freshness decision supplies an immutable tray
+projection; no UI time is credited or extrapolated. Minute-level labels update
+only when their text changes. Paused/unavailable/stale/setup states distinguish
+retained saved accounting from current monitoring; unavailable/stale context is
+Unknown and unacknowledged storage values are never presented as saved. Existing
+actions and PR 6 feedback are preserved. See the [short PR 7 owner smoke checklist](../validation/pr7-tray-summaries.md).
+
 Quiet Road palette constants are retained without invented semantic colors.
 The owner-supplied v0.1 canonical family assets are deployed unchanged in
 `src/OfframpShift.App/Assets/Offramp`, with source hashes/provenance. The executable,

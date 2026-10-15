@@ -34,6 +34,73 @@ internal static class Program
     {
         if (args is ["--instance-client", var suffix])
         { using var client = new SingleInstance(suffix); return !client.IsOwner && client.Activate() ? 0 : 1; }
+        Test("tray projects saved allowance and qualifying break in every observed context", () =>
+        {
+            var model = new DashboardModel(); var snapshot = Snapshot() with
+            { Configuration = new() { Accounting = AccountingMode.BestEffort, AllowanceMs = 1_800_000, RequiredBreakMs = 300_000 } };
+            foreach (var context in Enum.GetValues<DesktopScope>())
+            {
+                model.Apply(snapshot with { Context = context }, snapshot.PublishedTick);
+                Check(model.Tray.Context == "Current context: " + context);
+                Check(model.Tray.Allowance == "Saved allowance: 28m left");
+                Check(model.Tray.Break == "Saved qualifying break: <1m of 5m");
+                Check(model.Tray.Tooltip.Contains("Monitoring") && model.Tray.Tooltip.Contains("28m left (saved)") && model.Tray.Tooltip.Length <= 63);
+            }
+            model.Apply(snapshot with { State = snapshot.State! with { UsageMs = 65_999, BreakProgressMs = 12_999 } }, snapshot.PublishedTick);
+            var summary = model.Tray;
+            model.Apply(snapshot, snapshot.PublishedTick + 2_000);
+            Check(model.Tray == summary); // No extrapolation or second-level menu churn.
+        });
+        Test("tray retained values distinguish pause unavailability stale updates and owner failure", () =>
+        {
+            var model = new DashboardModel(); var snapshot = Snapshot();
+            model.Apply(snapshot, snapshot.PublishedTick); var saved = model.Tray;
+            model.Apply(snapshot with { Status = "Paused", State = snapshot.State! with { Paused = true } }, snapshot.PublishedTick);
+            Check(model.Tray.Status == "Paused — saved values retained" && !model.Tray.Tooltip.Contains("left"));
+            foreach (var tick in new[] { snapshot.PublishedTick - 1, snapshot.PublishedTick + 2_001 })
+            {
+                model.Apply(snapshot, tick);
+                Check(model.Tray.Status.Contains("stale updates") && model.Tray.Status.Contains("retained"));
+                Check(model.Tray.Context == "Current context: Unknown" && model.Tray.Allowance == saved.Allowance && model.Tray.Break == saved.Break);
+            }
+            model.Apply(snapshot with { Status = "Unavailable", Available = false }, snapshot.PublishedTick);
+            Check(model.Tray.Context == "Current context: Unknown" && model.Tray.Status.Contains("Unavailable") && !model.Tray.Tooltip.Contains("left"));
+            model.MarkUnavailable("Owner failed");
+            Check(model.Tray.Status.Contains("retained") && model.Tray.Allowance == saved.Allowance && model.Tray.Tooltip == "Offramp Shift — Unavailable");
+        });
+        Test("tray shows setup and missing committed accounting without presenting pending data as saved", () =>
+        {
+            var model = new DashboardModel(); var snapshot = Snapshot();
+            model.Apply(snapshot with { Status = "Ready to start", Settings = snapshot.Settings with { MonitoringEnabled = false } }, snapshot.PublishedTick);
+            Check(model.Tray.Status.Contains("setup incomplete") && model.Tray.Tooltip.Contains("Setup incomplete"));
+            foreach (var persistence in new[] { PersistenceStatus.PendingCommit, PersistenceStatus.Blocked, PersistenceStatus.Incompatible, PersistenceStatus.RecoveryRequired })
+            {
+                // Even a supplied state cannot bypass the persistence guard.
+                model.Apply(snapshot with { Persistence = persistence, Available = false, Status = persistence.ToString() }, snapshot.PublishedTick);
+                Check(model.Tray.Allowance == "Saved allowance unavailable" && model.Tray.Break == "Saved qualifying break unavailable");
+            }
+            model.Apply(snapshot with { State = null, Configuration = null }, snapshot.PublishedTick);
+            Check(model.Tray.Allowance == "Saved allowance unavailable" && model.Tray.Break == "Saved qualifying break unavailable");
+            Check(TraySummary.Starting.Context == "Current context: Unknown");
+        });
+        Test("tray represents exhausted completed zero and sub-minute saved durations", () =>
+        {
+            var model = new DashboardModel(); var snapshot = Snapshot();
+            var config = snapshot.Configuration!;
+            foreach (var state in new[] { snapshot.State! with { Exhausted = true }, snapshot.State! with { UsageMs = config.AllowanceMs } })
+            {
+                model.Apply(snapshot with { State = state }, snapshot.PublishedTick);
+                Check(model.Tray.Allowance == "Saved allowance: Allowance exhausted" && model.Tray.Tooltip.Contains("Allowance exhausted"));
+            }
+            model.Apply(snapshot with { State = snapshot.State! with { UsageMs = config.AllowanceMs - 1, BreakProgressMs = 0 } }, snapshot.PublishedTick);
+            Check(model.Tray.Allowance == "Saved allowance: <1m left" && model.Tray.Break.StartsWith("Saved qualifying break: 0m of "));
+            model.Apply(snapshot with { State = snapshot.State! with { UsageMs = 0, BreakCompleted = true } }, snapshot.PublishedTick);
+            Check(model.Tray.Break == "Saved qualifying break: completed; allowance reset");
+            Check(TraySummary.Duration(60_000) == "1m" && TraySummary.Duration(3_600_000) == "60m");
+            model.Apply(snapshot with { Status = "Establishing baseline", Configuration = config with { AllowanceMs = 900_000_000_000_000 }, State = snapshot.State! with { UsageMs = 0 } }, snapshot.PublishedTick);
+            Check(model.Tray.Tooltip.Length <= 63 && model.Tray.Tooltip.EndsWith("left (saved)"));
+            Check(TraySummary.Starting.Unavailable().Status == "Unavailable");
+        });
         Test("setup projection identifies next prerequisite without exposing desktop identities", () =>
         {
             var model = new DashboardModel(); var ready = Snapshot();
