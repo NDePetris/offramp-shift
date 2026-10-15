@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Nodes;
 
 namespace OfframpShift.ApplicationHost;
 
@@ -8,7 +9,7 @@ public enum SettingsStatus { Ready, Missing, Invalid, Incompatible, Unavailable 
 
 public sealed record WindowsSettings
 {
-    [JsonRequired] public int Version { get; init; } = 1;
+    [JsonRequired] public int Version { get; init; } = 2;
     [JsonRequired] public Guid? Personal { get; init; }
     [JsonRequired] public Guid? Work { get; init; }
     [JsonRequired] public string Provider { get; init; } = "shell-com-53f5ca0b-readonly-v1";
@@ -17,11 +18,12 @@ public sealed record WindowsSettings
     [JsonRequired] public bool MonitoringEnabled { get; init; }
     [JsonRequired] public AppTheme Theme { get; init; }
     [JsonRequired] public bool? CloseToTray { get; init; }
+    [JsonRequired] public bool BreakRemindersEnabled { get; init; }
     [JsonIgnore] public bool Complete => Personal is not null && Work is not null && Consent;
 
     public void Validate()
     {
-        if (Version != 1 || Provider != "shell-com-53f5ca0b-readonly-v1" || Build is null ||
+        if (Version != 2 || Provider != "shell-com-53f5ca0b-readonly-v1" || Build is null ||
             Build.Length > 40 || !Enum.IsDefined(Theme) || Personal == Guid.Empty || Work == Guid.Empty ||
             Personal is not null && Personal == Work || MonitoringEnabled && !Complete)
             throw new ArgumentException("Invalid Windows settings.");
@@ -48,9 +50,21 @@ public sealed class WindowsSettingsStore(string directory)
             foreach (var item in document.RootElement.EnumerateObject())
                 if (!names.Add(item.Name)) throw new JsonException();
             if (document.RootElement.TryGetProperty("Version", out var version) && version.ValueKind == JsonValueKind.Number &&
-                (!version.TryGetInt32(out var number) || number != 1))
+                (!version.TryGetInt32(out var number) || number is not (1 or 2)))
             { Status = SettingsStatus.Incompatible; return new(); }
-            var settings = document.RootElement.Deserialize<WindowsSettings>(Options) ?? throw new JsonException();
+            WindowsSettings settings;
+            if (version.ValueKind == JsonValueKind.Number && version.GetInt32() == 1)
+            {
+                // Validate the exact v1 shape before adding the new required v2 field.
+                // Migration is in memory only; the next explicit atomic save writes v2.
+                if (!names.SetEquals(["Version", "Personal", "Work", "Provider", "Build", "Consent",
+                    "MonitoringEnabled", "Theme", "CloseToTray"])) throw new JsonException();
+                var migrated = JsonNode.Parse(document.RootElement.GetRawText())!;
+                migrated["Version"] = 2;
+                migrated["BreakRemindersEnabled"] = false;
+                settings = migrated.Deserialize<WindowsSettings>(Options) ?? throw new JsonException();
+            }
+            else settings = document.RootElement.Deserialize<WindowsSettings>(Options) ?? throw new JsonException();
             settings.Validate(); Status = SettingsStatus.Ready; return settings;
         }
         catch (FileNotFoundException) { Status = SettingsStatus.Missing; }

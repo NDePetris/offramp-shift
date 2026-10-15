@@ -2,6 +2,26 @@ using OfframpShift.ApplicationHost;
 
 namespace OfframpShift.App;
 
+// Native callbacks have no per-balloon identity. Never replace a reminder with
+// an error balloon (or vice versa); ambiguous clicks must not dismiss an error.
+internal sealed class TrayBalloonState
+{
+    private enum Kind { None, Reminder, Error }
+    private Kind current;
+    internal bool BeginReminder(bool hasError)
+    {
+        if (hasError || current != Kind.None) return false;
+        current = Kind.Reminder; return true;
+    }
+    internal bool BeginError()
+    {
+        if (current != Kind.None) return false;
+        current = Kind.Error; return true;
+    }
+    internal bool ClickOpensError => current == Kind.Error;
+    internal void Closed() => current = Kind.None;
+}
+
 // Only explicit command outcomes enter this state; polling never produces alerts.
 internal sealed class TrayActionFeedback
 {

@@ -17,6 +17,7 @@ internal sealed class TrayService : IDisposable
     private readonly Forms.ToolStripMenuItem work;
     private readonly Forms.ToolStripMenuItem feedbackItem = new("Action needs &attention…") { Visible = false };
     private readonly TrayActionFeedback feedback = new();
+    private readonly TrayBalloonState balloons = new();
     private HostSnapshot? snapshot;
     private bool disposed;
     private readonly System.Drawing.Icon lightIcon;
@@ -62,10 +63,32 @@ internal sealed class TrayService : IDisposable
         try { icon = new() { Icon = lightIcon, Text = summary.Tooltip, ContextMenuStrip = menu, Visible = true }; }
         catch { lightIcon.Dispose(); darkIcon.Dispose(); menu.Dispose(); throw; }
         icon.DoubleClick += (_, _) => open();
-        icon.BalloonTipClicked += (_, _) => ShowFeedback();
+        icon.BalloonTipClicked += (_, _) =>
+        {
+            var opensError = balloons.ClickOpensError;
+            balloons.Closed();
+            if (opensError) ShowFeedback();
+        };
+        icon.BalloonTipClosed += (_, _) => balloons.Closed();
     }
-    private void NotifyFailure() => icon.ShowBalloonTip(5_000, "Offramp Shift — action needs attention",
-        "The action did not complete. Open the tray menu and choose Action needs attention for details.", Forms.ToolTipIcon.Warning);
+    private void NotifyFailure()
+    {
+        if (balloons.BeginError())
+            RequestBalloon("Offramp Shift — action needs attention",
+                "The action did not complete. Open the tray menu and choose Action needs attention for details.", Forms.ToolTipIcon.Warning);
+    }
+    // True means a request returned without exception, never proof of display.
+    internal bool RequestReminder()
+    {
+        if (disposed || !balloons.BeginReminder(feedback.Message.Length > 0)) return false;
+        return RequestBalloon("Time for a break", "You've used your Personal allowance. A break will help you reset.", Forms.ToolTipIcon.Info);
+    }
+    private bool RequestBalloon(string title, string text, Forms.ToolTipIcon kind)
+    {
+        try { icon.ShowBalloonTip(5_000, title, text, kind); return true; }
+        catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception or System.Runtime.InteropServices.ExternalException)
+        { balloons.Closed(); return false; }
+    }
     public void ApplyBrand(bool dark)
     {
         if (darkSelected == dark) return;

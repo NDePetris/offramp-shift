@@ -21,6 +21,7 @@ internal sealed class MonitoringApplication : IDisposable
     private bool providerFault;
     private string message = "";
     private long sequence, lastProviderAttempt = -10_000;
+    internal BreakReminderMailbox Reminders { get; } = new();
 
     public MonitoringApplication(IMonitoringClock clock, Action newEpoch, Func<long> elapsed,
         Func<IObservationSource> providers, Func<DurableMonitoringSession> openSession,
@@ -45,7 +46,8 @@ internal sealed class MonitoringApplication : IDisposable
         try
         {
             runtime = new(clock, newEpoch, elapsed, providers, session,
-                settings.Personal ?? Guid.NewGuid(), settings.Work ?? Guid.NewGuid());
+                settings.Personal ?? Guid.NewGuid(), settings.Work ?? Guid.NewGuid())
+            { Reminders = Reminders };
         }
         catch { providerFault = true; message = "Observation provider initialization failed. Retry monitoring after Windows settles."; }
     }
@@ -53,9 +55,9 @@ internal sealed class MonitoringApplication : IDisposable
     public void Step()
     {
         EnsureRuntime();
-        if (runtime is null || providerFault) return;
-        try { runtime.Step(CanAccount); }
-        catch { providerFault = true; message = "Observation or cleanup failed. Accounting stopped. Retry monitoring explicitly."; }
+        if (runtime is null || providerFault) { Reminders.Invalidate(); return; }
+        try { runtime.Step(CanAccount, settings.BreakRemindersEnabled); }
+        catch { Reminders.Invalidate(); providerFault = true; message = "Observation or cleanup failed. Accounting stopped. Retry monitoring explicitly."; }
     }
 
     private void SaveSettings(WindowsSettings value) { settingsStore.Save(value); settings = value; }
@@ -68,6 +70,7 @@ internal sealed class MonitoringApplication : IDisposable
 
     public HostCommandResult Execute(HostCommand command)
     {
+        Reminders.Invalidate();
         message = "";
         try
         {
@@ -145,6 +148,14 @@ internal sealed class MonitoringApplication : IDisposable
                     session.ChangeConfiguration(configuration); runtime?.ResetConfiguration(); break;
                 case HostCommandKind.ChangeAppearance:
                     SaveSettings(settings with { Theme = command.Theme, CloseToTray = command.CloseToTray }); break;
+                case HostCommandKind.ChangeBreakReminders:
+                    SaveSettings(settings with { BreakRemindersEnabled = command.BreakRemindersEnabled }); break;
+                case HostCommandKind.ResetUsage:
+                    Require(command.Confirmed && Ready, "Confirm Reset usage; ready accounting storage is required.");
+                    session.ResetUsage();
+                    runtime?.ResetConfiguration();
+                    message = "Usage and break progress reset and saved. Pause and monitoring settings are unchanged.";
+                    break;
                 case HostCommandKind.ChangeCloseBehavior:
                     Require(command.CloseToTray is not null, "Choose whether closing keeps the app in the tray or exits.");
                     SaveSettings(settings with { CloseToTray = command.CloseToTray }); break;
@@ -156,6 +167,7 @@ internal sealed class MonitoringApplication : IDisposable
                         "Explicit recovery confirmation is required; recovery is unavailable in this state.");
                     ResetRuntime();
                     session.Reinitialize(new());
+                    Reminders.ResetSession();
                     if (settingsStore.Status is SettingsStatus.Ready or SettingsStatus.Missing)
                         SaveSettings(settings with { MonitoringEnabled = false });
                     EnsureRuntime(); break;
@@ -242,5 +254,5 @@ internal sealed class MonitoringApplication : IDisposable
         _ => $"Storage is blocked ({failure}). Correct clock, access or competing-owner problems, then reopen storage. No accounting or reset is available."
     };
 
-    public void Dispose() { try { ResetRuntime(); } finally { session.Dispose(); } }
+    public void Dispose() { Reminders.Invalidate(); try { ResetRuntime(); } finally { session.Dispose(); } }
 }

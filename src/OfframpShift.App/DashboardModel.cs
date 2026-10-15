@@ -38,6 +38,8 @@ public sealed class DashboardModel : INotifyPropertyChanged
     public bool CanReopen { get; private set; }
     public bool CanRepairSettings { get; private set; }
     public bool CanEdit { get; private set; }
+    public bool CanResetUsage { get; private set; }
+    public bool CanEditReminders { get; private set; }
     public string RetryLabel { get; private set; } = "Retry monitoring";
 
     internal void MarkUnavailable(string detail)
@@ -46,6 +48,7 @@ public sealed class DashboardModel : INotifyPropertyChanged
         Tray = Tray.Unavailable();
         CanStart = CanPause = CanResume = CanRetrySave = CanRetryMonitoring = CanRecover = CanReopen = CanRepairSettings = CanEdit = false;
         CanConsent = CanAssign = false;
+        CanResetUsage = CanEditReminders = false;
         NeedsSetup = true;
         ConsentStatus = "Experimental monitoring consent: Unavailable";
         PersonalStatus = AssignmentText("Personal", Snapshot?.Settings.Personal, AssignmentStatus.Unavailable);
@@ -78,6 +81,8 @@ public sealed class DashboardModel : INotifyPropertyChanged
         }
         else { Usage = "Saved usage unavailable"; Break = "Saved break progress unavailable"; Advisory = "Advisory state unavailable"; UsageProgress = BreakProgress = 0; }
         CanEdit = !stale && snapshot.Persistence == PersistenceStatus.Ready;
+        CanResetUsage = CanEdit;
+        CanEditReminders = !stale && snapshot.SettingsStatus is SettingsStatus.Ready or SettingsStatus.Missing;
         CanStart = CanEdit && snapshot.ObservationAllowed && snapshot.CanAssign && snapshot.BindingsValid && snapshot.Settings.Complete &&
             (!snapshot.Settings.MonitoringEnabled || snapshot.Configuration?.Accounting != OfframpShift.Core.AccountingMode.BestEffort);
         CanPause = CanEdit && snapshot.State?.Paused == false && snapshot.Settings.MonitoringEnabled;

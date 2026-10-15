@@ -191,6 +191,18 @@ public sealed class MonitoringCoordinator
         }
     }
 
+    public TransitionResult ResetUsage()
+    {
+        lock (gate)
+        {
+            if (state.Recovery != RecoveryStatus.Ready)
+                throw new InvalidOperationException("Usage reset requires ready accounting storage.");
+            CommandBoundary();
+            state = Fresh() with { Paused = state.Paused, EffectSequence = state.EffectSequence };
+            return Result(ActivityKind.Uncertain, "Usage and break progress reset.", [], true);
+        }
+    }
+
     public TransitionResult Snooze()
     {
         lock (gate)

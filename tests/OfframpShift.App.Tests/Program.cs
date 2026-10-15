@@ -240,6 +240,21 @@ internal static class Program
             using var client = Process.Start(start)!;
             Check(client.WaitForExit(5_000)); Check(client.ExitCode == 0); Check(activated.Wait(2_000));
         });
+        Test("generated apphost has Offramp Shift metadata and launches without the dotnet host", () =>
+        {
+            var assembly = typeof(OfframpShift.App.Program).Assembly;
+            var executable = Path.ChangeExtension(assembly.Location, ".exe");
+            var metadata = FileVersionInfo.GetVersionInfo(executable);
+            Check(metadata.ProductName == "Offramp Shift" && metadata.FileDescription == "Offramp Shift");
+            Check(assembly.GetCustomAttribute<AssemblyProductAttribute>()?.Product == "Offramp Shift");
+            Check(assembly.GetCustomAttribute<AssemblyDescriptionAttribute>()?.Description ==
+                "Intentional transitions between personal and work contexts.");
+            var start = new ProcessStartInfo(executable) { UseShellExecute = false, CreateNoWindow = true };
+            // Unknown arguments exit before singleton, WPF, settings, storage or COM.
+            start.ArgumentList.Add("--invalid-startup-test");
+            using var process = Process.Start(start)!;
+            Check(process.WaitForExit(5_000) && process.ExitCode == 2);
+        });
         Test("actual WinExe worker fault modes use redirected pipes without creating UI or COM", () =>
         {
             foreach (var mode in new[] { "--worker-malformed", "--worker-hang" })
@@ -328,6 +343,7 @@ internal static class Program
             window.ReportAction("Desktop assignment rejected. Choose another desktop in Task View.");
             Check(window.ActionResult.Text == window.SettingsResult.Text && window.SettingsResult.Text.Contains("Task View"));
         });
+        Pr8UiRegressions.Run(Test, () => Snapshot());
         if (args is ["--render", var output])
         {
             Directory.CreateDirectory(output);
@@ -335,11 +351,13 @@ internal static class Program
             {
                 app.ApplyTheme(theme);
                 foreach (var settings in new[] { false, true })
-                    foreach (var scenario in new[] { (Name: "Monitoring", Width: 820, Height: 760), (Name: "Setup", Width: 820, Height: 760), (Name: "SetupSmall", Width: 480, Height: 420) })
+                    foreach (var scenario in new[] { (Name: "Monitoring", Width: 820, Height: 760), (Name: "Setup", Width: 820, Height: 760), (Name: "SetupSmall", Width: 480, Height: 420),
+                        (Name: "Reminders", Width: 820, Height: 760), (Name: "RemindersSmall", Width: 480, Height: 420) })
                     {
+                        if (!settings && scenario.Name.StartsWith("Reminders", StringComparison.Ordinal)) continue;
                         var window = new MainWindow(_ => Task.FromResult(HostCommandResult.Success()), () => Task.CompletedTask, () => Task.CompletedTask);
                         var snapshot = Snapshot();
-                        if (scenario.Name != "Monitoring") snapshot = snapshot with
+                        if (scenario.Name.StartsWith("Setup", StringComparison.Ordinal)) snapshot = snapshot with
                         {
                             Settings = new(),
                             ObservationAllowed = false,
@@ -358,6 +376,16 @@ internal static class Program
                         var content = (FrameworkElement)window.Content;
                         var bounds = new Rect(0, 0, scenario.Width, scenario.Height);
                         content.Measure(bounds.Size); content.Arrange(bounds); content.UpdateLayout();
+                        if (scenario.Name.StartsWith("Reminders", StringComparison.Ordinal))
+                        {
+                            DependencyObject? ancestor = window.ResetUsageButton;
+                            while (ancestor is not null && ancestor is not ScrollViewer) ancestor = VisualTreeHelper.GetParent(ancestor);
+                            if (ancestor is ScrollViewer scroll)
+                            {
+                                var offset = window.ResetUsageButton.TransformToAncestor(scroll).Transform(new Point()).Y;
+                                scroll.ScrollToVerticalOffset(offset - 12); content.UpdateLayout();
+                            }
+                        }
                         var drawing = new DrawingVisual();
                         using (var dc = drawing.RenderOpen())
                         {

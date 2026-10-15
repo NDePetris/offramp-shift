@@ -17,7 +17,8 @@ for the subsequent focused UI changes.
 ## Ownership
 
 `OfframpShift.ApplicationHost` references ActivityMonitoring, WindowsObservation
-and Persistence. Core and persistence semantics/formats are unchanged. The probe
+and Persistence. PR 8 adds an explicit durable Core usage-reset operation; the
+checkpoint format remains version 2. The probe
 and WPF app share `MonitoringRuntime`; there is no second estimator/accounting
 loop. `Sampler` and anonymous resource instrumentation moved from the probe into
 the host. Probe final JSON now places aggregate counters under `diagnostics`,
@@ -83,7 +84,8 @@ Tray failures retain one in-memory message behind **Action needs attention…** 
 mirror the explanation into Home/Settings. A native NotifyIcon balloon advises of a
 new failure without opening/activating the main window. Windows can suppress the
 balloon; the menu remains the dependable discovery path. Choosing the menu item or
-balloon explicitly opens a native keyboard/screen-reader-accessible details dialog;
+an unambiguous error balloon explicitly opens a native keyboard/screen-reader-accessible
+details dialog;
 OK dismisses it. Repeated identical failures for the same command do not repeat the
 balloon. A successful retry of that command clears its failure; other successes
 stay quiet. This retains only the latest failure, not an action history, durable
@@ -100,11 +102,60 @@ accounting. RecoveryRequired alone offers explicit reset through the existing
 archive protocol. Incompatible/Blocked states never offer destructive recovery;
 Blocked permits explicit reopen after correcting clock/access/ownership.
 
+## Break reminders and manual usage reset (PR 8)
+
+Break reminders are opt-in and default off. They consume only newly committed
+Core `Nudge` effects after estimator delivery acceptance. Core's grace and repeat
+cadence continues to use eligible Personal usage, not elapsed UI time. Preference
+changes patch only Windows settings; they preserve usage, configuration and
+unfinished break progress. Enabling the preference does not emit an immediate
+notification from saved exhaustion/advisory state.
+
+The host has one process-local reminder slot, consumed atomically by the existing
+Dispatcher refresh before requesting a balloon. It expires within two seconds
+of creation, bounded further by the original observation/tick freshness; snapshot
+publication does not renew it. Runtime rechecks current evidence after a commit,
+including signals received during the save. Paused, idle, locked, Work/Other,
+unhealthy/stale/unknown context, changed foreground identity and missing desktop
+bindings suppress delivery. Commands, resets, provider changes, storage failure,
+retry, restore and shutdown discard pending reminders. Neither effects nor the
+mailbox are replayed from storage, counters or presentation refreshes.
+
+The existing `NotifyIcon.ShowBalloonTip` mechanism remains best effort. A request
+returning without exception is not evidence of display: Windows may suppress or
+display a balloon late. The owner explicitly accepted this limit for PR 8. There
+is no guaranteed display freshness, native notification backend, toast framework,
+independent notification timer or delivery retry. Only one balloon request is
+outstanding until a native close/click callback; intervening events are discarded.
+Reminder clicks do not open the main window or error details. Retained actionable
+errors suppress reminders. An
+outstanding reminder is not replaced by an error balloon because native callbacks
+have no message identity; the new error remains accessible through **Action needs
+attention…** and Home/Settings. After a balloon closes/clicks, ordinary error
+balloon routing is available again. A suppressed balloon may provide no lifecycle
+callback, so the retained menu remains the dependable error path.
+
+**Reset usage…** is a separate confirmed Settings action for Ready storage,
+including while paused or observation is unavailable. It clears usage, estimated
+usage, exhaustion, break progress/completion, idle/uncertainty and advisory/snooze
+state. Configuration, Pause, Windows settings and monotonic effect sequence are
+preserved. Core establishes a command boundary and the runtime requires fresh
+endpoints; uncertain time earns no credit. Success is reported only after a
+durable save acknowledgment. A failure retains the exact PendingCommit checkpoint
+and hides unacknowledged state; Retry save keeps existing acknowledgment-loss
+handling and returns no delayed effects. This does not archive/delete the database
+or replace the separate Recover accounting protocol. See the
+[PR 8 validation and short owner smoke procedure](../validation/pr8-reminders-reset.md).
+
 ## Windows settings
 
 `%LOCALAPPDATA%\Offramp\Shift\windows-settings.json` is independent of
 `checkpoint.db`. It stores schema/provider/build, nullable role GUIDs, experimental
-consent, enabled-monitoring intent, theme and close behavior. It contains no
+consent, enabled-monitoring intent, theme, close behavior and default-off break
+reminder preference. Settings version 2 strictly migrates the exact version-1
+shape in memory, preserving all existing fields and setting reminders off. Load
+does not rewrite the file; the next explicit atomic save writes version 2.
+Version 2 requires the reminder field; version 1 rejects it as unknown. It contains no
 Core totals/configuration, foreground identities or activity/content history.
 The codec rejects duplicate/unknown/missing fields, unsupported versions and
 invalid values. Saving flushes a unique same-directory temporary file and uses
@@ -122,7 +173,13 @@ local filesystem/hardware; this is not a power-loss certification.
 
 ## Executable, UI and lifecycle
 
-The app is an x64 framework-dependent WPF WinExe. Its STA entry point dispatches
+The app is an x64 framework-dependent WPF WinExe. `run.ps1 app` builds and launches
+the generated `OfframpShift.App.exe` apphost directly; the .NET runtime remains
+required. The apphost embeds the Offramp Shift title/product and application
+description. This removes the explicit `dotnet OfframpShift.App.dll` launch path,
+but does not guarantee Windows notification attribution: the unpackaged app still
+uses legacy NotifyIcon balloons and system-selected shell identity. No notification
+registration, installer or new framework is added. Its STA entry point dispatches
 `--desktop-worker` before WPF, singleton or storage initialization. The existing
 same-executable redirected-stdio read-only worker protocol, process isolation,
 COM declarations and two-second worker response deadline remain unchanged.

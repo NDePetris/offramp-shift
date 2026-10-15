@@ -7,7 +7,7 @@ internal static class Program
 {
     private static int passed, failed, assertions;
     internal static void Check(bool condition) { assertions++; if (!condition) throw new InvalidOperationException("Assertion failed"); }
-    private static void Test(string name, Action body)
+    internal static void Test(string name, Action body)
     {
         try { body(); passed++; Console.WriteLine("PASS: " + name); }
         catch (Exception e) { failed++; Console.WriteLine("FAIL: " + name + " " + e.Message); }
@@ -314,6 +314,7 @@ internal static class Program
             Check(app.Execute(new(HostCommandKind.RepairSettings) { Confirmed = true }).Message.Length > 0);
             Check(File.ReadAllText(path) == "{\"Version\":999}"); Check(f.ProviderCreates == 0);
         });
+        Pr8Regressions.Run();
         Console.WriteLine($"Host: {passed} passed, {failed} failed, {assertions} assertions (synthetic providers, real local SQLite).");
         return failed == 0 ? 0 : 1;
     }

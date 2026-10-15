@@ -109,6 +109,7 @@ public sealed class DurableMonitoringSession : IDisposable
     }
     public TransitionResult SetPaused(bool paused) => Apply(() => coordinator.SetPaused(paused));
     public TransitionResult Snooze() => Apply(() => coordinator.Snooze());
+    public TransitionResult ResetUsage() => Apply(() => coordinator.ResetUsage());
 
     private TransitionResult Apply(Func<TransitionResult> transition)
     {

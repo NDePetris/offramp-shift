@@ -12,15 +12,20 @@ public partial class MainWindow : Window
     private readonly Func<HostCommand, Task<HostCommandResult>> execute;
     private readonly Func<Task> exit;
     private readonly Func<Task> close;
+    private readonly Func<bool> confirmUsageReset;
+    internal const string ResetUsageConfirmation = "Reset accumulated usage and clear current break progress, including any completed break? " +
+        "This cannot be undone. Your monitoring settings and Pause state will stay the same.";
     private MonitoringConfiguration? displayedConfiguration;
     private WindowsSettings? displayedSettings;
     private bool busy;
     private (bool Dark, bool HighContrast)? artwork;
 
-    internal MainWindow(Func<HostCommand, Task<HostCommandResult>> execute, Func<Task> exit, Func<Task> close)
+    internal MainWindow(Func<HostCommand, Task<HostCommandResult>> execute, Func<Task> exit, Func<Task> close, Func<bool>? confirmUsageReset = null)
     {
         InitializeComponent(); DataContext = Model;
         this.execute = execute; this.exit = exit; this.close = close;
+        this.confirmUsageReset = confirmUsageReset ?? (() => MessageBox.Show(this, ResetUsageConfirmation, "Reset usage",
+            MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) == MessageBoxResult.Yes);
         ThemeInput.ItemsSource = Enum.GetValues<AppTheme>();
         Closing += OnClosing;
         ApplyBrand(BrandAssets.IsDark(Background), SystemParameters.HighContrast);
@@ -48,7 +53,11 @@ public partial class MainWindow : Window
             IdleInput.Text = ((decimal)config.IdleThresholdMs / 1_000).ToString(CultureInfo.CurrentCulture);
         }
         if (snapshot.Settings != displayedSettings)
-        { displayedSettings = snapshot.Settings; ThemeInput.SelectedItem = snapshot.Settings.Theme; CloseInput.IsChecked = snapshot.Settings.CloseToTray ?? false; }
+        {
+            displayedSettings = snapshot.Settings; ThemeInput.SelectedItem = snapshot.Settings.Theme;
+            CloseInput.IsChecked = snapshot.Settings.CloseToTray ?? false;
+            RemindersInput.IsChecked = snapshot.Settings.BreakRemindersEnabled;
+        }
     }
 
     private async Task Run(HostCommand command)
@@ -113,6 +122,13 @@ public partial class MainWindow : Window
     }
     private async void SaveAppearance(object sender, RoutedEventArgs e) => await Run(new(HostCommandKind.ChangeAppearance)
     { Theme = ThemeInput.SelectedItem is AppTheme theme ? theme : AppTheme.System, CloseToTray = CloseInput.IsChecked == true });
+    private async void SaveReminders(object sender, RoutedEventArgs e) => await Run(new(HostCommandKind.ChangeBreakReminders)
+    { BreakRemindersEnabled = RemindersInput.IsChecked == true });
+    private async void ResetUsage(object sender, RoutedEventArgs e)
+    {
+        if (busy || !Model.CanResetUsage) return;
+        if (confirmUsageReset()) await Run(new(HostCommandKind.ResetUsage) { Confirmed = true });
+    }
     private async void Recover(object sender, RoutedEventArgs e)
     {
         if (MessageBox.Show(this, "Reset unavailable accounting and start with a fresh allowance? Accumulated accounting may be lost. Original files will be preserved locally before replacement. This cannot be undone automatically.",
