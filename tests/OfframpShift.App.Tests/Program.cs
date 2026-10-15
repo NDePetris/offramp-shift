@@ -44,7 +44,7 @@ internal static class Program
                 Check(model.Tray.Context == "Current context: " + context);
                 Check(model.Tray.Allowance == "Saved allowance: 28m left");
                 Check(model.Tray.Break == "Saved qualifying break: <1m of 5m");
-                Check(model.Tray.Tooltip.Contains("Monitoring") && model.Tray.Tooltip.Contains("28m left (saved)") && model.Tray.Tooltip.Length <= 63);
+                Check(model.Tray.Tooltip == context + " | 28m remaining" && model.Tray.Tooltip.Length <= 63);
             }
             model.Apply(snapshot with { State = snapshot.State! with { UsageMs = 65_999, BreakProgressMs = 12_999 } }, snapshot.PublishedTick);
             var summary = model.Tray;
@@ -56,17 +56,18 @@ internal static class Program
             var model = new DashboardModel(); var snapshot = Snapshot();
             model.Apply(snapshot, snapshot.PublishedTick); var saved = model.Tray;
             model.Apply(snapshot with { Status = "Paused", State = snapshot.State! with { Paused = true } }, snapshot.PublishedTick);
-            Check(model.Tray.Status == "Paused — saved values retained" && !model.Tray.Tooltip.Contains("left"));
+            Check(model.Tray.Status == "Paused — saved values retained" && model.Tray.Tooltip == "Paused | 28m remaining");
             foreach (var tick in new[] { snapshot.PublishedTick - 1, snapshot.PublishedTick + 2_001 })
             {
                 model.Apply(snapshot, tick);
                 Check(model.Tray.Status.Contains("stale updates") && model.Tray.Status.Contains("retained"));
                 Check(model.Tray.Context == "Current context: Unknown" && model.Tray.Allowance == saved.Allowance && model.Tray.Break == saved.Break);
+                Check(model.Tray.Tooltip == "Unavailable (stale) | Last recorded: 28m remaining");
             }
             model.Apply(snapshot with { Status = "Unavailable", Available = false }, snapshot.PublishedTick);
-            Check(model.Tray.Context == "Current context: Unknown" && model.Tray.Status.Contains("Unavailable") && !model.Tray.Tooltip.Contains("left"));
+            Check(model.Tray.Context == "Current context: Unknown" && model.Tray.Status.Contains("Unavailable") && model.Tray.Tooltip == "Unavailable | Last recorded: 28m remaining");
             model.MarkUnavailable("Owner failed");
-            Check(model.Tray.Status.Contains("retained") && model.Tray.Allowance == saved.Allowance && model.Tray.Tooltip == "Offramp Shift — Unavailable");
+            Check(model.Tray.Status.Contains("retained") && model.Tray.Allowance == saved.Allowance && model.Tray.Tooltip == "Unavailable | Last recorded: 28m remaining");
         });
         Test("tray shows setup and missing committed accounting without presenting pending data as saved", () =>
         {
@@ -78,6 +79,7 @@ internal static class Program
                 // Even a supplied state cannot bypass the persistence guard.
                 model.Apply(snapshot with { Persistence = persistence, Available = false, Status = persistence.ToString() }, snapshot.PublishedTick);
                 Check(model.Tray.Allowance == "Saved allowance unavailable" && model.Tray.Break == "Saved qualifying break unavailable");
+                Check(model.Tray.Tooltip == "Unavailable | Allowance unavailable");
             }
             model.Apply(snapshot with { State = null, Configuration = null }, snapshot.PublishedTick);
             Check(model.Tray.Allowance == "Saved allowance unavailable" && model.Tray.Break == "Saved qualifying break unavailable");
@@ -90,7 +92,9 @@ internal static class Program
             foreach (var state in new[] { snapshot.State! with { Exhausted = true }, snapshot.State! with { UsageMs = config.AllowanceMs } })
             {
                 model.Apply(snapshot with { State = state }, snapshot.PublishedTick);
-                Check(model.Tray.Allowance == "Saved allowance: Allowance exhausted" && model.Tray.Tooltip.Contains("Allowance exhausted"));
+                Check(model.Tray.Allowance == "Saved allowance: Allowance exhausted" && model.Tray.Tooltip == "Personal | Allowance exhausted");
+                model.Apply(snapshot with { State = state, Available = false, Status = "Unavailable" }, snapshot.PublishedTick);
+                Check(model.Tray.Tooltip == "Unavailable | Last recorded: Allowance exhausted");
             }
             model.Apply(snapshot with { State = snapshot.State! with { UsageMs = config.AllowanceMs - 1, BreakProgressMs = 0 } }, snapshot.PublishedTick);
             Check(model.Tray.Allowance == "Saved allowance: <1m left" && model.Tray.Break.StartsWith("Saved qualifying break: 0m of "));
@@ -98,7 +102,9 @@ internal static class Program
             Check(model.Tray.Break == "Saved qualifying break: completed; allowance reset");
             Check(TraySummary.Duration(60_000) == "1m" && TraySummary.Duration(3_600_000) == "60m");
             model.Apply(snapshot with { Status = "Establishing baseline", Configuration = config with { AllowanceMs = 900_000_000_000_000 }, State = snapshot.State! with { UsageMs = 0 } }, snapshot.PublishedTick);
-            Check(model.Tray.Tooltip.Length <= 63 && model.Tray.Tooltip.EndsWith("left (saved)"));
+            Check(model.Tray.Tooltip.Length <= 63 && model.Tray.Tooltip.EndsWith("m remaining"));
+            model.Apply(snapshot with { Configuration = config with { AllowanceMs = 900_000_000_000_000 } }, snapshot.PublishedTick + 2_001);
+            Check(model.Tray.Tooltip.Length <= 63 && model.Tray.Tooltip.StartsWith("Unavailable (stale) | Last recorded: "));
             Check(TraySummary.Starting.Unavailable().Status == "Unavailable");
         });
         Test("setup projection identifies next prerequisite without exposing desktop identities", () =>

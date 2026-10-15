@@ -9,8 +9,9 @@ notification mechanism is introduced.
 The existing dashboard refresh projects immutable host snapshots into a small tray
 summary. Durations use whole minutes, with `<1m` for positive sub-minute values.
 Only changed summary text is applied. The tooltip fits within 63 characters and
-includes saved allowance during active monitoring; long combinations prioritize
-status and allowance over the product name/context. It never extrapolates from
+uses natural context/remaining wording while active, Paused while paused, and
+Last recorded for unavailable/stale values. Menu rows retain their saved labels.
+The tooltip never extrapolates from
 elapsed UI time. Paused/unavailable/stale/setup states explicitly retain saved
 values when available. Unavailable/stale observations show Unknown context; stale
 updates use the dashboard's existing two-second freshness boundary. Unacknowledged
@@ -34,7 +35,29 @@ Validation commands/results are recorded in the PR. The established application
 and probe baselines remain required. No live provider or switching exercises are
 part of this change.
 
-## Short owner smoke checklist — NOT RUN
+## Owner acceptance — October 15, 2026
+
+The owner reported the following functional smoke results and approved the final
+tooltip copy adjustment for this owner-evaluation milestone:
+
+| Check | Owner result |
+|---|---|
+| Personal context, remaining allowance and tooltip | **PASS** |
+| Work context and qualifying break progress | **PASS** |
+| Pause/Resume and retained values | **PASS** |
+| Keyboard/Narrator accessibility validation | **NOT RUN** |
+| Unavailable and stale-state manual validation | **NOT RUN** |
+
+The owner visually reviewed the original tooltip and requested simpler wording
+such as `Personal | 1m remaining` and `Unavailable | Last recorded: 12m remaining`.
+The revised tooltip has **not** undergone another manual smoke test. Focused
+automated coverage and the previously completed functional validation suffice for
+this minor copy adjustment; no additional owner-operated validation is required.
+These are owner-reported results; exact tested SHA, Windows build/hardware and
+display scaling were not supplied and are not inferred. This does not establish
+live unavailable/stale behavior, accessibility or sustained accounting accuracy.
+
+## Original short owner smoke checklist — procedure, not a blanket PASS
 
 Record tested commit, exact Windows build/architecture and display scaling, then
 PASS/FAIL/NOT RUN for these four checks on an already configured owner account:

@@ -6,6 +6,7 @@ namespace OfframpShift.App;
 
 internal sealed record TraySummary(string Status, string Context, string Allowance, string Break, string Tooltip)
 {
+    private string Remaining { get; init; } = "";
     public static TraySummary Starting { get; } = new("Starting", "Current context: Unknown",
         "Saved allowance unavailable", "Saved qualifying break unavailable", "Offramp Shift — Starting");
 
@@ -13,7 +14,7 @@ internal sealed record TraySummary(string Status, string Context, string Allowan
     {
         Status = Allowance == Starting.Allowance ? "Unavailable" : "Unavailable — saved values retained",
         Context = "Current context: Unknown",
-        Tooltip = "Offramp Shift — Unavailable"
+        Tooltip = TooltipText("Unavailable", Remaining, retained: true)
     };
 
     public static TraySummary Create(HostSnapshot snapshot, string status, bool stale, bool needsSetup)
@@ -35,16 +36,15 @@ internal sealed record TraySummary(string Status, string Context, string Allowan
         }
         var heading = label + (needsSetup && !stale ? " — setup incomplete; open Settings" : "");
         if (saved && !active) heading += " — saved values retained";
-        var tooltip = "Offramp Shift — " + label + (needsSetup && !stale ? " | Setup incomplete" : "");
-        if (active)
-        {
-            // Prefer status and saved allowance over context if the native tooltip limit is reached.
-            var detail = saved ? (label == remaining ? " (saved)" : " | " + remaining + " (saved)") : "";
-            var full = tooltip + detail + " | " + context;
-            tooltip = full.Length <= 63 ? full : label + detail;
-        }
-        return new(heading, "Current context: " + context, allowance, progress, tooltip);
+        var tooltipRemaining = remaining.Replace(" left", " remaining", StringComparison.Ordinal);
+        var tooltipStatus = stale ? "Unavailable (stale)" : !snapshot.Available || !saved ? "Unavailable" :
+            needsSetup ? "Setup incomplete" : snapshot.State?.Paused == true ? "Paused" : context;
+        var tooltip = TooltipText(tooltipStatus, tooltipRemaining, retained: !active && tooltipStatus != "Paused");
+        return new(heading, "Current context: " + context, allowance, progress, tooltip) { Remaining = tooltipRemaining };
     }
+
+    private static string TooltipText(string status, string remaining, bool retained) => status +
+        (remaining.Length == 0 ? " | Allowance unavailable" : " | " + (retained ? "Last recorded: " : "") + remaining);
 
     // Whole minutes only; sub-minute credit/remaining time stays explicit without ticking seconds.
     internal static string Duration(long milliseconds) => milliseconds == 0 ? "0m" : milliseconds < 60_000 ? "<1m" :
