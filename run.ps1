@@ -12,7 +12,7 @@ if ($Command -eq 'app') {
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     & $dotnet build $appProject -c Release --no-restore
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-    & $dotnet (Join-Path $PSScriptRoot 'src/OfframpShift.App/bin/Release/net10.0-windows/OfframpShift.App.dll')
+    & (Join-Path $PSScriptRoot 'src/OfframpShift.App/bin/Release/net10.0-windows/OfframpShift.App.exe')
     exit $LASTEXITCODE
 }
 $projects = @(

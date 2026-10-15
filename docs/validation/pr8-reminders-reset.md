@@ -28,7 +28,7 @@ They use synthetic providers, local disposable SQLite and owned non-COM workers.
 They do not establish live Windows notification display, focus, shell reliability,
 accounting accuracy or Narrator acceptance.
 
-Automated checks on October 15, 2026:
+Initial implementation automated checks on October 15, 2026:
 
 | Check | Result |
 |---|---|
@@ -46,10 +46,49 @@ The local application scripts used `UseArtifactsOutput=true` and an ignored
 `.tools/pr8-artifacts` output directory because existing app processes held the
 normal output files open. Those processes were left running. No harness changes
 were needed; CI uses the ordinary scripts on clean Windows runners. CI results
-are recorded in the implementation PR. Live owner smoke is **NOT RUN** until
-separately reported. No new manual PASS is claimed.
+are recorded in the implementation PR. These automated results remain separate
+from the owner-reported acceptance below.
 
-## Short owner smoke procedure
+## Owner acceptance and launcher closeout — October 15, 2026
+
+The owner reported these bounded PR #16 acceptance results before the launcher
+adjustment and requested closeout. These are owner-supplied observations, not
+agent-executed live validation. A separate exact tested SHA, Windows build/hardware
+and display-scaling transcript was not supplied and is not inferred.
+
+| Check | Owner result |
+|---|---|
+| New build and reminder preference | **PASS** |
+| Initial break reminder without focus theft | **PASS** |
+| Reset usage | **PASS** |
+| Preference persistence | **PASS** |
+| Existing error feedback | **SKIPPED** — previously tested; automated regressions passed |
+
+The closeout changes `run.ps1 app` to launch the generated `.exe` directly and adds
+standard Offramp Shift title/product/description metadata. Deterministic app tests
+verify the native executable's product/file-description resources, managed metadata
+and direct apphost startup rejection before WPF, singleton, storage or native COM.
+Existing owned-worker tests continue to exercise the same `.exe`.
+
+Focused closeout validation: **PASS** — app/test locked restore and Release build
+with zero warnings/errors; 21 app groups / 225 assertions; formatting verification
+for the app and app-test projects; `run.ps1` PowerShell syntax and `git diff --check`.
+Local checks used the pinned SDK with isolated `.tools/pr8-closeout-artifacts`
+outputs; no running owner app was stopped and no live reminder test was repeated.
+The final-head GitHub CI result is recorded in PR #16.
+
+This is still a framework-dependent, unpackaged application using legacy NotifyIcon
+balloons. Direct apphost launch avoids using `dotnet.exe` as the application's
+process executable, but metadata alone does not guarantee the name/icon Windows
+shows for notifications. No explicit shell notification identity registration,
+installer or notification framework is introduced. Display/attribution remains
+Windows-controlled; no claim of corrected live attribution is made.
+
+The owner explicitly requested no further manual reminder test for this launcher
+adjustment. No additional live launcher/notification-attribution result or Narrator
+PASS is claimed. PR #16 remains unmerged pending the owner's separate merge decision.
+
+## Original short owner smoke procedure — retained for reference
 
 Record tested commit, exact Windows build/architecture and display scaling, then
 PASS/FAIL/NOT RUN per item. Use an already configured owner account on an approved

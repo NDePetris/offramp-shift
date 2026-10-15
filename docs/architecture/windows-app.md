@@ -173,7 +173,13 @@ local filesystem/hardware; this is not a power-loss certification.
 
 ## Executable, UI and lifecycle
 
-The app is an x64 framework-dependent WPF WinExe. Its STA entry point dispatches
+The app is an x64 framework-dependent WPF WinExe. `run.ps1 app` builds and launches
+the generated `OfframpShift.App.exe` apphost directly; the .NET runtime remains
+required. The apphost embeds the Offramp Shift title/product and application
+description. This removes the explicit `dotnet OfframpShift.App.dll` launch path,
+but does not guarantee Windows notification attribution: the unpackaged app still
+uses legacy NotifyIcon balloons and system-selected shell identity. No notification
+registration, installer or new framework is added. Its STA entry point dispatches
 `--desktop-worker` before WPF, singleton or storage initialization. The existing
 same-executable redirected-stdio read-only worker protocol, process isolation,
 COM declarations and two-second worker response deadline remain unchanged.

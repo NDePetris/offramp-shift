@@ -240,6 +240,21 @@ internal static class Program
             using var client = Process.Start(start)!;
             Check(client.WaitForExit(5_000)); Check(client.ExitCode == 0); Check(activated.Wait(2_000));
         });
+        Test("generated apphost has Offramp Shift metadata and launches without the dotnet host", () =>
+        {
+            var assembly = typeof(OfframpShift.App.Program).Assembly;
+            var executable = Path.ChangeExtension(assembly.Location, ".exe");
+            var metadata = FileVersionInfo.GetVersionInfo(executable);
+            Check(metadata.ProductName == "Offramp Shift" && metadata.FileDescription == "Offramp Shift");
+            Check(assembly.GetCustomAttribute<AssemblyProductAttribute>()?.Product == "Offramp Shift");
+            Check(assembly.GetCustomAttribute<AssemblyDescriptionAttribute>()?.Description ==
+                "Intentional transitions between personal and work contexts.");
+            var start = new ProcessStartInfo(executable) { UseShellExecute = false, CreateNoWindow = true };
+            // Unknown arguments exit before singleton, WPF, settings, storage or COM.
+            start.ArgumentList.Add("--invalid-startup-test");
+            using var process = Process.Start(start)!;
+            Check(process.WaitForExit(5_000) && process.ExitCode == 2);
+        });
         Test("actual WinExe worker fault modes use redirected pipes without creating UI or COM", () =>
         {
             foreach (var mode in new[] { "--worker-malformed", "--worker-hang" })
