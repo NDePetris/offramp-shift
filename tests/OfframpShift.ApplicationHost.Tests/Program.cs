@@ -14,6 +14,80 @@ internal static class Program
     }
     public static int Main()
     {
+        Test("setup snapshots progress through consent individual assignments and explicit start", () =>
+        {
+            using var f = new Fixture(); using var app = f.App();
+            var initial = app.Snapshot();
+            Check(initial.CanConsent && !initial.CanAssign && !initial.ObservationAllowed);
+            Check(initial.PersonalAssignment == AssignmentStatus.Unassigned && initial.WorkAssignment == AssignmentStatus.Unassigned);
+            Check(!app.Execute(new(HostCommandKind.AssignPersonal)).Succeeded);
+            Check(app.Execute(new(HostCommandKind.Consent) { Confirmed = true }).Succeeded);
+            f.Advance(app, 0); Check(app.Snapshot().CanAssign && !app.Snapshot().CanConsent);
+            Check(app.Execute(new(HostCommandKind.AssignPersonal)).Succeeded);
+            f.Advance(app, 1_000);
+            Check(app.Snapshot().PersonalAssignment == AssignmentStatus.Valid && app.Snapshot().WorkAssignment == AssignmentStatus.Unassigned);
+            var before = app.Snapshot().Settings;
+            var duplicate = app.Execute(new(HostCommandKind.AssignWork));
+            Check(!duplicate.Succeeded && duplicate.Message.Contains("Task View"));
+            Check(app.Snapshot().Settings == before);
+            f.Source!.Current = f.Work;
+            Check(app.Execute(new(HostCommandKind.AssignWork)).Succeeded);
+            f.Advance(app, 2_000); Check(app.Snapshot().BindingsValid && !app.Snapshot().Settings.MonitoringEnabled);
+            Check(app.Execute(new(HostCommandKind.Start)).Succeeded);
+            f.Source!.Topology = [f.Personal]; f.Advance(app, 3_000);
+            Check(app.Snapshot().WorkAssignment == AssignmentStatus.Missing);
+            Check(!app.Execute(new(HostCommandKind.Start)).Succeeded);
+            f.Source.Current = Guid.NewGuid();
+            var invalid = app.Execute(new(HostCommandKind.AssignWork));
+            Check(!invalid.Succeeded && invalid.Message.Contains("fresh current desktop"));
+        });
+        Test("unsupported mismatched invalid settings and stale observations disable setup accurately", () =>
+        {
+            using var f = new Fixture(); using (var unsupported = f.App(false))
+            { Check(!unsupported.Snapshot().CanConsent && !unsupported.Snapshot().CanAssign); }
+            f.Enable(); using (var mismatch = f.App(build: "26200.9711"))
+            { Check(mismatch.Snapshot().CanConsent && !mismatch.Snapshot().CanAssign && mismatch.Snapshot().ConsentNeedsReview); }
+            using (var app = f.App())
+            {
+                f.Advance(app, 0); Check(app.Snapshot().PersonalAssignment == AssignmentStatus.Valid);
+                f.Clock.Now = f.Clock.Now with { Milliseconds = 2_001 };
+                Check(app.Snapshot().PersonalAssignment == AssignmentStatus.Unavailable && !app.Snapshot().CanAssign);
+            }
+            File.WriteAllText(Path.Combine(f.PathName, "windows-settings.json"), "{broken");
+            using var invalid = f.App(); Check(!invalid.Snapshot().CanConsent && !invalid.Snapshot().CanAssign);
+            Check(invalid.Snapshot().PersonalAssignment == AssignmentStatus.Unavailable && invalid.Snapshot().WorkAssignment == AssignmentStatus.Unavailable);
+        });
+        Test("provider retry construction failure is an explicit failed outcome and retains cooldown", () =>
+        {
+            using var f = new Fixture(); f.Enable(); using var app = f.App();
+            f.Advance(app, 0); f.Source!.FailRead = true; f.Advance(app, 1_000); f.FailCreate = true;
+            var failed = app.Execute(new(HostCommandKind.RetryMonitoring));
+            Check(!failed.Succeeded && failed.Message.Contains("could not be restarted"));
+            Check(!app.Snapshot().Available && !app.Snapshot().CanAssign && app.Snapshot().RetryInMs == 10_000);
+            var attempts = f.ProviderCreates;
+            Check(!app.Execute(new(HostCommandKind.RetryMonitoring)).Succeeded && f.ProviderCreates == attempts);
+            f.FailCreate = false; f.Advance(app, 11_000);
+            var retry = app.Execute(new(HostCommandKind.RetryMonitoring));
+            Check(retry.Succeeded && retry.Message.Contains("Waiting for fresh evidence"));
+        });
+        Test("close preference save failures preserve settings and successful choice changes only close behavior", () =>
+        {
+            using var f = new Fixture(); f.Enable();
+            var original = f.Settings.Load() with { Theme = AppTheme.Dark };
+            f.Settings.Save(original); using var app = f.App();
+            var bytes = File.ReadAllBytes(Path.Combine(f.PathName, "windows-settings.json"));
+            f.Settings.BeforeReplace = () => throw new IOException("Injected save failure");
+            foreach (var choice in new[] { true, false })
+            {
+                var result = app.Execute(new(HostCommandKind.ChangeCloseBehavior) { CloseToTray = choice });
+                Check(!result.Succeeded && result.Message.Contains("could not be saved"));
+                Check(app.Snapshot().Settings == original && f.Settings.Load() == original);
+                Check(bytes.SequenceEqual(File.ReadAllBytes(Path.Combine(f.PathName, "windows-settings.json"))));
+            }
+            f.Settings.BeforeReplace = null;
+            Check(app.Execute(new(HostCommandKind.ChangeCloseBehavior) { CloseToTray = true }).Succeeded);
+            Check(app.Snapshot().Settings == original with { CloseToTray = true });
+        });
         Test("integrated exact-build policy reaches the host without bypassing saved setup gates", () =>
         {
             foreach (var build in new[] { "26200.9457", "26200.9711", "26200.9712" })
@@ -36,18 +110,18 @@ internal static class Program
             using var f = new Fixture(); using var app = f.App();
             Check(f.ProviderCreates == 0); Check(app.Snapshot().Status == "Setup required");
             Check(app.Snapshot().Configuration!.Accounting == AccountingMode.CertifiedOnly);
-            Check(app.Execute(new(HostCommandKind.Start)).Length > 0);
+            Check(app.Execute(new(HostCommandKind.Start)).Message.Length > 0);
         });
         Test("first setup requires explicit consent assignments and Start before charging", () =>
         {
             using var f = new Fixture(); using var app = f.App();
-            Check(app.Execute(new(HostCommandKind.Consent)).Length > 0); Check(f.ProviderCreates == 0);
-            Check(app.Execute(new(HostCommandKind.Consent) { Confirmed = true }) == "");
+            Check(app.Execute(new(HostCommandKind.Consent)).Message.Length > 0); Check(f.ProviderCreates == 0);
+            Check(app.Execute(new(HostCommandKind.Consent) { Confirmed = true }).Succeeded);
             f.Advance(app, 0); app.Execute(new(HostCommandKind.AssignPersonal));
             f.Source!.Current = f.Work; app.Execute(new(HostCommandKind.AssignWork));
             for (var i = 1_000; i <= 3_000; i += 1_000) f.Advance(app, i);
             Check(app.Snapshot().State!.UsageMs == 0 && !app.Snapshot().Settings.MonitoringEnabled);
-            Check(app.Execute(new(HostCommandKind.Start)) == "");
+            Check(app.Execute(new(HostCommandKind.Start)).Succeeded);
             for (var i = 4_000; i <= 8_000; i += 1_000) f.Advance(app, i);
             Check(app.Snapshot().Configuration!.Accounting == AccountingMode.BestEffort);
             Check(app.Snapshot().State!.UsageMs > 0);
@@ -85,13 +159,13 @@ internal static class Program
         {
             using var f = new Fixture(); f.Enable();
             using (var app = f.App())
-            { for (var i = 0; i <= 3_000; i += 1_000) f.Advance(app, i); Check(app.Execute(new(HostCommandKind.Pause)) == ""); }
+            { for (var i = 0; i <= 3_000; i += 1_000) f.Advance(app, i); Check(app.Execute(new(HostCommandKind.Pause)).Succeeded); }
             f.Clock.Now = new(Guid.NewGuid(), 0);
             using var restored = f.App(); Check(restored.Snapshot().State!.Paused);
             var usage = restored.Snapshot().State!.UsageMs;
             for (var i = 0; i <= 5_000; i += 1_000) f.Advance(restored, i);
             Check(restored.Snapshot().State!.UsageMs == usage);
-            Check(restored.Execute(new(HostCommandKind.Resume)) == "");
+            Check(restored.Execute(new(HostCommandKind.Resume)).Succeeded);
             f.Advance(restored, 6_000); Check(restored.Snapshot().State!.UsageMs == usage);
         });
         Test("missing or incompatible settings never enable accounting from a BestEffort checkpoint alone", () =>
@@ -118,7 +192,7 @@ internal static class Program
         {
             using var f = new Fixture(); f.Enable(); using var app = f.App(); f.Advance(app, 0);
             f.Source!.Current = f.Work;
-            Check(app.Execute(new(HostCommandKind.AssignPersonal)).Length > 0); // duplicate roles rejected
+            Check(app.Execute(new(HostCommandKind.AssignPersonal)).Message.Length > 0); // duplicate roles rejected
             var third = Guid.NewGuid(); f.Source.Topology = [f.Personal, f.Work, third]; f.Source.Current = third;
             app.Execute(new(HostCommandKind.AssignPersonal));
             Check(app.Snapshot().Settings.Personal == third); Check(!app.Snapshot().Settings.MonitoringEnabled);
@@ -130,10 +204,10 @@ internal static class Program
                 f.Fault = point => { if (point == fault) throw new IOException(); };
                 app.Execute(new(HostCommandKind.ChangeDurations) { AllowanceMs = 123_000, RequiredBreakMs = 45_000, IdleThresholdMs = 6_000 });
                 Check(app.Snapshot().Persistence == PersistenceStatus.PendingCommit); Check(app.Snapshot().State is null);
-                Check(app.Execute(new(HostCommandKind.Pause)).Length > 0);
-                f.Fault = null; Check(app.Execute(new(HostCommandKind.RetrySave)) == "");
+                Check(app.Execute(new(HostCommandKind.Pause)).Message.Length > 0);
+                f.Fault = null; Check(app.Execute(new(HostCommandKind.RetrySave)).Succeeded);
                 Check(app.Snapshot().Configuration!.AllowanceMs == 123_000); Check(app.Snapshot().State!.EffectSequence == 0);
-                Check(app.Execute(new(HostCommandKind.RetrySave)).Length > 0);
+                Check(app.Execute(new(HostCommandKind.RetrySave)).Message.Length > 0);
             });
         Test("provider failure requires explicit retry and cooldown; totals remain saved", () =>
         {
@@ -142,8 +216,8 @@ internal static class Program
             var usage = app.Snapshot().State!.UsageMs; var source = f.Source!;
             source.FailRead = true; f.Advance(app, 4_000);
             Check(app.Snapshot().Status == "Unavailable"); f.Advance(app, 8_000); Check(f.ProviderCreates == 1);
-            Check(app.Execute(new(HostCommandKind.RetryMonitoring)) == ""); Check(source.Disposed);
-            Check(app.Execute(new(HostCommandKind.RetryMonitoring)).Length > 0);
+            Check(app.Execute(new(HostCommandKind.RetryMonitoring)).Succeeded); Check(source.Disposed);
+            Check(app.Execute(new(HostCommandKind.RetryMonitoring)).Message.Length > 0);
             Check(app.Snapshot().State!.UsageMs == usage);
         });
         Test("one desktop helper replacement per shell generation", () =>
@@ -165,8 +239,8 @@ internal static class Program
             using var f = new Fixture(); f.Enable(); var path = Path.Combine(f.PathName, "windows-settings.json");
             File.WriteAllText(path, "{broken"); using var app = f.App();
             Check(app.Snapshot().SettingsStatus == SettingsStatus.Invalid); Check(f.ProviderCreates == 0);
-            Check(app.Execute(new(HostCommandKind.RepairSettings)).Length > 0);
-            Check(app.Execute(new(HostCommandKind.RepairSettings) { Confirmed = true }) == "");
+            Check(app.Execute(new(HostCommandKind.RepairSettings)).Message.Length > 0);
+            Check(app.Execute(new(HostCommandKind.RepairSettings) { Confirmed = true }).Succeeded);
             Check(Directory.GetFiles(f.PathName, "*.preserved-*").Length == 1);
             Check(app.Snapshot().Configuration!.Accounting == AccountingMode.BestEffort);
         });
@@ -191,7 +265,7 @@ internal static class Program
         {
             using var f = new Fixture(); f.Enable(); f.Clock.UtcNow = f.Clock.UtcNow.AddDays(-1);
             using var app = f.App(); Check(app.Snapshot().Persistence == PersistenceStatus.Blocked);
-            Check(app.Execute(new(HostCommandKind.Recover) { Confirmed = true }).Length > 0);
+            Check(app.Execute(new(HostCommandKind.Recover) { Confirmed = true }).Message.Length > 0);
             Check(app.Snapshot().Persistence == PersistenceStatus.Blocked);
         });
         Test("shutdown disposes providers and releases the checkpoint lease", () =>
@@ -205,10 +279,10 @@ internal static class Program
             var controller = new MonitoringController(() => f.App());
             var changes = Enumerable.Range(1, 8).Select(i => controller.ExecuteAsync(new(HostCommandKind.ChangeDurations)
             { AllowanceMs = i * 60_000, RequiredBreakMs = 30_000, IdleThresholdMs = 6_000 })).ToArray();
-            Check(Task.WaitAll(changes, 10_000)); Check(changes.All(x => x.Result == ""));
+            Check(Task.WaitAll(changes, 10_000)); Check(changes.All(x => x.Result.Succeeded));
             Check(controller.Latest!.Configuration!.AllowanceMs == 8 * 60_000);
             Check(controller.StopAsync().Wait(5_000));
-            Check(controller.ExecuteAsync(new(HostCommandKind.Pause)).Result.Length > 0);
+            Check(controller.ExecuteAsync(new(HostCommandKind.Pause)).Result.Message.Length > 0);
             using var restored = f.Session(); Check(restored.Configuration.AllowanceMs == 8 * 60_000);
         });
         Test("bounded command queue and shutdown resolve every submitted command", () =>
@@ -218,15 +292,15 @@ internal static class Program
             var commands = Enumerable.Range(0, 64).Select(_ => controller.ExecuteAsync(new(HostCommandKind.Pause))).ToArray();
             Check(commands.Count(x => x.IsCompleted) == 48);
             var stopped = controller.StopAsync(); initialize.Set();
-            Check(stopped.Wait(5_000)); Check(Task.WaitAll(commands, 5_000)); Check(commands.All(x => x.Result.Length > 0));
+            Check(stopped.Wait(5_000)); Check(Task.WaitAll(commands, 5_000)); Check(commands.All(x => x.Result.Message.Length > 0));
         });
         Test("recovery preserves corrupt originals and requires another explicit Start", () =>
         {
             using var f = new Fixture(); f.Enable();
             File.WriteAllText(Path.Combine(f.PathName, "checkpoint.db"), "corrupt-test-database");
             using var app = f.App(); Check(app.Snapshot().Persistence == PersistenceStatus.RecoveryRequired);
-            Check(app.Execute(new(HostCommandKind.Recover)).Length > 0);
-            Check(app.Execute(new(HostCommandKind.Recover) { Confirmed = true }) == "");
+            Check(app.Execute(new(HostCommandKind.Recover)).Message.Length > 0);
+            Check(app.Execute(new(HostCommandKind.Recover) { Confirmed = true }).Succeeded);
             Check(app.Snapshot().Persistence == PersistenceStatus.Ready);
             Check(!app.Snapshot().Settings.MonitoringEnabled);
             var archives = Directory.GetDirectories(f.PathName, "recovery-*"); Check(archives.Length == 1);
@@ -237,7 +311,7 @@ internal static class Program
             using var f = new Fixture(); f.Enable(); var path = Path.Combine(f.PathName, "windows-settings.json");
             File.WriteAllText(path, "{\"Version\":999}"); using var app = f.App();
             Check(app.Snapshot().SettingsStatus == SettingsStatus.Incompatible);
-            Check(app.Execute(new(HostCommandKind.RepairSettings) { Confirmed = true }).Length > 0);
+            Check(app.Execute(new(HostCommandKind.RepairSettings) { Confirmed = true }).Message.Length > 0);
             Check(File.ReadAllText(path) == "{\"Version\":999}"); Check(f.ProviderCreates == 0);
         });
         Console.WriteLine($"Host: {passed} passed, {failed} failed, {assertions} assertions (synthetic providers, real local SQLite).");

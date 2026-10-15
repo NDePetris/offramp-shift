@@ -31,6 +31,9 @@ desktop observer remains restricted to the two approved exact builds,
 See [Windows app architecture](docs/architecture/windows-app.md) and
 [PR 5 validation](docs/validation/pr5-app.md) and the
 [prioritized owner acceptance checklist](docs/validation/pr5-owner-acceptance.md).
+The [PR 6 setup and feedback checklist](docs/validation/pr6-setup-feedback.md)
+tracks the focused setup, tray-error and first-close changes separately from the
+deferred PR 5 acceptance exercises.
 
 CI uses these automated test commands on Windows runners, with Node.js 24 for the browser probe. Browser tests use mocked extension APIs and synthetic native callers; neither job interacts with a live browser or switches desktops. CI cannot establish actual virtual-desktop or browser-to-window compatibility.
 

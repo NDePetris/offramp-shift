@@ -13,24 +13,35 @@ internal sealed class TrayService : IDisposable
     private readonly Forms.ToolStripMenuItem save;
     private readonly Forms.ToolStripMenuItem personal;
     private readonly Forms.ToolStripMenuItem work;
+    private readonly Forms.ToolStripMenuItem feedbackItem = new("Action needs &attention…") { Visible = false };
+    private readonly TrayActionFeedback feedback = new();
     private HostSnapshot? snapshot;
     private bool disposed;
     private readonly System.Drawing.Icon lightIcon;
     private readonly System.Drawing.Icon darkIcon;
     private bool darkSelected;
-    public TrayService(Action open, Action settings, Func<HostCommand, Task<string>> execute, Func<Task> exit)
+    public TrayService(Action open, Action settings, Func<HostCommand, Task<HostCommandResult>> execute, Func<Task> exit)
     {
+        async Task Run(HostCommand command)
+        {
+            var notify = await feedback.ExecuteAsync(command, execute);
+            if (disposed) return;
+            feedbackItem.Visible = feedback.Message.Length > 0;
+            if (notify) NotifyFailure();
+        }
         Forms.ToolStripMenuItem Action(string label, HostCommandKind kind)
         {
             var item = new Forms.ToolStripMenuItem(label);
-            item.Click += async (_, _) => await execute(new(kind)); return item;
+            item.Click += async (_, _) => await Run(new(kind)); return item;
         }
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add(status);
         menu.Items.Add(advisory);
+        menu.Items.Add(feedbackItem);
+        feedbackItem.Click += (_, _) => ShowFeedback();
         menu.Items.Add("Open Offramp Shift", null, (_, _) => open());
         pause = new("Pause");
-        pause.Click += async (_, _) => await execute(new(snapshot?.State?.Paused == true ? HostCommandKind.Resume : HostCommandKind.Pause));
+        pause.Click += async (_, _) => await Run(new(snapshot?.State?.Paused == true ? HostCommandKind.Resume : HostCommandKind.Pause));
         menu.Items.Add(pause);
         retry = Action("Retry monitoring", HostCommandKind.RetryMonitoring); menu.Items.Add(retry);
         save = Action("Retry save", HostCommandKind.RetrySave); menu.Items.Add(save);
@@ -45,7 +56,10 @@ internal sealed class TrayService : IDisposable
         try { icon = new() { Icon = lightIcon, Text = "Offramp Shift", ContextMenuStrip = menu, Visible = true }; }
         catch { lightIcon.Dispose(); darkIcon.Dispose(); menu.Dispose(); throw; }
         icon.DoubleClick += (_, _) => open();
+        icon.BalloonTipClicked += (_, _) => ShowFeedback();
     }
+    private void NotifyFailure() => icon.ShowBalloonTip(5_000, "Offramp Shift — action needs attention",
+        "The action did not complete. Open the tray menu and choose Action needs attention for details.", Forms.ToolTipIcon.Warning);
     public void ApplyBrand(bool dark)
     {
         if (darkSelected == dark) return;
@@ -60,7 +74,14 @@ internal sealed class TrayService : IDisposable
         pause.Enabled = value.State?.Paused == true ? model.CanResume : model.CanPause;
         retry.Enabled = model.CanRetryMonitoring; retry.Text = model.RetryLabel;
         save.Enabled = model.CanRetrySave;
-        personal.Enabled = work.Enabled = model.CanEdit && value.Settings.Consent;
+        personal.Enabled = work.Enabled = model.CanAssign;
+    }
+    private void ShowFeedback()
+    {
+        if (disposed || feedback.Message.Length == 0) return;
+        Forms.MessageBox.Show("Last unsuccessful action:\n\n" + feedback.Message + "\n\nSelect OK to dismiss this message.",
+            "Offramp Shift — action needs attention", Forms.MessageBoxButtons.OK, Forms.MessageBoxIcon.Warning);
+        feedback.Dismiss(); feedbackItem.Visible = false;
     }
     public void Dispose()
     {

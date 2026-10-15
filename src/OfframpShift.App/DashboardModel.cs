@@ -16,6 +16,14 @@ public sealed class DashboardModel : INotifyPropertyChanged
     public string Break { get; private set; } = "Break progress unavailable";
     public string Persistence { get; private set; } = "Opening storage";
     public string Bindings { get; private set; } = "Assign Personal and Work in Settings";
+    public string ConsentStatus { get; private set; } = "Experimental monitoring consent: Unavailable — starting";
+    public string PersonalStatus { get; private set; } = "Personal desktop: Unavailable — starting";
+    public string WorkStatus { get; private set; } = "Work desktop: Unavailable — starting";
+    public string StartStatus { get; private set; } = "Start monitoring: Incomplete — finish setup first";
+    public string NextSetupAction { get; private set; } = "Wait for local settings to open.";
+    public bool CanConsent { get; private set; }
+    public bool CanAssign { get; private set; }
+    public bool NeedsSetup { get; private set; } = true;
     public string Confidence { get; private set; } = "Estimated monitoring • owner evaluation";
     public string Advisory { get; private set; } = "";
     public double UsageProgress { get; private set; }
@@ -35,6 +43,14 @@ public sealed class DashboardModel : INotifyPropertyChanged
     {
         Status = "Unavailable"; Detail = detail; Context = "Unknown";
         CanStart = CanPause = CanResume = CanRetrySave = CanRetryMonitoring = CanRecover = CanReopen = CanRepairSettings = CanEdit = false;
+        CanConsent = CanAssign = false;
+        NeedsSetup = true;
+        ConsentStatus = "Experimental monitoring consent: Unavailable";
+        PersonalStatus = AssignmentText("Personal", Snapshot?.Settings.Personal, AssignmentStatus.Unavailable);
+        WorkStatus = AssignmentText("Work", Snapshot?.Settings.Work, AssignmentStatus.Unavailable);
+        Bindings = PersonalStatus + "\n" + WorkStatus;
+        StartStatus = "Start monitoring: Unavailable";
+        NextSetupAction = detail;
         PropertyChanged?.Invoke(this, new(null));
     }
 
@@ -46,8 +62,6 @@ public sealed class DashboardModel : INotifyPropertyChanged
         Detail = stale ? "Monitoring updates are stale. Displayed values are the last saved snapshot; no time is extrapolated." : snapshot.Detail;
         Context = stale ? "Unknown" : snapshot.Context.ToString();
         Persistence = snapshot.Persistence == PersistenceStatus.Ready ? "Accounting saved locally" : $"Accounting storage: {snapshot.Persistence} ({snapshot.StorageFailure})";
-        Bindings = $"Personal: {snapshot.Settings.Personal?.ToString() ?? "Unassigned"}\nWork: {snapshot.Settings.Work?.ToString() ?? "Unassigned"}\n" +
-            (snapshot.BindingsValid && !stale ? "Both assignments observed" : "Assignments need fresh validation");
         if (snapshot.State is { } state && snapshot.Configuration is { } configuration)
         {
             Usage = $"{Duration(state.UsageMs)} used of {Duration(configuration.AllowanceMs)} allowance";
@@ -62,7 +76,7 @@ public sealed class DashboardModel : INotifyPropertyChanged
         }
         else { Usage = "Saved usage unavailable"; Break = "Saved break progress unavailable"; Advisory = "Advisory state unavailable"; UsageProgress = BreakProgress = 0; }
         CanEdit = !stale && snapshot.Persistence == PersistenceStatus.Ready;
-        CanStart = CanEdit && snapshot.BindingsValid && snapshot.Settings.Complete &&
+        CanStart = CanEdit && snapshot.ObservationAllowed && snapshot.CanAssign && snapshot.BindingsValid && snapshot.Settings.Complete &&
             (!snapshot.Settings.MonitoringEnabled || snapshot.Configuration?.Accounting != OfframpShift.Core.AccountingMode.BestEffort);
         CanPause = CanEdit && snapshot.State?.Paused == false && snapshot.Settings.MonitoringEnabled;
         CanResume = CanEdit && snapshot.State?.Paused == true && snapshot.Settings.MonitoringEnabled && snapshot.Available;
@@ -72,8 +86,38 @@ public sealed class DashboardModel : INotifyPropertyChanged
         CanReopen = !stale && snapshot.Persistence == PersistenceStatus.Blocked;
         CanRepairSettings = !stale && snapshot.SettingsStatus == SettingsStatus.Invalid;
         RetryLabel = snapshot.RetryInMs > 0 ? $"Retry monitoring ({(snapshot.RetryInMs + 999) / 1_000}s)" : "Retry monitoring";
+        CanConsent = !stale && snapshot.CanConsent;
+        CanAssign = !stale && snapshot.CanAssign;
+        var consentComplete = snapshot.Settings.Consent && !snapshot.ConsentNeedsReview;
+        ConsentStatus = "Experimental monitoring consent: " + (consentComplete ? "Completed — saved" :
+            CanConsent ? snapshot.Settings.Consent ? "Incomplete — review for this Windows build" : "Incomplete — review and agree below" :
+            "Unavailable — see monitoring status");
+        PersonalStatus = AssignmentText("Personal", snapshot.Settings.Personal, stale ? AssignmentStatus.Unavailable : snapshot.PersonalAssignment);
+        WorkStatus = AssignmentText("Work", snapshot.Settings.Work, stale ? AssignmentStatus.Unavailable : snapshot.WorkAssignment);
+        Bindings = PersonalStatus + "\n" + WorkStatus;
+        var started = snapshot.Settings.MonitoringEnabled && snapshot.Configuration?.Accounting == OfframpShift.Core.AccountingMode.BestEffort;
+        NeedsSetup = stale || !started || !snapshot.BindingsValid || !snapshot.ObservationAllowed;
+        StartStatus = "Start monitoring: " + (started ? "Completed — " + Status : CanStart ? "Ready — select Start monitoring" : "Unavailable — finish setup and resolve monitoring status");
+        NextSetupAction = stale ? "Setup actions unavailable while updates are stale. Wait for fresh updates or restart the app." :
+            CanConsent ? "Next: review experimental monitoring and agree in Settings." :
+            !consentComplete ? "Setup unavailable. See monitoring status and storage recovery controls." :
+            !snapshot.ObservationAllowed ? "Setup unavailable. See monitoring status and storage recovery controls." :
+            !CanAssign ? "Desktop observation unavailable. Wait for Windows to settle, then use Retry monitoring if needed." :
+            snapshot.PersonalAssignment != AssignmentStatus.Valid ? "Next: choose your Personal desktop in Task View, then use the tray menu to assign Personal." :
+            snapshot.WorkAssignment != AssignmentStatus.Valid ? "Next: choose a different Work desktop in Task View, then use the tray menu to assign Work." :
+            CanStart ? "Next: select Start monitoring." : started ? "Setup complete. Use Pause or Resume to control monitoring." :
+            "Start monitoring unavailable. See monitoring status.";
         PropertyChanged?.Invoke(this, new(null));
     }
+    private static string AssignmentText(string role, Guid? id, AssignmentStatus status) => role + " desktop: " +
+        (status switch
+        {
+            AssignmentStatus.Unassigned => "Incomplete — unassigned",
+            AssignmentStatus.Valid => "Completed — assigned and observed",
+            AssignmentStatus.Missing => "Invalid — assigned desktop no longer available; reassign explicitly",
+            AssignmentStatus.Invalid => "Invalid — choose two distinct desktops",
+            _ => id is null ? "Unavailable — setup cannot be validated" : "Unavailable — assignment saved; awaiting fresh validation"
+        });
     public static string Duration(long milliseconds) => TimeSpan.FromMilliseconds(milliseconds).TotalHours >= 1
         ? (milliseconds / 3_600_000).ToString(CultureInfo.CurrentCulture) + "h " + (milliseconds / 60_000 % 60).ToString(CultureInfo.CurrentCulture) + "m"
         : (milliseconds / 60_000).ToString(CultureInfo.CurrentCulture) + "m " + (milliseconds / 1_000 % 60).ToString(CultureInfo.CurrentCulture) + "s";

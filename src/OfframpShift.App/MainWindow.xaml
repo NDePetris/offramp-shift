@@ -20,6 +20,21 @@
      <StackPanel>
       <TextBlock Text="{Binding Status}" FontSize="24" FontWeight="SemiBold" AutomationProperties.LiveSetting="Polite" />
       <TextBlock Text="{Binding Detail}" Margin="0,8,0,16" />
+      <StackPanel Visibility="{Binding NeedsSetup, Converter={StaticResource BooleanToVisibility}}">
+       <TextBlock Text="Monitoring setup" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,12" />
+       <TextBlock Text="{Binding ConsentStatus}" />
+       <TextBlock Text="{Binding PersonalStatus}" Margin="0,4,0,0" />
+       <TextBlock Text="{Binding WorkStatus}" Margin="0,4,0,0" />
+       <TextBlock Text="{Binding StartStatus}" Margin="0,4,0,0" />
+       <TextBlock Text="{Binding NextSetupAction}" Margin="0,8,0,4" />
+      </StackPanel>
+      <WrapPanel Margin="0,8,0,12">
+       <Button x:Name="SetupButton" Content="Review desktop set_up" Click="OpenSetup" />
+       <Button Content="_Start monitoring" Click="Start" IsEnabled="{Binding CanStart}" />
+       <Button Content="_Pause" Click="Pause" IsEnabled="{Binding CanPause}" />
+       <Button Content="_Resume" Click="Resume" IsEnabled="{Binding CanResume}" />
+      </WrapPanel>
+      <TextBlock x:Name="ActionResult" AutomationProperties.LiveSetting="Polite" Margin="0,0,0,12" />
       <TextBlock Text="Current desktop context" FontWeight="SemiBold" />
       <TextBlock Text="{Binding Context}" Margin="0,4,0,0" FontSize="18" />
       <TextBlock Text="Usage and allowance" Style="{StaticResource SectionTitle}" />
@@ -30,11 +45,6 @@
       <TextBlock Text="Break progress" Style="{StaticResource SectionTitle}" />
       <TextBlock Text="{Binding Break}" />
       <ProgressBar Value="{Binding BreakProgress, Mode=OneWay}" Maximum="100" Height="12" Margin="0,10,0,8" AutomationProperties.Name="Saved qualifying break progress" AutomationProperties.HelpText="{Binding Break}" />
-      <WrapPanel Margin="0,16,0,0">
-       <Button Content="_Start monitoring" Click="Start" IsEnabled="{Binding CanStart}" />
-       <Button Content="_Pause" Click="Pause" IsEnabled="{Binding CanPause}" />
-       <Button Content="_Resume" Click="Resume" IsEnabled="{Binding CanResume}" />
-      </WrapPanel>
       <TextBlock Text="Storage and recovery" Style="{StaticResource SectionTitle}" />
       <TextBlock Text="{Binding Persistence}" />
       <WrapPanel>
@@ -43,22 +53,28 @@
        <Button Content="Reopen storage" Click="ReopenStorage" IsEnabled="{Binding CanReopen}" />
        <Button Content="Recover accounting…" Click="Recover" IsEnabled="{Binding CanRecover}" />
       </WrapPanel>
-      <TextBlock x:Name="ActionResult" AutomationProperties.LiveSetting="Polite" Margin="0,12,0,0" />
      </StackPanel>
     </ScrollViewer>
    </TabItem>
    <TabItem Header="Se_ttings">
     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12">
      <StackPanel>
-      <TextBlock Text="Desktop setup" Style="{StaticResource SectionTitle}" />
+      <TextBlock x:Name="SetupHeading" Text="Desktop setup" Style="{StaticResource SectionTitle}" />
       <TextBlock Text="Monitoring uses bounded estimates and can miss activity. Explorer recovery and sustained reliability remain unresolved. Consent enables read-only desktop observation on the allowlisted Windows build; Start monitoring enables accounting." />
-      <Button Content="I agree — enable experimental observation" Click="Consent" HorizontalAlignment="Left" IsEnabled="{Binding CanEdit}" />
+      <TextBlock Text="{Binding NextSetupAction}" Margin="0,12,0,12" />
+      <TextBlock Text="{Binding ConsentStatus}" />
+      <Button x:Name="ConsentButton" Content="I _agree — enable experimental observation" Click="Consent" HorizontalAlignment="Left" IsEnabled="{Binding CanConsent}" />
       <TextBlock Text="{Binding Bindings}" Margin="0,12,0,12" />
+      <TextBlock Text="Current desktop context" FontWeight="SemiBold" />
+      <TextBlock Text="{Binding Context}" Margin="0,4,0,12" />
       <TextBlock Text="Manually choose each desktop in Task View. Use the Offramp Shift tray menu on that desktop to assign Personal or Work without opening this window. Existing assignments are replaced only by your explicit action. Reassignment stops monitoring until you Start again." />
       <WrapPanel Margin="0,8,0,0">
-       <Button Content="Use current desktop as Personal" Click="AssignPersonal" IsEnabled="{Binding CanEdit}" />
-       <Button Content="Use current desktop as Work" Click="AssignWork" IsEnabled="{Binding CanEdit}" />
+       <Button x:Name="PersonalButton" Content="Use current desktop as _Personal" Click="AssignPersonal" IsEnabled="{Binding CanAssign}" />
+       <Button x:Name="WorkButton" Content="Use current desktop as _Work" Click="AssignWork" IsEnabled="{Binding CanAssign}" />
       </WrapPanel>
+      <TextBlock Text="{Binding StartStatus}" Margin="0,12,0,4" />
+      <Button x:Name="SetupStartButton" Content="_Start monitoring" Click="Start" IsEnabled="{Binding CanStart}" HorizontalAlignment="Left" />
+      <TextBlock x:Name="SettingsResult" AutomationProperties.LiveSetting="Polite" Margin="0,12,0,0" />
       <TextBlock Text="Monitoring" Style="{StaticResource SectionTitle}" />
       <TextBlock Text="Settings apply prospectively and clear an unfinished break. Increasing allowance does not clear an exhausted allowance; a qualifying break is still required." Margin="0,0,0,12" />
       <Label Content="_Allowance (minutes)" Target="{Binding ElementName=AllowanceInput}" />
@@ -68,7 +84,6 @@
       <Label Content="_Idle threshold (seconds)" Target="{Binding ElementName=IdleInput}" />
       <TextBox x:Name="IdleInput" HorizontalAlignment="Left" AutomationProperties.Name="Idle threshold in seconds" />
       <Button Content="Save monitoring settings" Click="SaveDurations" IsEnabled="{Binding CanEdit}" HorizontalAlignment="Left" />
-      <TextBlock x:Name="SettingsResult" AutomationProperties.LiveSetting="Polite" />
       <TextBlock Text="Appearance and closing" Style="{StaticResource SectionTitle}" />
       <Label Content="_Theme" Target="{Binding ElementName=ThemeInput}" />
       <ComboBox x:Name="ThemeInput" HorizontalAlignment="Left" MinWidth="160" AutomationProperties.Name="Theme" />

@@ -53,10 +53,16 @@ internal sealed class Fixture : IDisposable
     public FakeSource? Source { get; private set; }
     public int ProviderCreates { get; private set; }
     public Action<StorageFault>? Fault { get; set; }
+    public bool FailCreate { get; set; }
     public WindowsSettingsStore Settings { get; }
     public Fixture() { Directory.CreateDirectory(PathName); Settings = new(PathName); Settings.Load(); }
     public DurableMonitoringSession Session() => new(Clock, new(), PathName, f => Fault?.Invoke(f));
-    public IObservationSource CreateSource() { ProviderCreates++; Source = new(this); return Source; }
+    public IObservationSource CreateSource()
+    {
+        ProviderCreates++;
+        if (FailCreate) throw new InvalidOperationException("Injected provider construction failure");
+        Source = new(this); return Source;
+    }
     public MonitoringApplication App(bool supported = true, string build = "26200.9457") => new(Clock, () => Clock.Now = new(Guid.NewGuid(), 0),
         () => Ms, CreateSource, Session, Settings, supported, build);
     public void Enable(bool monitoring = true, string build = "26200.9457")
