@@ -351,6 +351,7 @@ internal static class Program
                 Equal(4, JsonNode.Parse(payload)!.AsObject().Count);
             });
             ReviewRegressions.Run();
+            ResetUsagePersistence.Run();
             BestEffortPersistence.Run();
             if (OperatingSystem.IsWindows()) ProcessTermination.Run();
             else Console.WriteLine("Windows process-termination checks NOT RUN on this platform.");

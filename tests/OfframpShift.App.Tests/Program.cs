@@ -328,6 +328,7 @@ internal static class Program
             window.ReportAction("Desktop assignment rejected. Choose another desktop in Task View.");
             Check(window.ActionResult.Text == window.SettingsResult.Text && window.SettingsResult.Text.Contains("Task View"));
         });
+        Pr8UiRegressions.Run(Test, () => Snapshot());
         if (args is ["--render", var output])
         {
             Directory.CreateDirectory(output);
@@ -335,11 +336,13 @@ internal static class Program
             {
                 app.ApplyTheme(theme);
                 foreach (var settings in new[] { false, true })
-                    foreach (var scenario in new[] { (Name: "Monitoring", Width: 820, Height: 760), (Name: "Setup", Width: 820, Height: 760), (Name: "SetupSmall", Width: 480, Height: 420) })
+                    foreach (var scenario in new[] { (Name: "Monitoring", Width: 820, Height: 760), (Name: "Setup", Width: 820, Height: 760), (Name: "SetupSmall", Width: 480, Height: 420),
+                        (Name: "Reminders", Width: 820, Height: 760), (Name: "RemindersSmall", Width: 480, Height: 420) })
                     {
+                        if (!settings && scenario.Name.StartsWith("Reminders", StringComparison.Ordinal)) continue;
                         var window = new MainWindow(_ => Task.FromResult(HostCommandResult.Success()), () => Task.CompletedTask, () => Task.CompletedTask);
                         var snapshot = Snapshot();
-                        if (scenario.Name != "Monitoring") snapshot = snapshot with
+                        if (scenario.Name.StartsWith("Setup", StringComparison.Ordinal)) snapshot = snapshot with
                         {
                             Settings = new(),
                             ObservationAllowed = false,
@@ -358,6 +361,16 @@ internal static class Program
                         var content = (FrameworkElement)window.Content;
                         var bounds = new Rect(0, 0, scenario.Width, scenario.Height);
                         content.Measure(bounds.Size); content.Arrange(bounds); content.UpdateLayout();
+                        if (scenario.Name.StartsWith("Reminders", StringComparison.Ordinal))
+                        {
+                            DependencyObject? ancestor = window.ResetUsageButton;
+                            while (ancestor is not null && ancestor is not ScrollViewer) ancestor = VisualTreeHelper.GetParent(ancestor);
+                            if (ancestor is ScrollViewer scroll)
+                            {
+                                var offset = window.ResetUsageButton.TransformToAncestor(scroll).Transform(new Point()).Y;
+                                scroll.ScrollToVerticalOffset(offset - 12); content.UpdateLayout();
+                            }
+                        }
                         var drawing = new DrawingVisual();
                         using (var dc = drawing.RenderOpen())
                         {

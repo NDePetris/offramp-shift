@@ -76,7 +76,7 @@
       <Button x:Name="SetupStartButton" Content="_Start monitoring" Click="Start" IsEnabled="{Binding CanStart}" HorizontalAlignment="Left" />
       <TextBlock x:Name="SettingsResult" AutomationProperties.LiveSetting="Polite" Margin="0,12,0,0" />
       <TextBlock Text="Monitoring" Style="{StaticResource SectionTitle}" />
-      <TextBlock Text="Settings apply prospectively and clear an unfinished break. Increasing allowance does not clear an exhausted allowance; a qualifying break is still required." Margin="0,0,0,12" />
+      <TextBlock Text="Duration changes apply prospectively and clear an unfinished break. Increasing allowance does not clear an exhausted allowance; take a qualifying break or explicitly reset usage." Margin="0,0,0,12" />
       <Label Content="_Allowance (minutes)" Target="{Binding ElementName=AllowanceInput}" />
       <TextBox x:Name="AllowanceInput" HorizontalAlignment="Left" AutomationProperties.Name="Allowance in minutes" />
       <Label Content="Required _break (minutes)" Target="{Binding ElementName=BreakInput}" />
@@ -84,6 +84,11 @@
       <Label Content="_Idle threshold (seconds)" Target="{Binding ElementName=IdleInput}" />
       <TextBox x:Name="IdleInput" HorizontalAlignment="Left" AutomationProperties.Name="Idle threshold in seconds" />
       <Button Content="Save monitoring settings" Click="SaveDurations" IsEnabled="{Binding CanEdit}" HorizontalAlignment="Left" />
+      <Button x:Name="ResetUsageButton" Content="Reset _usage…" Click="ResetUsage" IsEnabled="{Binding CanResetUsage}" HorizontalAlignment="Left" AutomationProperties.HelpText="Requires confirmation. Clears accumulated usage and break progress; preserves settings and Pause." />
+      <TextBlock Text="Break reminders" Style="{StaticResource SectionTitle}" />
+      <CheckBox x:Name="RemindersInput" Content="Enable b_reak reminders" IsEnabled="{Binding CanEditReminders}" AutomationProperties.Name="Enable break reminders" />
+      <TextBlock Text="Off by default. Gentle reminders use eligible Personal usage after the grace period. Windows may suppress or display notifications late. Changing this preference preserves usage and break progress." Margin="0,8,0,8" />
+      <Button x:Name="SaveRemindersButton" Content="Save reminder preference" Click="SaveReminders" IsEnabled="{Binding CanEditReminders}" HorizontalAlignment="Left" />
       <TextBlock Text="Appearance and closing" Style="{StaticResource SectionTitle}" />
       <Label Content="_Theme" Target="{Binding ElementName=ThemeInput}" />
       <ComboBox x:Name="ThemeInput" HorizontalAlignment="Left" MinWidth="160" AutomationProperties.Name="Theme" />

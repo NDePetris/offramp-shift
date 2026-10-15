@@ -8,9 +8,21 @@ public sealed class MonitoringController
     private readonly TaskCompletionSource stopped = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly object submissionGate = new();
     private HostSnapshot? latest;
+    private BreakReminderMailbox? reminders;
     private volatile bool stopping;
+    private bool commandInProgress;
     public HostSnapshot? Latest => Volatile.Read(ref latest);
     public Task Completion => stopped.Task;
+    public bool TryTakeReminder()
+    {
+        lock (submissionGate)
+        {
+            var mailbox = Volatile.Read(ref reminders);
+            if (stopping || stopped.Task.IsCompleted || commandInProgress || commands.Count != 0)
+            { mailbox?.Invalidate(); return false; }
+            return mailbox?.TryTake(Environment.TickCount64) == true;
+        }
+    }
 
     internal MonitoringController(Func<MonitoringApplication> create)
     {
@@ -22,12 +34,15 @@ public sealed class MonitoringController
     {
         var completion = new TaskCompletionSource<HostCommandResult>(TaskCreationOptions.RunContinuationsAsynchronously);
         lock (submissionGate)
+        {
+            Volatile.Read(ref reminders)?.Invalidate();
             if (stopping || stopped.Task.IsCompleted || !commands.TryAdd((command, completion)))
                 completion.SetResult(HostCommandResult.Failure("The application is stopping or busy. Try again after the current action completes."));
+        }
         return completion.Task;
     }
 
-    public Task StopAsync() { lock (submissionGate) stopping = true; return stopped.Task; }
+    public Task StopAsync() { lock (submissionGate) { stopping = true; Volatile.Read(ref reminders)?.Invalidate(); } return stopped.Task; }
 
     private void Run(Func<MonitoringApplication> create)
     {
@@ -35,6 +50,7 @@ public sealed class MonitoringController
         try
         {
             using var application = create();
+            Volatile.Write(ref reminders, application.Reminders);
             long nextPublication = 0;
             while (!stopping)
             {
@@ -42,8 +58,10 @@ public sealed class MonitoringController
                 if (commands.TryTake(out var request, 10))
                 {
                     if (stopping) { request.Completion.TrySetResult(HostCommandResult.Failure("The monitoring owner is stopping.")); break; }
+                    lock (submissionGate) commandInProgress = true;
                     try { var result = application.Execute(request.Command); Volatile.Write(ref latest, application.Snapshot()); request.Completion.TrySetResult(result); }
                     catch { request.Completion.TrySetResult(HostCommandResult.Failure("Application action failed. Accounting stopped; restart the app.")); throw; }
+                    finally { lock (submissionGate) commandInProgress = false; }
                 }
                 if (stopping) break;
                 application.Step();
@@ -60,6 +78,7 @@ public sealed class MonitoringController
             lock (submissionGate)
             {
                 stopping = true;
+                Volatile.Read(ref reminders)?.Invalidate();
                 while (commands.TryTake(out var pending)) pending.Completion.TrySetResult(HostCommandResult.Failure("The monitoring owner stopped."));
             }
             if (failure is null) stopped.TrySetResult();

@@ -26,6 +26,10 @@ internal sealed class FakeSource(Fixture fixture) : IObservationSource
     public Guid? Current { get; set; }
     public Guid[]? Topology { get; set; }
     public Capability Foreground { get; set; } = Capability.Available;
+    public SessionState Session { get; set; } = SessionState.Active;
+    public long IdleAgeMs { get; set; }
+    public Capability Input { get; set; } = Capability.Available;
+    public ApplicationIdentity Application { get; set; } = new("opaque-test", true);
     private readonly Queue<NativeSignal> queue = new();
     private long sequence;
     public void Tick() => Emit(SignalKind.Tick);
@@ -34,9 +38,9 @@ internal sealed class FakeSource(Fixture fixture) : IObservationSource
     {
         Reads++;
         if (FailRead) throw new InvalidOperationException("Injected provider failure");
-        return new(fixture.Clock.Now, fixture.Ms, (ulong)fixture.Ms * 10_000, 1, 1, new("opaque-test", true),
-            0, SessionState.Active, new(Capability.Available, Current ?? fixture.Personal, Topology ?? [fixture.Personal, fixture.Work], ShellGeneration),
-            Foreground, Capability.Available, Capability.Available);
+        return new(fixture.Clock.Now, fixture.Ms, (ulong)fixture.Ms * 10_000, 1, 1, Application,
+            IdleAgeMs, Session, new(Capability.Available, Current ?? fixture.Personal, Topology ?? [fixture.Personal, fixture.Work], ShellGeneration),
+            Foreground, Input, Capability.Available);
     }
     public bool TryTake(out NativeSignal? signal) { var result = queue.TryDequeue(out var item); signal = item; return result; }
     public void ReplaceDesktopWorker() => Replacements++;

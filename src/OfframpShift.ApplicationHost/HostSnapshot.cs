@@ -22,7 +22,8 @@ public sealed record HostCommandResult(bool Succeeded, string Message = "")
 public enum HostCommandKind
 {
     Consent, Start, Pause, Resume, RetryMonitoring, RetrySave, ReopenStorage,
-    AssignPersonal, AssignWork, ChangeDurations, ChangeAppearance, ChangeCloseBehavior, Recover, RepairSettings
+    AssignPersonal, AssignWork, ChangeDurations, ChangeAppearance, ChangeCloseBehavior, Recover, RepairSettings,
+    ChangeBreakReminders, ResetUsage
 }
 
 public sealed record HostCommand(HostCommandKind Kind)
@@ -33,4 +34,5 @@ public sealed record HostCommand(HostCommandKind Kind)
     public long IdleThresholdMs { get; init; }
     public AppTheme Theme { get; init; }
     public bool? CloseToTray { get; init; }
+    public bool BreakRemindersEnabled { get; init; }
 }

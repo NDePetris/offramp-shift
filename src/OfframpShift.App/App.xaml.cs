@@ -13,6 +13,7 @@ public partial class ShiftApplication : Application
     private TrayService? tray;
     private DispatcherTimer? timer;
     private bool exiting, closing;
+    private int actionsInFlight;
     private AppTheme? theme;
     public ShiftApplication() { InitializeComponent(); }
     internal ShiftApplication(SingleInstance instance) : this() { this.instance = instance; }
@@ -51,6 +52,8 @@ public partial class ShiftApplication : Application
             return;
         }
         window.Apply(value, controller.Completion.IsCompleted); tray?.Apply(value, window.Model);
+        if (controller.TryTakeReminder() && actionsInFlight == 0 && Environment.TickCount64 - value.PublishedTick is >= 0 and <= 2_000)
+            tray?.RequestReminder();
         if (theme != value.Settings.Theme)
         {
             theme = value.Settings.Theme;
@@ -75,9 +78,14 @@ public partial class ShiftApplication : Application
     private async Task<HostCommandResult> Execute(HostCommand command)
     {
         if (controller is null || exiting) return HostCommandResult.Failure("The app is stopping.");
-        var result = await controller.ExecuteAsync(command);
-        window?.ReportAction(result.Message.Length == 0 ? "Saved action completed." : result.Message);
-        Refresh(); return result;
+        actionsInFlight++;
+        try
+        {
+            var result = await controller.ExecuteAsync(command);
+            window?.ReportAction(result.Message.Length == 0 ? "Saved action completed." : result.Message);
+            Refresh(); return result;
+        }
+        finally { actionsInFlight--; }
     }
     private async Task CloseAsync()
     {

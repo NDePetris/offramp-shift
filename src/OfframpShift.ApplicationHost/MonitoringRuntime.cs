@@ -40,6 +40,42 @@ public sealed class MonitoringRuntime : IDisposable
     public long EffectsCommitted { get; private set; }
     public long EffectsSuppressed { get; private set; }
     public long QueueHigh { get; private set; }
+    internal BreakReminderMailbox? Reminders { get; init; }
+    private long reminderGeneration;
+    private long reminderSignalSequence;
+    private ApplicationIdentity? reminderApplication;
+    private MonotonicTime? reminderEnd;
+
+    private void InvalidateReminder() { Reminders?.Invalidate(); reminderApplication = null; reminderEnd = null; }
+
+    private bool EligiblePersonal()
+    {
+        var now = clock.Now;
+        return session.Status == PersistenceStatus.Ready && !session.State.Paused && Health.Healthy && Reason == "BoundedEstimate" &&
+            Latest is { } p && p.Time.Epoch == now.Epoch && now.Milliseconds - p.Time.Milliseconds is >= 0 and <= 2_000 &&
+            p.Desktop.Health == Capability.Available && p.Desktop.ShellProcess != 0 && p.Desktop.Current == personal &&
+            p.Desktop.Desktops.Contains(personal) && p.Desktop.Desktops.Contains(work) &&
+            p.SessionHealth == Capability.Available && p.Session == SessionState.Active &&
+            p.Input == Capability.Available && !p.InputDiscontinuity && p.CollectionMs is >= 0 and <= 500 && p.IdleAgeMs is >= 0 &&
+            p.IdleAgeMs < configuration.IdleThresholdMs && p.Foreground == Capability.Available &&
+            p.Application is { Verified: true } && !string.IsNullOrWhiteSpace(p.Application.Key);
+    }
+
+    private void UpdateReminderEligibility(bool accounting, bool enabled)
+    {
+        if (Reminders is null) return;
+        var now = clock.Now;
+        var age = reminderEnd is { } end && end.Epoch == now.Epoch ? now.Milliseconds - end.Milliseconds : long.MaxValue;
+        var maximumAge = Math.Min(EstimationPolicy.MaximumAgeMs, configuration.MaximumEvidenceAgeMs);
+        var eligible = accounting && enabled && EligiblePersonal() && session.State.Exhausted &&
+            session.State.Intervention == InterventionState.Nudging && Latest!.Application == reminderApplication &&
+            age >= 0 && age <= maximumAge;
+        var remaining = Latest is { } p ? 2_000 - (clock.Now.Milliseconds - p.Time.Milliseconds) : 0;
+        remaining = Math.Min(remaining, maximumAge - age);
+        // Health also has a two-second tick boundary; publication must not renew it.
+        remaining = Math.Min(remaining, 2_000 - (elapsed() - lastTick));
+        Reminders?.Update(eligible, Environment.TickCount64, remaining);
+    }
 
     public MonitoringRuntime(IMonitoringClock clock, Action newEpoch, Func<long> elapsed,
         Func<IObservationSource> factory, DurableMonitoringSession session, Guid personal, Guid work)
@@ -55,6 +91,7 @@ public sealed class MonitoringRuntime : IDisposable
 
     public void ResetConfiguration()
     {
+        InvalidateReminder();
         // Retain the native stream sequence when providers have not changed.
         estimator.Reset();
         configuration = session.Configuration;
@@ -65,12 +102,14 @@ public sealed class MonitoringRuntime : IDisposable
 
     public bool RetryProviders()
     {
+        InvalidateReminder();
         if (RetryInMs != 0) return false;
         lastRecovery = elapsed(); Recoveries++;
         // Failed cleanup must not create a second provider bundle.
         source.Dispose();
         source = factory();
         estimator.ResetSignals(); Latest = null; Health = new(false, ++generation);
+        reminderSignalSequence = 0;
         lastTick = -1; drops = errors = 0;
         helperShellGeneration = shellGeneration = source.ShellGeneration;
         return true;
@@ -78,13 +117,14 @@ public sealed class MonitoringRuntime : IDisposable
 
     public EvidencePoint CaptureCurrent()
     {
+        InvalidateReminder();
         estimator.Reset();
         Latest = source.Read();
         Drain(); RefreshHealth();
         return Latest;
     }
 
-    public void Step(bool accounting = true)
+    public void Step(bool accounting = true, bool breakReminders = false)
     {
         Drain();
         if (elapsed() >= next || elapsed() >= eventSampleAt && elapsed() - lastSampleAt >= 100)
@@ -97,7 +137,7 @@ public sealed class MonitoringRuntime : IDisposable
             lastSampleAt = elapsed(); eventSampleAt = long.MaxValue;
             var started = Stopwatch.GetTimestamp();
             var shell = source.ShellGeneration;
-            if (shellGeneration != 0 && shell != shellGeneration) generation++;
+            if (shellGeneration != 0 && shell != shellGeneration) { InvalidateReminder(); generation++; }
             if (shell != 0 && shell != helperShellGeneration && elapsed() - lastRecovery >= 10_000)
             {
                 // Preserve PR 4: one attempt per new shell, no recovery loop.
@@ -123,6 +163,7 @@ public sealed class MonitoringRuntime : IDisposable
             else activeCycles.Record(cycleUs);
         }
         Drain(); RefreshHealth();
+        UpdateReminderEligibility(accounting, breakReminders);
         if (!accounting || session.Status != PersistenceStatus.Ready || session.State.Paused)
         { estimator.Reset(); return; }
         if (Latest is null) return;
@@ -131,6 +172,9 @@ public sealed class MonitoringRuntime : IDisposable
         {
             try
             {
+                InvalidateReminder();
+                var deliveryGeneration = reminderGeneration;
+                var healthGeneration = Health.Generation;
                 var before = session.State;
                 var result = session.Observe(observation);
                 if (!before.BreakCompleted) maximumIncompleteBreakMs = Math.Max(maximumIncompleteBreakMs, before.BreakProgressMs);
@@ -156,15 +200,34 @@ public sealed class MonitoringRuntime : IDisposable
                     Latest.Foreground == Capability.Available && !result.State.Paused;
                 if (!supportsPersonal) EffectsSuppressed += result.Effects.Count(x => x.Kind != EffectKind.AllowanceReset);
                 if (!estimator.AcceptDelivery(observation, result)) break;
+                if (!breakReminders || Reminders is null) continue;
+                // Saving can block; consume signals and recheck age/health after commit.
+                Drain(); RefreshHealth();
+                if (breakReminders && deliveryGeneration == reminderGeneration && healthGeneration == Health.Generation &&
+                    clock.Now.Epoch == observation.End.Epoch &&
+                    clock.Now.Milliseconds - observation.End.Milliseconds >= 0 &&
+                    clock.Now.Milliseconds - observation.End.Milliseconds <= Math.Min(EstimationPolicy.MaximumAgeMs, configuration.MaximumEvidenceAgeMs) &&
+                    result.Activity == ActivityKind.CountedPersonal && EligiblePersonal() &&
+                    Latest!.Application == observation.Application && result.State.Exhausted &&
+                    result.State.Intervention == InterventionState.Nudging)
+                {
+                    foreach (var effect in result.Effects.Where(x => x.Kind == EffectKind.Nudge))
+                    {
+                        reminderApplication = observation.Application;
+                        reminderEnd = observation.End;
+                        Reminders?.Offer(effect.Sequence, Environment.TickCount64);
+                    }
+                }
+                UpdateReminderEligibility(accounting, breakReminders);
             }
-            catch (CheckpointStorageException) { estimator.Reset(); break; }
+            catch (CheckpointStorageException) { InvalidateReminder(); estimator.Reset(); break; }
         }
     }
 
     private void RefreshHealth()
     {
         if (source.Dropped != drops || source.CallbackErrors != errors)
-        { generation++; drops = source.Dropped; errors = source.CallbackErrors; }
+        { InvalidateReminder(); generation++; drops = source.Dropped; errors = source.CallbackErrors; }
         Health = new(source.Hooks == Capability.Available && source.LoopHealth == Capability.Available &&
             source.SessionNotifications == Capability.Available && source.PowerNotifications == Capability.Available &&
             lastTick >= 0 && elapsed() - lastTick <= 2_000, generation);
@@ -176,6 +239,9 @@ public sealed class MonitoringRuntime : IDisposable
         while (source.TryTake(out var signal))
         {
             if (signal is null) continue;
+            if (signal.Kind != SignalKind.Tick || signal.Sequence != reminderSignalSequence + 1)
+            { reminderGeneration++; InvalidateReminder(); }
+            reminderSignalSequence = Math.Max(reminderSignalSequence, signal.Sequence);
             estimator.Signal(signal);
             if (signal.Kind == SignalKind.Foreground) foregroundSignals++;
             if (signal.Kind == SignalKind.Destroyed) destroyedSignals++;
@@ -238,5 +304,5 @@ public sealed class MonitoringRuntime : IDisposable
         foregroundDiagnostics = new { failures = foregroundFailures, lastFailure = lastForegroundFailure, lastForegroundIdentityQueryCode },
         providers = source.Diagnostics
     };
-    public void Dispose() { estimator.Reset(); source.Dispose(); }
+    public void Dispose() { InvalidateReminder(); estimator.Reset(); source.Dispose(); }
 }
