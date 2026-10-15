@@ -15,6 +15,7 @@ public partial class MainWindow : Window
     private MonitoringConfiguration? displayedConfiguration;
     private WindowsSettings? displayedSettings;
     private bool busy;
+    private (bool Dark, bool HighContrast)? artwork;
 
     internal MainWindow(Func<HostCommand, Task<string>> execute, Func<Task> exit, Func<Task> close)
     {
@@ -22,6 +23,18 @@ public partial class MainWindow : Window
         this.execute = execute; this.exit = exit; this.close = close;
         ThemeInput.ItemsSource = Enum.GetValues<AppTheme>();
         Closing += OnClosing;
+        ApplyBrand(BrandAssets.IsDark(Background), SystemParameters.HighContrast);
+    }
+
+    internal void ApplyBrand(bool dark, bool highContrast)
+    {
+        if (artwork == (dark, highContrast)) return;
+        artwork = (dark, highContrast);
+        FamilySymbol.Source = BrandAssets.Symbol(dark);
+        // The decorative mark never overrides high-contrast system colors.
+        // The adjacent native text heading remains the accessible app identity.
+        FamilySymbol.Visibility = highContrast ? Visibility.Collapsed : Visibility.Visible;
+        Icon = BrandAssets.WindowIcon(dark);
     }
 
     internal void Apply(HostSnapshot snapshot, bool ownerStopped = false)

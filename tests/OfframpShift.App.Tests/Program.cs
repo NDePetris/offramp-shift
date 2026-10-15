@@ -98,6 +98,38 @@ internal static class Program
             }
         });
         var app = new ShiftApplication();
+        Test("canonical symbols and all seven native icon sizes decode from packaged resources", () =>
+        {
+            foreach (var dark in new[] { false, true })
+            {
+                var symbol = BrandAssets.Symbol(dark);
+                Check(symbol.PixelWidth == 128 && symbol.PixelHeight == 128 && symbol.IsFrozen);
+                var frames = BrandAssets.WindowIcon(dark).Decoder!.Frames;
+                Check(frames.Count == 7);
+                Check(frames.Select(frame => frame.PixelWidth).ToHashSet().SetEquals([16, 24, 32, 48, 64, 128, 256]));
+                // NotifyIcon uses 32px. Drawing.Icon can choose 128px when asked
+                // for 256px; verify the retained 256px frame with WPF above.
+                foreach (var size in new[] { 16, 24, 32, 48, 64, 128 })
+                {
+                    using var icon = BrandAssets.LoadTrayIcon(dark, size);
+                    Check(icon.Width == size && icon.Height == size);
+                }
+            }
+        });
+        Test("family artwork adapts without recoloring and stays decorative in high contrast", () =>
+        {
+            var window = new MainWindow(_ => Task.FromResult(""), () => Task.CompletedTask, () => Task.CompletedTask);
+            Check(!BrandAssets.IsDark(Brushes.White) && BrandAssets.IsDark(Brushes.Black));
+            window.ApplyBrand(false, false);
+            Check(ReferenceEquals(window.FamilySymbol.Source, BrandAssets.Symbol(false)));
+            Check(ReferenceEquals(window.Icon, BrandAssets.WindowIcon(false)));
+            window.ApplyBrand(true, false);
+            Check(ReferenceEquals(window.FamilySymbol.Source, BrandAssets.Symbol(true)));
+            Check(ReferenceEquals(window.Icon, BrandAssets.WindowIcon(true)));
+            window.ApplyBrand(true, true);
+            Check(window.FamilySymbol.Visibility == Visibility.Collapsed && window.Title == "Offramp Shift");
+            Check(UIElementAutomationPeer.CreatePeerForElement(window.FamilySymbol) is null);
+        });
         Test("native WPF views load bind and expose accessible labels without live monitoring", () =>
         {
             var window = new MainWindow(_ => Task.FromResult(""), () => Task.CompletedTask, () => Task.CompletedTask);

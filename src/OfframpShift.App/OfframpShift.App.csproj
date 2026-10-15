@@ -7,9 +7,12 @@
     <PlatformTarget>x64</PlatformTarget>
     <StartupObject>OfframpShift.App.Program</StartupObject>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets/Offramp/offramp-family-light.ico</ApplicationIcon>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
   <ItemGroup>
+    <Resource Include="Assets/Offramp/*.ico" />
+    <Resource Include="Assets/Offramp/*.png" />
     <ProjectReference Include="../OfframpShift.ApplicationHost/OfframpShift.ApplicationHost.csproj" />
     <InternalsVisibleTo Include="OfframpShift.App.Tests" />
     <Using Remove="System.Windows.Forms" />

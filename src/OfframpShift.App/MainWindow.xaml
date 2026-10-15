@@ -1,14 +1,18 @@
 <Window x:Class="OfframpShift.App.MainWindow"
  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:local="clr-namespace:OfframpShift.App"
  Title="Offramp Shift" Width="820" Height="760" MinWidth="480" MinHeight="420"
  FontFamily="Segoe UI" FontSize="14" WindowStartupLocation="CenterScreen"
  Background="{DynamicResource WindowBackground}" Foreground="{DynamicResource WindowForeground}">
  <DockPanel Margin="24">
-  <StackPanel DockPanel.Dock="Top" Margin="0,0,0,16">
-   <TextBlock Text="Offramp Shift" FontSize="26" FontWeight="SemiBold" />
-   <TextBlock Text="A little space between personal time and work." Margin="0,4,0,0" />
-  </StackPanel>
+  <DockPanel DockPanel.Dock="Top" Margin="0,0,0,16">
+   <local:FamilySymbolImage x:Name="FamilySymbol" Width="48" Height="48" Stretch="Uniform" Margin="0,0,14,0" DockPanel.Dock="Left" Focusable="False" />
+   <StackPanel>
+    <TextBlock Text="Offramp Shift" FontSize="26" FontWeight="SemiBold" />
+    <TextBlock Text="A little space between personal time and work." Margin="0,4,0,0" />
+   </StackPanel>
+  </DockPanel>
   <TextBlock DockPanel.Dock="Bottom" Margin="0,14,0,0" Text="Owner evaluation • Estimated accounting • Local only. Automatic switching and website attribution are unavailable." />
   <TabControl x:Name="Navigation" AutomationProperties.Name="Main navigation">
    <TabItem Header="_Home">

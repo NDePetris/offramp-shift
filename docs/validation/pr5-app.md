@@ -17,7 +17,7 @@ and noninteractive results below do not expand that gate.
 | Core | PASS: 67 tests / 38,679 assertions | Synthetic domain observations |
 | Persistence | PASS: 65 tests / 618 assertions | Real local SQLite, injected faults; five owned Windows forced-termination scenarios reported separately |
 | Application host | PASS: 25 tests / 103 assertions | Fake providers/clock, real temporary SQLite and settings; no native observation |
-| WPF application | PASS: 7 tests / 45 assertions | Synthetic states, actual WPF layout/automation properties, current-user activation process, actual WinExe non-COM worker fault modes |
+| WPF application | PASS: 9 tests / 70 assertions | Synthetic states/theme/high-contrast artwork selection, packaged canonical resources, actual WPF layout/automation properties, current-user activation process, actual WinExe non-COM worker fault modes |
 | Windows observation | PASS: 41 tests / 10,237 assertions | Existing synthetic estimator and real local SQLite integration |
 | Virtual desktop probe | PASS: 58 tests + three isolation checks | Fake providers and owned worker faults; no shell COM/switching |
 | Browser probe | PASS: 2,053 assertions + five mock groups + transport checks | No Chrome/Edge interaction or attribution validation |
@@ -65,12 +65,21 @@ Perform only deliberate owner-led exercises on the allowlisted configuration.
   light/dark/system/high contrast and enlarged text work. Test narrow window sizes,
   100/150/200% scaling and mixed-DPI monitors without clipped controls.
 
-## Pending assets and gates
+## Canonical assets and remaining gates
 
-Canonical Offramp assets/design foundation have not yet been supplied in this
-checkout at this implementation checkpoint. No logo geometry or new semantic
-palette was invented. The standard Windows application icon is temporary; final
-canonical symbol integration remains pending the owner-provided assets.
+The owner subsequently supplied `offramp-design-v0.1.zip`. Eight canonical source/
+runtime files were copied byte-for-byte with archive/entry SHA-256 provenance in
+`src/OfframpShift.App/Assets/Offramp/provenance.json`. Geometry and pixel values were
+not altered, archive scripts were not executed, and proposed semantic mappings
+were not promoted. The executable/window/tray use the family ICOs provisionally;
+a differentiated Shift-specific icon remains pending. Light/dark header render
+checks and synthetic high-contrast decorative-art exclusion pass. Actual shell
+icon appearance, high contrast and DPI acceptance remain NOT RUN.
+
+Both supplied ICOs retain all seven 16/24/32/48/64/128/256 frames, verified with
+WPF decoding. Drawing.Icon decodes the tray sizes through 128px correctly here;
+its chooser returns 128px for a 256px request. The tray requests 32px. No artwork
+was changed to accommodate that decoder behavior.
 
 Issue #8 (Explorer recovery) and #9 (independent accuracy/sustained reliability)
 remain OPEN. No new two-hour measurement or mature transition matrix was run.

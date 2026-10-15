@@ -23,6 +23,7 @@ public partial class ShiftApplication : Application
         window = new(Execute, ExitAsync, CloseAsync); MainWindow = window;
         try { tray = new(() => Open(false), () => Open(true), Execute, ExitAsync); }
         catch { MessageBox.Show("The tray icon could not be created. Keep this window open; closing will exit.", "Offramp Shift"); }
+        RefreshBrand();
         instance.Listen(() => Dispatcher.BeginInvoke(() => Open(false)));
         timer = new(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(250) };
         timer.Tick += (_, _) => Refresh(); timer.Start();
@@ -39,6 +40,7 @@ public partial class ShiftApplication : Application
     private void Refresh()
     {
         if (controller is null || window is null) return;
+        RefreshBrand();
         if (controller.Latest is not { } value)
         {
             if (controller.Completion.IsCompleted)
@@ -53,9 +55,16 @@ public partial class ShiftApplication : Application
         {
             theme = value.Settings.Theme;
             ApplyTheme(theme.Value);
+            RefreshBrand();
         }
         if (controller.Completion.IsCompleted && !exiting)
             window.ActionResult.Text = "The monitoring owner stopped or cleanup failed. Accounting is stopped. Exit and restart the app.";
+    }
+    private void RefreshBrand()
+    {
+        if (window is null) return;
+        var dark = BrandAssets.IsDark(window.Background);
+        window.ApplyBrand(dark, SystemParameters.HighContrast); tray?.ApplyBrand(dark);
     }
     // The framework Fluent theme selector remains evaluation-marked in .NET 10.
     // Keep the opt-in local; all other warnings remain errors.

@@ -15,6 +15,9 @@ internal sealed class TrayService : IDisposable
     private readonly Forms.ToolStripMenuItem work;
     private HostSnapshot? snapshot;
     private bool disposed;
+    private readonly System.Drawing.Icon lightIcon;
+    private readonly System.Drawing.Icon darkIcon;
+    private bool darkSelected;
     public TrayService(Action open, Action settings, Func<HostCommand, Task<string>> execute, Func<Task> exit)
     {
         Forms.ToolStripMenuItem Action(string label, HostCommandKind kind)
@@ -36,9 +39,17 @@ internal sealed class TrayService : IDisposable
         work = Action("Use current desktop as Work", HostCommandKind.AssignWork); menu.Items.Add(work);
         menu.Items.Add("Settings", null, (_, _) => settings());
         menu.Items.Add("Exit", null, async (_, _) => await exit());
-        // Replaced with canonical supplied icon when available; never synthesize logo geometry.
-        icon = new() { Icon = System.Drawing.SystemIcons.Application, Text = "Offramp Shift", ContextMenuStrip = menu, Visible = true };
+        lightIcon = BrandAssets.LoadTrayIcon(false);
+        try { darkIcon = BrandAssets.LoadTrayIcon(true); }
+        catch { lightIcon.Dispose(); menu.Dispose(); throw; }
+        try { icon = new() { Icon = lightIcon, Text = "Offramp Shift", ContextMenuStrip = menu, Visible = true }; }
+        catch { lightIcon.Dispose(); darkIcon.Dispose(); menu.Dispose(); throw; }
         icon.DoubleClick += (_, _) => open();
+    }
+    public void ApplyBrand(bool dark)
+    {
+        if (darkSelected == dark) return;
+        darkSelected = dark; icon.Icon = dark ? darkIcon : lightIcon;
     }
     public void Apply(HostSnapshot value, DashboardModel model)
     {
@@ -55,6 +66,7 @@ internal sealed class TrayService : IDisposable
     {
         if (disposed) return;
         disposed = true; icon.Visible = false; icon.ContextMenuStrip?.Dispose(); icon.Dispose();
+        lightIcon.Dispose(); darkIcon.Dispose();
     }
     public void MarkUnavailable()
     {

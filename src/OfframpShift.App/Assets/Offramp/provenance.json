@@ -1,0 +1,47 @@
+{
+  "source_archive": "offramp-design-v0.1.zip",
+  "archive_sha256": "c38d0ca5018c61ac7bb70619742d1c5e4d231ac14a4a4ad0ae7f551a216d9436",
+  "foundation_version": "0.1",
+  "assets": [
+    {
+      "file": "offramp-family-light.ico",
+      "source_entry": "offramp-design/assets/windows/offramp-family-light.ico",
+      "sha256": "95e08e8a2c274ee885b1e57aa98b32690e1b5275419cd2240c8ae99b1998d0c9"
+    },
+    {
+      "file": "offramp-family-dark.ico",
+      "source_entry": "offramp-design/assets/windows/offramp-family-dark.ico",
+      "sha256": "7b844790cba5d5e0788b40c67e38b014fb280029eafecc903e49de3402e5d384"
+    },
+    {
+      "file": "offramp-family-light.svg",
+      "source_entry": "offramp-design/assets/windows/offramp-family-light.svg",
+      "sha256": "d307fd16e1fed6622191e4b774e75e0ec85de3c08cb636620c4ae7f7fd44cc81"
+    },
+    {
+      "file": "offramp-family-dark.svg",
+      "source_entry": "offramp-design/assets/windows/offramp-family-dark.svg",
+      "sha256": "6f437872a7b1b285bccc271c2a0f958fba74d0242f0054d72714cfec672838b2"
+    },
+    {
+      "file": "offramp-primary-128.png",
+      "source_entry": "offramp-design/assets/png/offramp-primary-128.png",
+      "sha256": "d6f3260cbfca439b1c6e1b9d58480bc381529d39813b235f7cfbc4bcc91d98c2"
+    },
+    {
+      "file": "offramp-reversed-128.png",
+      "source_entry": "offramp-design/assets/png/offramp-reversed-128.png",
+      "sha256": "53e83999e748c011e2fc3be21af0773c94f2d4925fc4cc9e2e623dd38c36ae85"
+    },
+    {
+      "file": "offramp-primary.svg",
+      "source_entry": "offramp-design/assets/svg/offramp-primary.svg",
+      "sha256": "486aff70b2b4c2ae7b3cafa10da8822beca150e52b35bd54fff9f6ff7268ffe7"
+    },
+    {
+      "file": "offramp-reversed.svg",
+      "source_entry": "offramp-design/assets/svg/offramp-reversed.svg",
+      "sha256": "8b51d53aa5fdf5a0c017955b4c9170132e0dbb7c1746b5c42b552e4a923dcb58"
+    }
+  ]
+}

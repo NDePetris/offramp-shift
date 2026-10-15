@@ -121,8 +121,13 @@ is separate. Dashboard/tray distinguish primary availability/pause from the save
 exhaustion/advisory state. No toast notification infrastructure is added.
 
 Quiet Road palette constants are retained without invented semantic colors.
-Canonical Offramp symbol assets must be supplied by the owner; no substitute logo
-geometry is authored. See the validation record for the current asset status.
+The owner-supplied v0.1 canonical family assets are deployed unchanged in
+`src/OfframpShift.App/Assets/Offramp`, with source hashes/provenance. The executable,
+window and tray use the supplied family ICOs; the header selects the primary or
+reversed PNG against the effective native light/dark background. Decorative header
+art is hidden in high contrast; the native text heading remains. This provisions
+the family symbol without approving a differentiated Shift icon or the handoff's
+proposed semantic mappings. See the asset README and validation record.
 
 No telemetry, runtime network calls, activity history or automatic diagnostics
 files are added. Licensing/distribution remain undecided.
