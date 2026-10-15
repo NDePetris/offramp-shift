@@ -1,0 +1,66 @@
+using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
+
+[assembly: SupportedOSPlatform("windows")]
+
+namespace WindowsObservation;
+
+internal static class Program
+{
+    private static int Main(string[] args)
+    {
+        if (args.Length != 0) return 2; // A broken spawn guard must not recursively run tests.
+        var cases = 0;
+        foreach (var build in new[] { "26200.9456", "26200.9458", "26200.9710", "26200.9712", "26100.9711", "26200" })
+        {
+            Registry.Build = build;
+            using var worker = new DesktopWorker();
+            if (worker.OwnedProcess is not null || worker.Read().Health != Capability.Unsupported ||
+                DesktopWorker.Run() != 2 || Native.Calls != 0) return 1;
+            cases++;
+        }
+        foreach (var build in new[] { "26200.9457", "26200.9711" })
+        {
+            if (!DesktopWorker.IsSupported(build, Architecture.X64)) return 1;
+            foreach (var architecture in new[] { Architecture.X86, Architecture.Arm64, Architecture.Arm })
+            {
+                if (DesktopWorker.IsSupported(build, architecture)) return 1;
+                Registry.Build = build;
+                RuntimeInformation.ProcessArchitecture = architecture;
+                using var worker = new DesktopWorker();
+                if (worker.OwnedProcess is not null || worker.Read().Health != Capability.Unsupported ||
+                    DesktopWorker.Run() != 2 || Native.Calls != 0) return 1;
+                cases++;
+            }
+        }
+        Console.WriteLine($"PASS: {cases} unsupported-build/architecture constructor/worker-entry cases rejected without child or native activation; both exact build/architecture matrices passed (test-only registry/runtime/native stubs).");
+        return 0;
+    }
+}
+
+// Namespace-local replacements exist ONLY in this test executable. The actual worker
+// source above is compiled unchanged; these stubs are never referenced by a live project.
+internal static class Registry
+{
+    internal static string Build { get; set; } = "";
+    internal static FakeKey LocalMachine { get; } = new();
+    internal sealed class FakeKey : IDisposable
+    {
+        internal FakeKey OpenSubKey(string _) => this;
+        internal object GetValue(string name) => name == "CurrentBuild" ? Build.Split('.')[0] : Build.Split('.').ElementAtOrDefault(1) ?? "";
+        public void Dispose() { }
+    }
+}
+
+internal static class Native
+{
+    internal static int Calls { get; private set; }
+    internal static nint GetShellWindow() { Calls++; throw new InvalidOperationException("NativeActivationForbiddenInGuardTests"); }
+    internal static uint GetWindowThreadProcessId(nint _, out uint process)
+    { Calls++; process = 0; throw new InvalidOperationException("NativeActivationForbiddenInGuardTests"); }
+}
+
+internal static class RuntimeInformation
+{
+    internal static Architecture ProcessArchitecture { get; set; } = Architecture.X64;
+}

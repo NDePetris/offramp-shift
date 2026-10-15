@@ -91,6 +91,10 @@ jobs:
         shell: pwsh
         run: ./spikes/WindowsObservation/run.ps1 test
 
+      - name: Verify compatibility guards and owned non-COM worker faults
+        shell: pwsh
+        run: ./spikes/WindowsObservation/compatibility.ps1 test
+
       - name: Verify observation probe formatting
         shell: pwsh
         run: ./spikes/WindowsObservation/run.ps1 format
