@@ -7,6 +7,13 @@ activity history, telemetry, network behavior, licensing or distribution decisio
 
 ## Boundaries
 
+PR 5 extracts the probe's sampler/orchestration into ApplicationHost, shared by
+the retained headless command and owner-evaluation WPF app. See
+[Windows app architecture](windows-app.md) for ownership, setup and recovery.
+The following PR 4 evidence/estimation limits remain in force. Probe aggregate
+output is now nested under `diagnostics`; native resource/latency data is under
+`diagnostics.providers`. No observation history is retained.
+
 `OfframpShift.WindowsObservation` extracts the spike's native loop, clock, identity,
 last-input reconstruction and persistent read-only COM worker. The probe still
 owns command dispatch and sampling. The worker launches the entry executable,

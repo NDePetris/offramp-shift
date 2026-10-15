@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><OutputType>Exe</OutputType><AssemblyName>ObservationProbe</AssemblyName><RestorePackagesWithLockFile>true</RestorePackagesWithLockFile></PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="../../../src/OfframpShift.ApplicationHost/OfframpShift.ApplicationHost.csproj" />
     <ProjectReference Include="../../../src/OfframpShift.WindowsObservation/OfframpShift.WindowsObservation.csproj" />
     <ProjectReference Include="../../../src/OfframpShift.ActivityMonitoring/OfframpShift.ActivityMonitoring.csproj" />
     <ProjectReference Include="../../../src/OfframpShift.Persistence/OfframpShift.Persistence.csproj" />

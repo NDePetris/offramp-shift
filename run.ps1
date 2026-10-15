@@ -1,4 +1,4 @@
-param([ValidateSet('build', 'test', 'format')][string]$Command = 'test')
+param([ValidateSet('build', 'test', 'format', 'app')][string]$Command = 'test')
 $ErrorActionPreference = 'Stop'
 $localDotnet = Join-Path $PSScriptRoot '.tools/dotnet/dotnet.exe'
 $dotnet = if (Test-Path -LiteralPath $localDotnet) { $localDotnet } else { 'dotnet' }
@@ -6,9 +6,20 @@ $env:DOTNET_CLI_HOME = Join-Path $PSScriptRoot '.tools/cli'
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 $env:DOTNET_SKIP_FIRST_TIME_EXPERIENCE = '1'
 if (Test-Path -LiteralPath $localDotnet) { $env:DOTNET_ROOT = Split-Path $localDotnet -Parent }
+if ($Command -eq 'app') {
+    $appProject = Join-Path $PSScriptRoot 'src/OfframpShift.App/OfframpShift.App.csproj'
+    & $dotnet restore $appProject --configfile (Join-Path $PSScriptRoot 'src/NuGet.Config') --locked-mode
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    & $dotnet build $appProject -c Release --no-restore
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    & $dotnet (Join-Path $PSScriptRoot 'src/OfframpShift.App/bin/Release/net10.0-windows/OfframpShift.App.dll')
+    exit $LASTEXITCODE
+}
 $projects = @(
     'tests/OfframpShift.Core.Tests/OfframpShift.Core.Tests.csproj',
-    'tests/OfframpShift.Persistence.Tests/OfframpShift.Persistence.Tests.csproj'
+    'tests/OfframpShift.Persistence.Tests/OfframpShift.Persistence.Tests.csproj',
+    'tests/OfframpShift.ApplicationHost.Tests/OfframpShift.ApplicationHost.Tests.csproj',
+    'tests/OfframpShift.App.Tests/OfframpShift.App.Tests.csproj'
 )
 foreach ($relativeProject in $projects) {
     $project = Join-Path $PSScriptRoot $relativeProject
@@ -24,7 +35,9 @@ foreach ($relativeProject in $projects) {
 if ($Command -eq 'format') {
     foreach ($relativeProject in @(
         'src/OfframpShift.Core/OfframpShift.Core.csproj',
-        'src/OfframpShift.Persistence/OfframpShift.Persistence.csproj'
+        'src/OfframpShift.Persistence/OfframpShift.Persistence.csproj',
+        'src/OfframpShift.ApplicationHost/OfframpShift.ApplicationHost.csproj',
+        'src/OfframpShift.App/OfframpShift.App.csproj'
     ) + $projects) {
         & $dotnet format (Join-Path $PSScriptRoot $relativeProject) --verify-no-changes --no-restore
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

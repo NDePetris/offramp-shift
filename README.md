@@ -2,7 +2,7 @@
 
 Offramp Shift is an early-stage, local-first Windows application concept for helping users keep personal and work contexts separate. It is part of the Offramp family, alongside Offramp Fade for Android.
 
-**Current state: an independently tested monitoring domain engine, transactional local checkpoint persistence, experimental best-effort Windows monitoring and isolated feasibility probes.** PR 4's bounded headless investigation has partial live evidence; full acceptance remains unproven. There is no production tray app, approved automatic switching or production website attribution.
+**Current state: an owner-evaluation WPF/tray app, a shared monitoring host, transactional local checkpoints and isolated feasibility probes.** Accounting is experimental and Estimated. PR 4's partial live evidence does not establish production readiness or unattended daily-use acceptance; Explorer recovery and sustained reliability remain unresolved. Automatic switching and production website attribution remain NO-GO.
 
 ## Development
 
@@ -17,13 +17,25 @@ Offramp Shift is an early-stage, local-first Windows application concept for hel
 ./run.ps1 format
 ```
 
+Launch the Windows x64 app for deliberate owner evaluation with `./run.ps1 app`.
+First setup requires explicit experimental-observation consent, Personal/Work GUID
+assignments and Start monitoring. Use the tray assignment menu on each manually
+selected desktop without opening the main window first. Previously enabled
+monitoring resumes on later app launches only with valid settings and fresh
+providers; Pause persists. No Windows-login startup is configured. The native
+desktop observer remains restricted to exact build 26200.9457/x64.
+
+See [Windows app architecture](docs/architecture/windows-app.md) and
+[PR 5 validation and pending manual acceptance](docs/validation/pr5-app.md).
+
 CI uses these automated test commands on Windows runners, with Node.js 24 for the browser probe. Browser tests use mocked extension APIs and synthetic native callers; neither job interacts with a live browser or switches desktops. CI cannot establish actual virtual-desktop or browser-to-window compatibility.
 
-Core and persistence target platform-independent `net10.0`. Core tests use synthetic observations and a fake clock; persistence tests use real temporary SQLite databases and injected interruption faults. The root runner builds/tests both projects and verifies their formatting. Persistence introduces pinned Microsoft.Data.Sqlite with bundled native SQLite and locked transitive dependencies; initial restore/audit needs NuGet access, and subsequent locked restores can use cached packages. No runtime network or Windows monitoring integration is added. See [core monitoring architecture](docs/architecture/core-monitoring.md), [local persistence architecture](docs/architecture/local-persistence.md) and [dependency notices](THIRD-PARTY-NOTICES.md).
+Core and persistence target platform-independent `net10.0`. Core tests use synthetic observations and a fake clock; persistence tests use real temporary SQLite databases and injected interruption faults. The root runner builds/tests Core, Persistence, ApplicationHost and the Windows app and verifies their formatting. Persistence introduces pinned Microsoft.Data.Sqlite with bundled native SQLite and locked transitive dependencies; initial restore/audit needs NuGet access, and subsequent locked restores can use cached packages. Core/Persistence contain no runtime network or native observation code; Windows integration is owned by the application host. See [core monitoring architecture](docs/architecture/core-monitoring.md), [local persistence architecture](docs/architecture/local-persistence.md) and [dependency notices](THIRD-PARTY-NOTICES.md).
 
 ## Architecture and decisions
 
 - [Virtual-desktop feasibility results](spikes/VirtualDesktop/docs/pr0-results.md)
+- [Windows application host and lifecycle](docs/architecture/windows-app.md)
 - [Core monitoring domain architecture](docs/architecture/core-monitoring.md)
 - [Transactional local persistence architecture](docs/architecture/local-persistence.md)
 - [Best-effort monitoring architecture and checkpoint migration](docs/architecture/best-effort-monitoring.md)
@@ -41,7 +53,7 @@ Core and persistence target platform-independent `net10.0`. Core tests use synth
 
 The virtual-desktop feasibility spike is intentionally gated to the tested Windows build. Automatic desktop switching remains **NO-GO** until outstanding live validation gates are satisfied. Browser domain-to-window attribution is a separate experimental track and is likewise **NO-GO** for production use pending live proof.
 
-Website-level attribution is not an MVP prerequisite. The core provides application-level classification, accounting, break resets, and advisory decisions; live context detection and manual desktop control remain future integration work.
+Website-level attribution is not an MVP prerequisite. The core provides application-level classification, accounting, break resets, and advisory decisions. The app uses experimental read-only context observation; users change desktops themselves through Windows.
 
 ## Project conventions
 

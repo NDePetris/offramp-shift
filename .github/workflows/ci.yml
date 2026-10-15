@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   core-monitoring:
-    name: Core and persistence (synthetic observations, local SQLite)
+    name: Core, persistence and Windows app (synthetic observations, local SQLite)
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
