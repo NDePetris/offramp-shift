@@ -27,7 +27,9 @@ public sealed record EvidenceResult(MonitoringObservation? Interval, string Reas
 
 public static class DesktopObservationPolicy
 {
-    public static bool IsSupported(string build, string architecture) => build == "26200.9457" && architecture == "X64";
+    // Exact owner-approved read-only builds; unrelated switching policy remains separate.
+    public static bool IsSupported(string build, string architecture) =>
+        build is "26200.9457" or "26200.9711" && architecture == "X64";
 }
 
 // Portable cleanup decision, with native process operations supplied by the owner.

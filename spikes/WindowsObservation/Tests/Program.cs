@@ -140,12 +140,17 @@ Test("last input regression discards reading and starts fresh", () =>
     Check(input.Read(99, 250) is null);
     Check(input.Read(260, 270) == 10);
 });
-Test("native build gate accepts only the reviewed exact build and architecture", () =>
+Test("native read-only gate accepts exactly the two owner-approved x64 builds", () =>
 {
-    Check(DesktopObservationPolicy.IsSupported("26200.9457", "X64"));
-    foreach (var build in new[] { "26200", "26200.9458", "26100.9457", "", "unknown" })
+    foreach (var build in new[] { "26200.9457", "26200.9711" })
+    {
+        Check(DesktopObservationPolicy.IsSupported(build, "X64"));
+        foreach (var arch in new[] { "Arm64", "Arm", "X86", "x64", "", "unknown" })
+            Check(!DesktopObservationPolicy.IsSupported(build, arch));
+    }
+    foreach (var build in new[] { "26200", "26200.9456", "26200.9458", "26200.9710", "26200.9712",
+        "26100.9457", "26100.9711", "26201.9711", "26200.9711.0", " 26200.9711", "26200.9711 ", "", "unknown" })
         Check(!DesktopObservationPolicy.IsSupported(build, "X64"));
-    foreach (var arch in new[] { "Arm64", "X86", "x64", "" }) Check(!DesktopObservationPolicy.IsSupported("26200.9457", arch));
 });
 Test("generated evidence sequences preserve interval and accounting invariants", () =>
 {

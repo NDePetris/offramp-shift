@@ -50,8 +50,20 @@ filesystem/process sandbox when its build/process restrictions prevent operation
 history. Ctrl+C stops it. It runs for at most 600 seconds. It writes no files.
 
 `--desktop` explicitly enables the experimental read-only COM helper, only on
-**26200.9457/x64**. All other builds reject before undocumented COM activation.
-This is a research allowlist, not production monitoring compatibility approval.
+**26200.9457/x64** or **26200.9711/x64**, the two exact owner-approved read-only
+observation builds. All other builds reject before undocumented COM activation.
+The newer build is approved for experimental owner-evaluation monitoring after
+the bounded owner-reported compatibility checks; this does not certify accounting
+accuracy, uninterrupted observation or unattended daily use.
+
+For the separately isolated, exact **26200.9711/x64** update investigation in issue
+#12, see [the compatibility harness and operator procedure](Compatibility/README.md).
+Its live commands require deliberate operator initiation. The shared read-only
+policy now includes the approved build; the separate switching allowlist remains
+unchanged and automatic switching/browser attribution remain NO-GO. Evidence and
+approval are recorded in [the compatibility record](../../docs/validation/windows-26200-9711.md).
+See [owner smoke commands](../../docs/validation/windows-26200-9711-smoke.md) for
+the updated production observation path and separate WPF integration check.
 
 For a diagnostic Personal/Work mapping, supply distinct GUIDs deliberately obtained
 on the corresponding desktops by the operator, without printing or using their names:
