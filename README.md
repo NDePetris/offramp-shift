@@ -2,7 +2,7 @@
 
 Offramp Shift is an early-stage, local-first Windows application concept for helping users keep personal and work contexts separate. It is part of the Offramp family, alongside Offramp Fade for Android.
 
-**Current state: an owner-evaluation WPF/tray app, a shared monitoring host, transactional local checkpoints and isolated feasibility probes.** Accounting is experimental and Estimated. PR 4's partial live evidence does not establish production readiness or unattended daily-use acceptance; Explorer recovery and sustained reliability remain unresolved. Automatic switching and production website attribution remain NO-GO.
+**Current state: an owner-evaluation WPF/tray app, a shared monitoring host, transactional local checkpoints and isolated feasibility probes.** PR #11 completed the accepted PR 5 milestone: owner acceptance Tests 1–7 were reported PASS; Tests 8–12 remain deferred / NOT RUN. Accounting is experimental and Estimated. This does not establish production readiness, certified accounting or unattended daily-use acceptance; Explorer recovery (#8) and sustained reliability (#9) remain unresolved. PR #13 completed the bounded exact-build read-only compatibility work. Automatic switching and production website attribution remain NO-GO.
 
 ## Development
 
