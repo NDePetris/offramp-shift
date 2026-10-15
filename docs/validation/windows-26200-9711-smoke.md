@@ -1,6 +1,11 @@
 # Owner smoke tests after the exact read-only build update
 
-These tests are **NOT RUN** by the agent. They are short owner-evaluation smokes,
+These tests were **not run live by the agent**. The owner subsequently reported
+the bounded production-path smoke and integrated WPF interactions successful;
+see [the evidence record](windows-26200-9711.md) for exact results and limits.
+Post-exit app/helper cleanup was not separately reported for either smoke.
+The procedure below remains a checklist, not proof every step was completed.
+These are short owner-evaluation smokes,
 not accounting accuracy, uninterrupted monitoring or unattended daily-use acceptance.
 Use ordinary unelevated Windows PowerShell outside Codex's constrained tool sandbox,
 on Windows 11 25H2 Professional **26200.9711/x64**. Record exact revision, two-monitor
