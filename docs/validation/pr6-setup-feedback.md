@@ -48,7 +48,40 @@ Builds retain warnings as errors and locked dependencies. Tests use synthetic pr
 SQLite; actual owned process checks are non-COM. These do not establish live
 Windows UI behavior, native observation reliability or certified accounting.
 
-## Short owner smoke — NOT RUN
+## Owner acceptance — October 15, 2026
+
+The owner reported **PASS** for the four targeted checks below and accepted PR 6
+for its bounded owner-evaluation scope. The implementation at closeout is
+`681b03464577da7efd7da0f6ffcca77ef6712f00`; this acceptance update changes only
+documentation. The report is owner-supplied evidence, not agent-executed live
+verification. It does not supply a separate tested-SHA transcript, exact Windows
+build/hardware, display scaling, timings or per-variant results; none are inferred
+from earlier runs or from the approved-build list.
+
+| Targeted check | Live result | Evidence boundary |
+|---|---|---|
+| Home/Settings setup guidance and assignment labels | **PASS — owner-reported** | Existing setup inspected; understandable labels and no raw GUIDs. Complete fresh-account onboarding is not claimed. |
+| Duplicate tray assignment rejection | **PASS — owner-reported** | Assigning Work to the existing Personal desktop produced appropriate rejection feedback through **Action needs attention…**, without unexpectedly opening the main window. |
+| Close/reopen through the tray | **PASS — owner-reported** | Existing saved close preference was respected. Initial close-choice dialog, newly saving either choice, and preference-save failure were not manually verified. |
+| Brief keyboard-focus and Narrator review | **PASS — owner-reported** | Affected controls received a brief review; this is not a complete accessibility or display-variant matrix. |
+
+**NOT RUN / not established by this report:** the complete fresh-account consent →
+assignment → Start sequence; the initial close-choice dialog and its choices;
+injected preference-save failure; live provider-retry failure; high contrast;
+minimum-window-size behavior; and any other unreported theme, DPI, hardware,
+notification deduplication, dismissal or successful-retry variant. Deterministic
+fault tests and synthetic renders remain separate automated evidence.
+
+PR 5 acceptance Tests 8–12 remain deferred / **NOT RUN**. Explorer recovery (#8),
+sustained reliability/accuracy (#9), and existing cleanup limitations remain
+unresolved. This acceptance does not approve unattended daily use or certified
+accounting and does not lift any safety gate.
+
+## Original short owner smoke procedure — criteria, not a blanket PASS
+
+The procedure below is retained for provenance and possible future checks. Only
+the specific observations in the acceptance table above are recorded as PASS;
+the broader procedure and unreported variants have not been marked complete.
 
 Record tested commit, Windows edition/build/architecture, display scaling and
 PASS/FAIL/NOT RUN for each item. Use an ordinary account on an approved exact build.
@@ -85,8 +118,10 @@ Do not delete normal data or improvise storage/ACL faults.
 Failed close-save and provider-retry failure paths have deterministic fault
 coverage; live fault UI acceptance is **NOT RUN** without a reviewed isolated fault
 fixture. No normal-data corruption, Explorer restart or broad accounting campaign
-is required for this PR. Native balloons/details dialogs and first-close interactions
-remain owner-operated smoke checks; synthetic renders are not manual passes.
+is required for this PR. The acceptance table records the bounded live tray feedback
+and saved-close-preference checks; other native balloon/dialog and first-close
+variants remain NOT RUN unless explicitly reported. Synthetic renders are not
+manual passes.
 
 ## Unchanged gates
 
@@ -94,4 +129,5 @@ Automatic desktop switching/window movement and production website attribution
 remain **NO-GO**. Unattended daily-use acceptance and certified accounting remain
 unapproved. Explorer recovery (#8), sustained reliability/accuracy (#9), PR 5
 Tests 8–12 and existing blocked-native-call cleanup limitations remain unresolved.
-Licensing/public distribution remain undecided. No merge, deployment or release.
+Licensing/public distribution remain undecided. The owner separately authorized
+PR #14 merge after final-head CI verification; no deployment or release is authorized.
