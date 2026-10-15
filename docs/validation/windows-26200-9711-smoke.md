@@ -1,5 +1,10 @@
 # Owner smoke tests after the exact read-only build update
 
+**Historical detached-overlay procedure.** PR #13 is now merged, and PR #11
+integrates that main revision. Use [the integrated-head owner checklist](pr5-owner-acceptance.md)
+for new WPF acceptance; no detached checkout or predicate overlay is needed.
+The procedure/results below retain the provenance of the earlier owner smoke.
+
 These tests were **not run live by the agent**. The owner subsequently reported
 the bounded production-path smoke and integrated WPF interactions successful;
 see [the evidence record](windows-26200-9711.md) for exact results and limits.

@@ -14,6 +14,11 @@ See [the architecture](../../docs/architecture/best-effort-monitoring.md) and
 [live procedure](../../docs/validation/pr4-accounting.md). Original snapshot/watch
 commands still emit uncertain diagnostic evidence and open no accounting session.
 The read-only native mechanisms now live in `src/OfframpShift.WindowsObservation`.
+PR 5 moves the sampler and monitoring loop to `src/OfframpShift.ApplicationHost`,
+shared by this headless command and the WPF owner-evaluation app. The probe remains
+available; final monitor aggregates are now nested under `diagnostics`, with native
+latency/resources under `diagnostics.providers`. See the
+[Windows app architecture](../../docs/architecture/windows-app.md).
 The monitor host reuses the existing pinned SQLite dependency; its runner uses
 root NuGet source mapping and locked restore. New host/test lock files pin transitives.
 

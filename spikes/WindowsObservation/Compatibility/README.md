@@ -2,7 +2,9 @@
 
 Issue [#12](https://github.com/NDePetris/offramp-shift/issues/12), based on main
 `e73fe5763ca510eab19dc3d04abcd4408ec19234`, branch
-`spike/windows-26200-9711-compatibility`. PR #11's branch is untouched.
+`spike/windows-26200-9711-compatibility`. That original investigation left PR #11
+untouched. PR #13 has since merged as `22e6e65`, and PR #11 now integrates it;
+see [the integrated-head owner checklist](../../../docs/validation/pr5-owner-acceptance.md).
 The owner reported PASS for all three bounded live exercises on the original
 source digest `1251F5DD1D53BFFFA672597BDA820B48142C629EEAC540BFEC6F995D412C834D`
 and explicitly approved adding 26200.9711/x64 for experimental owner-evaluation
@@ -193,9 +195,9 @@ should remain after exit. Do not terminate unrelated dotnet processes. A leftove
 owned worker is FAIL; record it, then terminate only that diagnostic process.
 
 The harness never opens the app's settings/store. Independently check your normal
-settings/store location has no unexpected writes. PR #11's existing unmodified
-binary/branch retains its old policy; only a separately integrated build receives
-this approval. Use the separate smoke procedure for that build and keep its
+settings/store location has no unexpected writes. PR #11's historical unmodified
+binary retained its old policy; the integrated branch now receives this approval.
+Use the integrated-head owner checklist for that build and keep its
 deliberate settings/accounting writes distinct from diagnostic no-write evidence.
 Confirm no automatic desktop changes occurred and the temporary pin disappeared.
 

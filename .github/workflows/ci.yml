@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   core-monitoring:
-    name: Core and persistence (synthetic observations, local SQLite)
+    name: Core, persistence and Windows app (synthetic observations, local SQLite)
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
@@ -22,11 +22,11 @@ jobs:
         with:
           global-json-file: global.json
 
-      - name: Build and run core and persistence checks
+      - name: Build and run core, persistence and Windows app checks
         shell: pwsh
         run: ./run.ps1 test
 
-      - name: Verify core and persistence formatting
+      - name: Verify core, persistence and Windows app formatting
         shell: pwsh
         run: ./run.ps1 format
 

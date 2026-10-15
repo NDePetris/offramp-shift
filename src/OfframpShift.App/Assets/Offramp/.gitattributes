@@ -1,0 +1,5 @@
+# Preserve the owner-supplied bytes, including SVG source line endings.
+# Upstream SVGs contain doubled CR line endings; retain rather than normalize.
+*.svg -text -whitespace
+*.png -text
+*.ico -text

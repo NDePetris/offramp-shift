@@ -4,5 +4,6 @@
     <ProjectReference Include="../OfframpShift.Core/OfframpShift.Core.csproj" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="[10.0.12]" />
     <InternalsVisibleTo Include="OfframpShift.Persistence.Tests" />
+    <InternalsVisibleTo Include="OfframpShift.ApplicationHost.Tests" />
   </ItemGroup>
 </Project>

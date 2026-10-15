@@ -53,6 +53,13 @@
           "OfframpShift.WindowsObservation": "[1.0.0, )"
         }
       },
+      "offrampshift.applicationhost": {
+        "type": "Project",
+        "dependencies": {
+          "OfframpShift.ActivityMonitoring": "[1.0.0, )",
+          "OfframpShift.Persistence": "[1.0.0, )"
+        }
+      },
       "offrampshift.core": {
         "type": "Project"
       },

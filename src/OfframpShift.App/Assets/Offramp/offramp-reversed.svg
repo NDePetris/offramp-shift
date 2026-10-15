@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 266" role="img" aria-labelledby="title">
+<title id="title">Offramp — Quiet Road</title>
+<defs>
+<clipPath id="arch-clip">
+<path d="M29 266C13 266 0 253 0 237V114C0 51 57 0 120 0H136C202 0 256 51 256 114V237C256 253 243 266 227 266Z"/>
+</clipPath>
+</defs>
+<g id="offramp-symbol" clip-path="url(#arch-clip)" fill="#F6F3EC">
+<path id="arch-and-road-cutout" fill-rule="evenodd" d="M29 266C13 266 0 253 0 237V114C0 51 57 0 120 0H136C202 0 256 51 256 114V237C256 253 243 266 227 266Z M100 -4H152L160.6509 127.6861C187.5630 107.8314 222.2985 90.4123 262 72V124C210 154 179 181 175 217C172 235 175 254 176 270H73Z"/>
+<path id="tapered-branch-divider" d="M98 270C99 228 97 207 114 177C124.49079018369486 158.3168846632261 140.49054935531112 142.33825382041292 160.6509 127.6861C141.09054935531114 142.33825382041292 125.89079018369486 158.3168846632261 116 177C101 207 103 228 102 270Z"/>
+<g fill="none" stroke="#F6F3EC" stroke-width="5.5" stroke-linecap="round">
+<path d="M125.5 9L125.2 22"/>
+<path d="M124.9 39L124.5 54"/>
+<path d="M124.2 72L123.8 88"/>
+<path d="M123.4 108L123 126"/>
+<path d="M122.6 147L122.5 153"/>
+</g>
+<g fill="none" stroke="#F6F3EC" stroke-width="5" stroke-linecap="round">
+<path d="M139.2 243L139.2 260"/>
+<path d="M141 200L136.5 220"/>
+<path d="M162 163L151 179"/>
+<path d="M194 131L176 146"/>
+<path d="M231 106L214 116"/>
+</g>
+</g>
+</svg>
