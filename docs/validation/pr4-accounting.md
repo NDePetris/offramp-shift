@@ -1,5 +1,17 @@
 # PR 4 accounting and resource validation
 
+Current status: the bounded investigation is closed with partial live evidence.
+See [PR 4 closeout](pr4-closeout.md) for the owner-reported accounting/recovery
+results, failed automatic Explorer recovery, unsupported hosted-app identity,
+unverified accuracy/matrix criteria and the declined resource repeat (NOT RUN).
+The older measurement and procedures below do not establish current acceptance.
+No additional operator exercises are requested for this closeout.
+
+The owner subsequently authorized committing the validated changes, pushing the
+existing branch, opening an experimental PR and verifying CI. Merge, deployment
+and release remain unauthorized. Historical implementation-time restrictions
+below are superseded only to that extent.
+
 Status: Stage 1 accepted by owner; Stage 2 implemented with automated regressions
 passing. The two-hour native measurement completed; full performance acceptance,
 independent Personal/Work accuracy and reset acceptance remain pending. Do not infer
@@ -203,6 +215,7 @@ commit load, and the approved accounting/error/reset criteria. Never weaken
 synchronous persistence to meet a target. Performance optimization requires an
 observed bottleneck; batching and crash-loss windows require separate approval.
 
-Ready-for-review recommendation remains pending independent accounting and the
-remaining resource/recovery acceptance. No implementation commit is made before required validation
-is resolved. No push, PR, merge, publication or release is authorized.
+Full acceptance remains pending independent accounting and resource/transition
+criteria. Bounded experimental review is recommended with the closeout's explicit
+limitations. Commit, branch push, PR creation and CI verification are authorized;
+merge, deployment and release remain unauthorized.
