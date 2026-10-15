@@ -16,9 +16,14 @@ output is now nested under `diagnostics`; native resource/latency data is under
 
 `OfframpShift.WindowsObservation` extracts the spike's native loop, clock, identity,
 last-input reconstruction and persistent read-only COM worker. The probe still
-owns command dispatch and sampling. The worker launches the entry executable,
+owns command dispatch and uses the shared host for monitoring sampling. The worker launches the entry executable,
 not the extracted library. Its internal manager declaration still ends before
-switch slots, and activation remains opt-in and restricted to 26200.9457/x64.
+switch slots, and activation remains opt-in and restricted to exactly
+26200.9457/x64 and 26200.9711/x64. The latter has owner-reported bounded read-only
+compatibility evidence and explicit owner-evaluation approval; see
+[the evidence](../validation/windows-26200-9711.md). This approval does not establish
+accounting accuracy, uninterrupted monitoring or unattended daily-use reliability.
+The separate VirtualDesktop switching allowlist and NO-GO gate are unchanged.
 The original uncertainty-only EvidenceInvestigation is retained unchanged in
 meaning. Known generic process brokers have unresolved application identity.
 Identity resolution corroborates process creation time through a second limited-query

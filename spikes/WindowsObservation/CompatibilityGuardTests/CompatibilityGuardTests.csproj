@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><RestorePackagesWithLockFile>true</RestorePackagesWithLockFile></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../src/OfframpShift.Core/OfframpShift.Core.csproj" />
+    <Compile Include="../../../src/OfframpShift.WindowsObservation/DesktopWorker.cs" Link="Existing/DesktopWorker.cs" />
+    <Compile Include="../../../src/OfframpShift.WindowsObservation/Evidence.cs" Link="Existing/Evidence.cs" />
+  </ItemGroup>
+</Project>

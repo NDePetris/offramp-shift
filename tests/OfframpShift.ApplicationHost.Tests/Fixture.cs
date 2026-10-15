@@ -57,11 +57,11 @@ internal sealed class Fixture : IDisposable
     public Fixture() { Directory.CreateDirectory(PathName); Settings = new(PathName); Settings.Load(); }
     public DurableMonitoringSession Session() => new(Clock, new(), PathName, f => Fault?.Invoke(f));
     public IObservationSource CreateSource() { ProviderCreates++; Source = new(this); return Source; }
-    public MonitoringApplication App(bool supported = true) => new(Clock, () => Clock.Now = new(Guid.NewGuid(), 0),
-        () => Ms, CreateSource, Session, Settings, supported, "26200.9457");
-    public void Enable(bool monitoring = true)
+    public MonitoringApplication App(bool supported = true, string build = "26200.9457") => new(Clock, () => Clock.Now = new(Guid.NewGuid(), 0),
+        () => Ms, CreateSource, Session, Settings, supported, build);
+    public void Enable(bool monitoring = true, string build = "26200.9457")
     {
-        Settings.Save(new() { Personal = Personal, Work = Work, Consent = true, MonitoringEnabled = monitoring, Build = "26200.9457" });
+        Settings.Save(new() { Personal = Personal, Work = Work, Consent = true, MonitoringEnabled = monitoring, Build = build });
         using var session = Session();
         session.ChangeConfiguration(session.Configuration with { Accounting = AccountingMode.BestEffort });
     }

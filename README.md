@@ -13,6 +13,8 @@ Offramp Shift is an early-stage, local-first Windows application concept for hel
 ```powershell
 ./spikes/VirtualDesktop/run.ps1 test
 ./spikes/BrowserAttribution/run.ps1 test
+./spikes/WindowsObservation/run.ps1 test
+./spikes/WindowsObservation/compatibility.ps1 test
 ./run.ps1 test
 ./run.ps1 format
 ```
@@ -23,10 +25,12 @@ assignments and Start monitoring. Use the tray assignment menu on each manually
 selected desktop without opening the main window first. Previously enabled
 monitoring resumes on later app launches only with valid settings and fresh
 providers; Pause persists. No Windows-login startup is configured. The native
-desktop observer remains restricted to exact build 26200.9457/x64.
+desktop observer remains restricted to the two approved exact builds,
+26200.9457/x64 and 26200.9711/x64. The separate switching gate is unchanged.
 
 See [Windows app architecture](docs/architecture/windows-app.md) and
-[PR 5 validation and pending manual acceptance](docs/validation/pr5-app.md).
+[PR 5 validation](docs/validation/pr5-app.md) and the
+[prioritized owner acceptance checklist](docs/validation/pr5-owner-acceptance.md).
 
 CI uses these automated test commands on Windows runners, with Node.js 24 for the browser probe. Browser tests use mocked extension APIs and synthetic native callers; neither job interacts with a live browser or switches desktops. CI cannot establish actual virtual-desktop or browser-to-window compatibility.
 

@@ -6,11 +6,11 @@ monitoring session, desktop switch, Explorer restart, lock or suspend exercise
 was performed by the agent during implementation or closeout. Later owner-reported
 live evidence is recorded separately below.
 
-## Automated results
+## Original automated results (before main integration)
 
 Windows 11 25H2 **26200.9711/x64**, pinned .NET SDK 10.0.401, Release,
-warnings as errors. The PR #11 branch alone retains the 26200.9457/x64 observation
-allowlist. Native monitoring on 26200.9711 is blocked in that unmodified branch;
+warnings as errors. At that validation the PR #11 branch retained the 26200.9457/x64
+observation allowlist. Native monitoring on 26200.9711 was blocked in that revision;
 the later owner smoke used a detached checkout with the separately approved
 PR #13 predicate. The automated results below do not expand the gate.
 
@@ -46,7 +46,7 @@ This is a combined working tree, not a single tested PR #11 commit. The exact
 overlay commit/digest and a separate full runtime/hardware/privilege transcript
 were not returned. No live monitoring or cleanup was independently run by the
 agent. Procedure and diagnostic provenance are in PR #13's
-[compatibility record](https://github.com/NDePetris/offramp-shift/blob/spike/windows-26200-9711-compatibility/docs/validation/windows-26200-9711.md).
+[compatibility record](windows-26200-9711.md).
 
 | Check | Owner-reported result | Limit |
 |---|---|---|
@@ -120,7 +120,7 @@ remain OPEN. No new two-hour measurement or mature transition matrix was run.
 All prior automatic-switching/browser-attribution gates remain NO-GO. This PR does
 not establish certified accounting, unattended daily use or production readiness.
 
-## Review verdict and integration
+## Original closeout verdict (before main integration)
 
 The first usable owner-evaluation path is demonstrated by the reported integrated
 smoke. The original issue #10 acceptance checklist is **not fully closed**:
@@ -159,3 +159,49 @@ compatibility, VirtualDesktop and BrowserAttribution tests plus formatting; veri
 CI and repeat a deliberate WPF smoke on the actual integrated head. Avoid replacing
 the branch with `main` or copying only the predicate and losing its tests/evidence.
 No integration, merge, deployment, release or license change was performed here.
+
+## Main integration — October 15, 2026
+
+PR #13 was verified merged into `main` as
+`22e6e65432c704bc80a8b4d2558b6081ec6e3b01`. That main revision is merged into
+the existing PR #11 branch with both parents retained; the WPF application,
+shared host, canonical assets and original branch history are preserved.
+Architecture/observation README and CI edits merged without conflicts. CI retains
+the Windows-app root tests and the compatibility guard/non-COM fault step.
+Both exact read-only entries and all compatibility tests are retained unchanged.
+The unsupported-build explanation now describes the exact-build/x64 requirement
+without an obsolete one-build list. No policy, ABI, switching, accounting,
+intervention or licensing behavior changed beyond integrating approved #13.
+
+The older sections above record historical validation, not acceptance of this
+integrated head. The owner confirmed no additional original acceptance checks
+had been completed. Use [the prioritized acceptance checklist](pr5-owner-acceptance.md)
+on the integrated head; all its live checks remain NOT RUN for that head.
+Issues #8/#9 remain open; automatic switching, production website attribution
+and unattended daily use remain NO-GO. PR #11 remains draft.
+
+### Agent-executed integration validation
+
+Pinned SDK 10.0.401; Release builds with warnings as errors, zero warnings/errors.
+Checks ran outside the constrained sandbox because these same build/formatter
+tools required it in the earlier closeout. No live observation or switching ran.
+
+| Command/check | Result | Boundary |
+|---|---|---|
+| `./run.ps1 test` | PASS: Core 67 / 38,679 assertions; Persistence 65 / 618; WPF 9 / 70; initial host 25 / 103 | Synthetic observations, real temporary SQLite and five owned forced-termination cases; WPF layout/resources/activation and non-COM WinExe faults |
+| Final host Release regression run | PASS: 26 tests / 112 assertions | Added integrated-policy test: both approved builds reach fake-provider accounting; 26200.9712 creates no provider; saved old-build settings on the new build require setup and earn no time |
+| `./spikes/WindowsObservation/run.ps1 test` | PASS: 41 tests / 10,254 assertions | Synthetic evidence and real local SQLite; includes both exact builds and neighbor/architecture rejection |
+| `./spikes/WindowsObservation/compatibility.ps1 test` | PASS: 14 groups, seven owned non-COM child exercises; 12 unsupported constructor/worker-entry cases | Actual worker source with test-only registry/runtime/native stubs; no live COM |
+| Observation `isolation-test` | PASS: hang/malformed owned workers | No retry or shell activation |
+| `./spikes/VirtualDesktop/run.ps1 test` | PASS: 58 fake-provider tests + three isolation checks | Switching policy and implementation unchanged |
+| `./spikes/BrowserAttribution/run.ps1 test` | PASS: 2,053 assertions, five mocked groups, synthetic transport | No Chrome/Edge attribution acceptance |
+| Root and observation `format` | PASS | Verify-no-changes; includes host/WPF and retained probe |
+| Diagnostic and guard-test `dotnet format --verify-no-changes --no-restore` | PASS | Both projects, no source rewritten |
+| Diff whitespace and local documentation links | PASS | No conflict markers or missing local Markdown link targets in edited documentation |
+
+The root run preceded addition of the new host regression; the separate final
+host run validates that addition. The original assets, switching code and approved
+read-only predicate/guard tests were compared directly with their branch/main
+inputs: unchanged. No integration regression identified by these checks. The
+integrated commit and final PR CI status are reported on PR #11; a successful
+CI run is automated evidence only. No live checklist row is promoted to PASS.

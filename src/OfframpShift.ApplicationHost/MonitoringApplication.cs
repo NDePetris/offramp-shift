@@ -193,7 +193,7 @@ internal sealed class MonitoringApplication : IDisposable
             runtime?.Reason != "BoundedEstimate" ? "Waiting for evidence" :
             state.Intervention == InterventionState.Nudging ? "Nudging" : state.Exhausted ? "Allowance exhausted" : "Monitoring";
         var detail = !Ready ? StorageDetail(session.Status, session.Failure) : !supported ?
-            "Desktop observation is restricted to Windows build 26200.9457 / x64. No accounting is available on this configuration." :
+            "Desktop observation requires an explicitly approved exact Windows build on x64. This build or architecture is unsupported; no accounting is available." :
             settings.Build != build && settings.Consent ? "The saved desktop provider build differs. Explicitly review setup again." :
             providerFault ? "Observation provider failed. Retry monitoring explicitly after Windows settles." :
             !settings.Consent ? "Opt in to experimental Estimated monitoring to observe and assign desktops." :

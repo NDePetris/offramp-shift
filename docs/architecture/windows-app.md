@@ -4,7 +4,10 @@ This is the first launchable WPF/tray app, not production readiness, certified
 accounting or approval for unattended daily use. Explorer recovery [#8](https://github.com/NDePetris/offramp-shift/issues/8)
 and sustained accuracy/reliability [#9](https://github.com/NDePetris/offramp-shift/issues/9)
 remain unresolved. Automatic switching, window movement and browser attribution
-are absent. The read-only COM gate remains exactly 26200.9457/x64.
+are absent. The shared read-only COM gate accepts exactly **26200.9457/x64** and
+**26200.9711/x64**, as approved in merged PR #13. Both worker entry guards and
+the read-only ABI remain unchanged. The separate switching gate is unchanged.
+See [integration validation and owner checklist](../validation/pr5-app.md).
 
 ## Ownership
 

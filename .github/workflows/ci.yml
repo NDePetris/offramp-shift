@@ -22,11 +22,11 @@ jobs:
         with:
           global-json-file: global.json
 
-      - name: Build and run core and persistence checks
+      - name: Build and run core, persistence and Windows app checks
         shell: pwsh
         run: ./run.ps1 test
 
-      - name: Verify core and persistence formatting
+      - name: Verify core, persistence and Windows app formatting
         shell: pwsh
         run: ./run.ps1 format
 
@@ -90,6 +90,10 @@ jobs:
       - name: Build and run synthetic observation tests
         shell: pwsh
         run: ./spikes/WindowsObservation/run.ps1 test
+
+      - name: Verify compatibility guards and owned non-COM worker faults
+        shell: pwsh
+        run: ./spikes/WindowsObservation/compatibility.ps1 test
 
       - name: Verify observation probe formatting
         shell: pwsh

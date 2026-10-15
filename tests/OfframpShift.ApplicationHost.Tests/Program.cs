@@ -14,6 +14,23 @@ internal static class Program
     }
     public static int Main()
     {
+        Test("integrated exact-build policy reaches the host without bypassing saved setup gates", () =>
+        {
+            foreach (var build in new[] { "26200.9457", "26200.9711", "26200.9712" })
+            {
+                using var f = new Fixture(); f.Enable(build: build);
+                using var app = f.App(WindowsObservation.DesktopObservationPolicy.IsSupported(build, "X64"), build);
+                for (var i = 0; i <= 5_000; i += 1_000) f.Advance(app, i);
+                var approved = build != "26200.9712";
+                Check(f.ProviderCreates == (approved ? 1 : 0));
+                Check(approved ? app.Snapshot().State!.UsageMs > 0 : app.Snapshot().Status == "Unavailable");
+            }
+            using var stale = new Fixture(); stale.Enable(build: "26200.9457");
+            using var updated = stale.App(WindowsObservation.DesktopObservationPolicy.IsSupported("26200.9711", "X64"), "26200.9711");
+            for (var i = 0; i <= 5_000; i += 1_000) stale.Advance(updated, i);
+            Check(stale.ProviderCreates == 0); Check(updated.Snapshot().State!.UsageMs == 0);
+            Check(updated.Snapshot().Detail.Contains("Explicitly review setup again", StringComparison.Ordinal));
+        });
         Test("first run retains CertifiedOnly and creates no native provider before consent", () =>
         {
             using var f = new Fixture(); using var app = f.App();
