@@ -9,6 +9,7 @@ public sealed class DashboardModel : INotifyPropertyChanged
 {
     public event PropertyChangedEventHandler? PropertyChanged;
     public HostSnapshot? Snapshot { get; private set; }
+    internal TraySummary Tray { get; private set; } = TraySummary.Starting;
     public string Status { get; private set; } = "Starting";
     public string Detail { get; private set; } = "Opening local settings and accounting storage…";
     public string Context { get; private set; } = "Unknown";
@@ -42,6 +43,7 @@ public sealed class DashboardModel : INotifyPropertyChanged
     internal void MarkUnavailable(string detail)
     {
         Status = "Unavailable"; Detail = detail; Context = "Unknown";
+        Tray = Tray.Unavailable();
         CanStart = CanPause = CanResume = CanRetrySave = CanRetryMonitoring = CanRecover = CanReopen = CanRepairSettings = CanEdit = false;
         CanConsent = CanAssign = false;
         NeedsSetup = true;
@@ -107,6 +109,7 @@ public sealed class DashboardModel : INotifyPropertyChanged
             snapshot.WorkAssignment != AssignmentStatus.Valid ? "Next: choose a different Work desktop in Task View, then use the tray menu to assign Work." :
             CanStart ? "Next: select Start monitoring." : started ? "Setup complete. Use Pause or Resume to control monitoring." :
             "Start monitoring unavailable. See monitoring status.";
+        Tray = TraySummary.Create(snapshot, Status, stale, NeedsSetup);
         PropertyChanged?.Invoke(this, new(null));
     }
     private static string AssignmentText(string role, Guid? id, AssignmentStatus status) => role + " desktop: " +

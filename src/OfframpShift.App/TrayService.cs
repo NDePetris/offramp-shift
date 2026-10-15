@@ -7,7 +7,9 @@ internal sealed class TrayService : IDisposable
 {
     private readonly Forms.NotifyIcon icon;
     private readonly Forms.ToolStripMenuItem status = new("Starting") { Enabled = false };
-    private readonly Forms.ToolStripMenuItem advisory = new("Allowance unavailable") { Enabled = false };
+    private readonly Forms.ToolStripMenuItem context = new("Current context: Unknown") { Enabled = false };
+    private readonly Forms.ToolStripMenuItem allowance = new("Saved allowance unavailable") { Enabled = false };
+    private readonly Forms.ToolStripMenuItem qualifyingBreak = new("Saved qualifying break unavailable") { Enabled = false };
     private readonly Forms.ToolStripMenuItem pause;
     private readonly Forms.ToolStripMenuItem retry;
     private readonly Forms.ToolStripMenuItem save;
@@ -20,6 +22,7 @@ internal sealed class TrayService : IDisposable
     private readonly System.Drawing.Icon lightIcon;
     private readonly System.Drawing.Icon darkIcon;
     private bool darkSelected;
+    private TraySummary summary = TraySummary.Starting;
     public TrayService(Action open, Action settings, Func<HostCommand, Task<HostCommandResult>> execute, Func<Task> exit)
     {
         async Task Run(HostCommand command)
@@ -36,7 +39,10 @@ internal sealed class TrayService : IDisposable
         }
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add(status);
-        menu.Items.Add(advisory);
+        menu.Items.Add(context);
+        menu.Items.Add(allowance);
+        menu.Items.Add(qualifyingBreak);
+        menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add(feedbackItem);
         feedbackItem.Click += (_, _) => ShowFeedback();
         menu.Items.Add("Open Offramp Shift", null, (_, _) => open());
@@ -53,7 +59,7 @@ internal sealed class TrayService : IDisposable
         lightIcon = BrandAssets.LoadTrayIcon(false);
         try { darkIcon = BrandAssets.LoadTrayIcon(true); }
         catch { lightIcon.Dispose(); menu.Dispose(); throw; }
-        try { icon = new() { Icon = lightIcon, Text = "Offramp Shift", ContextMenuStrip = menu, Visible = true }; }
+        try { icon = new() { Icon = lightIcon, Text = summary.Tooltip, ContextMenuStrip = menu, Visible = true }; }
         catch { lightIcon.Dispose(); darkIcon.Dispose(); menu.Dispose(); throw; }
         icon.DoubleClick += (_, _) => open();
         icon.BalloonTipClicked += (_, _) => ShowFeedback();
@@ -68,13 +74,22 @@ internal sealed class TrayService : IDisposable
     public void Apply(HostSnapshot value, DashboardModel model)
     {
         snapshot = value;
-        status.Text = model.Status; icon.Text = ("Offramp Shift — " + model.Status)[..Math.Min(63, ("Offramp Shift — " + model.Status).Length)];
-        advisory.Text = model.Advisory;
+        ApplySummary(model.Tray);
         pause.Text = value.State?.Paused == true ? "Resume" : "Pause";
         pause.Enabled = value.State?.Paused == true ? model.CanResume : model.CanPause;
         retry.Enabled = model.CanRetryMonitoring; retry.Text = model.RetryLabel;
         save.Enabled = model.CanRetrySave;
         personal.Enabled = work.Enabled = model.CanAssign;
+    }
+    private void ApplySummary(TraySummary value)
+    {
+        if (summary == value) return;
+        if (summary.Status != value.Status) status.Text = value.Status;
+        if (summary.Context != value.Context) context.Text = value.Context;
+        if (summary.Allowance != value.Allowance) allowance.Text = value.Allowance;
+        if (summary.Break != value.Break) qualifyingBreak.Text = value.Break;
+        if (summary.Tooltip != value.Tooltip) icon.Text = value.Tooltip;
+        summary = value;
     }
     private void ShowFeedback()
     {
@@ -91,7 +106,7 @@ internal sealed class TrayService : IDisposable
     }
     public void MarkUnavailable()
     {
-        status.Text = "Unavailable"; icon.Text = "Offramp Shift — Unavailable";
+        ApplySummary(summary.Unavailable());
         pause.Enabled = retry.Enabled = save.Enabled = personal.Enabled = work.Enabled = false;
     }
 }
