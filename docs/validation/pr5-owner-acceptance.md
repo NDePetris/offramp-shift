@@ -1,8 +1,45 @@
 # PR #11 integrated Windows acceptance
 
-All checks below are **NOT RUN on the integrated head**. Earlier owner smoke
-passed setup, Personal/Work observations, dashboard, tray and Pause/Resume on a
-detached revision plus a predicate overlay; it did not establish these checks.
+## Owner acceptance record — October 15, 2026
+
+Tested implementation commit: **`80f027b4c6731529b81f1abd147ed10ec9745348`**.
+The owner explicitly reported **PASS for Tests 1–7**, and explicitly elected to
+defer live **Tests 8–12 for the initial owner-evaluation milestone**, accepting
+the documented limitations and risks. Each deferred test is **NOT RUN**, not
+PASS. This is a scope decision, not a waiver of automated regression requirements
+or evidence that the deferred behavior works.
+
+| Test | Exercise | Live result | Evidence / decision |
+|---|---|---|---|
+| 1 | Clean Exit and worker disposal | **PASS — owner-reported** | Report applies to the tested commit; no agent-executed live verification |
+| 2 | Setup and restoration | **PASS — owner-reported** | Same evidence boundary |
+| 3 | Persisted Pause | **PASS — owner-reported** | Same evidence boundary |
+| 4 | Tray lifecycle | **PASS — owner-reported** | Same evidence boundary |
+| 5 | Keyboard, Narrator and contrast | **PASS — owner-reported** | Overall test result; no separate per-variant measurements supplied |
+| 6 | Lock and resume | **PASS — owner-reported** | Bounded acceptance, not independent sustained accounting certification |
+| 7 | Context and feedback | **PASS — owner-reported** | Existing advisory behavior only |
+| 8 | Rename/reorder/delete | **NOT RUN — owner-deferred** | Deferred topology-mutation acceptance |
+| 9 | Explorer + explicit Retry | **NOT RUN — owner-deferred** | Recovery remains unvalidated on this integrated commit; issue #8 remains open |
+| 10 | Storage failures and exact Retry save | **NOT RUN — owner-deferred** | Automated fault tests remain required; live UI fault acceptance deferred |
+| 11 | Corrupt/future/blocked data | **NOT RUN — owner-deferred** | Automated storage/recovery tests remain required; live acceptance deferred |
+| 12 | Crash/logout | **NOT RUN — owner-deferred** | Crash/native-call cleanup and logout acceptance deferred |
+
+Source: the owner's explicit report and deferral in the PR #11 closeout chat.
+No new runtime/hardware/privilege transcript, timings, logs or per-variant results
+were supplied with this report. The previously supplied host is documented below
+as context, not a newly measured environment. Do not extend these results to
+other builds/hardware or relabel them as agent verification. Later documentation
+commits retain this exact tested implementation revision as the live provenance.
+
+The original broader acceptance criteria remain below for future execution.
+The initial owner-evaluation scope is accepted with Tests 8–12 deferred; it does
+not establish full original acceptance, certified accounting, production readiness
+or unattended daily use. Issues #8/#9 remain open. Existing delayed/failed-cleanup,
+blocked native-call crash cleanup, Explorer recovery and sustained accuracy
+limitations remain in force. Switching and production browser attribution remain
+NO-GO. See [the final review verdict](pr5-app.md#final-owner-evaluation-closeout--october-15-2026).
+
+## Procedure and environment record
 
 Use ordinary unelevated PowerShell on exactly 26200.9457/x64 or 26200.9711/x64.
 Save other work. Record date, tested commit, Windows edition/release/build,
@@ -24,7 +61,7 @@ it has no supported test-directory CLI override. For a fresh/isolated store use 
 separate standard Windows test account with repository/runtime access. Preserve
 normal data while the app is stopped; do not delete or replace it to run a check.
 
-## Priority checks — run in this order
+## Original priority check criteria — Tests 1–7
 
 | Check | Owner actions and pass criteria |
 |---|---|
@@ -40,7 +77,10 @@ Passive video with no input may currently earn break credit after idle
 qualification on Personal. Record it as current policy, not an observer defect;
 cumulative-break or media-aware policy changes are separate work.
 
-## Remaining fault/topology acceptance — isolated data and saved work required
+## Deferred criteria — Tests 8–12, isolated data and saved work required
+
+The five exercises below map to Tests 8–12 in table order. All five are **NOT RUN**
+under the explicit owner deferral above; retain their criteria for future work.
 
 Use the separate standard test account and disposable desktops/store only. Do not
 corrupt a live database, change the system clock, delete a desktop containing

@@ -1,6 +1,13 @@
 # PR 5 validation — owner evaluation only
 
 Base: `e73fe57` (merged PR 4), branch `feat/first-usable-windows-app`.
+**Current closeout:** owner-reported Tests 1–7 PASS on `80f027b`; live Tests 8–12
+explicitly deferred and NOT RUN for the accepted initial owner-evaluation scope.
+See [the acceptance ledger](pr5-owner-acceptance.md) and
+[final review verdict](#final-owner-evaluation-closeout--october-15-2026).
+Earlier evidence and pending-check statements below are historical snapshots;
+the final closeout supersedes their merge-readiness recommendation only.
+
 This record distinguishes automated work from live Windows acceptance. No actual
 monitoring session, desktop switch, Explorer restart, lock or suspend exercise
 was performed by the agent during implementation or closeout. Later owner-reported
@@ -63,11 +70,12 @@ behavior, not evidence of observer or PR 5 implementation failure. Changing brea
 eligibility needs a new product-policy decision and separate work; this closeout
 does not alter accounting or add media/browser observation.
 
-## Remaining original manual acceptance — not established by the report
+## Original broader manual acceptance — historical pre-acceptance snapshot
 
-The broad checklist items below remain unchecked when only part was covered by
-the bounded smoke above. Unreported steps are pending, not failures. Do not infer
-cleanup, persistence, accessibility or fault-path passes from ordinary interaction.
+At the earlier bounded-smoke closeout, the broad checklist items below remained
+unchecked when only part was covered. Preserve this original broader checklist;
+the current per-test results and explicit scope deferral are in the acceptance
+ledger. Do not infer deferred fault-path passes from ordinary interaction.
 
 For each exercise record exact app revision, Windows build/UBR and x64, runtime,
 privileges, CPU/RAM, storage/filesystem, power mode and monitor layout/DPI. Use an
@@ -98,7 +106,7 @@ Perform only deliberate owner-led exercises on the allowlisted configuration.
   light/dark/system/high contrast and enlarged text work. Test narrow window sizes,
   100/150/200% scaling and mixed-DPI monitors without clipped controls.
 
-## Canonical assets and remaining gates
+## Canonical assets and gates — historical pre-acceptance snapshot
 
 The owner subsequently supplied `offramp-design-v0.1.zip`. Eight canonical source/
 runtime files were copied byte-for-byte with archive/entry SHA-256 provenance in
@@ -173,12 +181,11 @@ The unsupported-build explanation now describes the exact-build/x64 requirement
 without an obsolete one-build list. No policy, ABI, switching, accounting,
 intervention or licensing behavior changed beyond integrating approved #13.
 
-The older sections above record historical validation, not acceptance of this
-integrated head. The owner confirmed no additional original acceptance checks
-had been completed. Use [the prioritized acceptance checklist](pr5-owner-acceptance.md)
-on the integrated head; all its live checks remain NOT RUN for that head.
-Issues #8/#9 remain open; automatic switching, production website attribution
-and unattended daily use remain NO-GO. PR #11 remains draft.
+At integration time, no additional owner acceptance had been reported and all
+live checks were NOT RUN on that head. The later owner report and deferral below
+supersede that acceptance status; [the acceptance ledger](pr5-owner-acceptance.md)
+retains per-test results. Issues #8/#9 remain open; automatic switching,
+production website attribution and unattended daily use remain NO-GO.
 
 ### Agent-executed integration validation
 
@@ -204,4 +211,52 @@ host run validates that addition. The original assets, switching code and approv
 read-only predicate/guard tests were compared directly with their branch/main
 inputs: unchanged. No integration regression identified by these checks. The
 integrated commit and final PR CI status are reported on PR #11; a successful
-CI run is automated evidence only. No live checklist row is promoted to PASS.
+CI run is automated evidence only. No live checklist row is promoted to PASS by
+automated checks.
+
+## Final owner-evaluation closeout — October 15, 2026
+
+The owner reported **Tests 1–7 PASS** on integrated implementation commit
+**`80f027b4c6731529b81f1abd147ed10ec9745348`**: clean Exit/worker disposal,
+setup/restoration, persisted Pause, tray lifecycle, keyboard/Narrator/contrast,
+lock/resume, and context/feedback. These are owner-reported live results, not
+agent-executed verification. No new detailed environment transcript, timing or
+per-variant evidence accompanied the report; do not invent such measurements.
+The prior supplied Windows 11 25H2 Professional 26200.9711/x64 and side-by-side
+2560x1440 at 150% / 1920x1080 at 100% remain recorded as prior context.
+
+The owner explicitly accepted the documented risks and deferred live **Tests
+8–12** for this initial milestone. Each is **NOT RUN**: topology rename/reorder/
+delete; Explorer restart + explicit Retry; storage failures + exact Retry save;
+corrupt/future/blocked data; crash/logout. Their original criteria remain in
+[the acceptance record](pr5-owner-acceptance.md). This closes acceptance for the
+owner-selected evaluation scope, not the original broader live matrix. The
+deferral does not change implementation or weaken any automated regression,
+warnings-as-errors, failure-reporting, consent, persistence or exact-build gate.
+
+Final review rechecked the existing integrated changes, saved-setup/exact-build
+gates, immutable UI snapshot behavior, explicit retry/save/recovery boundaries,
+shutdown reporting, CI requirements and review discussion. No new PR-blocking
+defect was identified; GitHub had no review comments or unresolved review threads.
+[Implementation-head CI run 38773765176](https://github.com/NDePetris/offramp-shift/actions/runs/38773765176)
+passed all four jobs, including the final 26-test host regression and compatibility
+guards. Earlier local Release/format/isolation results remain separately recorded
+above. Documentation-only closeout checks validate links, result mapping and
+whitespace; no new live tests were performed by the agent.
+
+**Recommendation: PR #11 is ready for merge consideration for the accepted initial
+owner-evaluation scope**, subject to green CI on the final documentation head and
+separate explicit owner merge authorization. PR #11 remains draft/unmerged here.
+The original broader live acceptance is incomplete and explicitly deferred, not
+silently satisfied or treated as failed implementation.
+
+Issues #8/#9 remain OPEN. Explorer automatic recovery is unresolved; explicit
+Retry is a fallback, not a demonstrated repair. Blocked in-process native calls
+can delay shutdown; parent death while a helper is blocked inside COM does not
+guarantee cleanup. Live fault/recovery/crash behavior remains unvalidated by the
+deferred tests even though automated regression tests pass. Accounting remains
+Estimated, with independent accuracy/sustained reliability and unattended daily
+use unapproved. No new cumulative-break accounting or active interventions were
+added; passive-video break credit remains existing policy requiring a separate
+decision. Automatic switching and production website attribution remain NO-GO.
+No release, deployment, distribution or licensing change is authorized.
