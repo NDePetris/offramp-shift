@@ -2,10 +2,11 @@
 
 Owner evaluation only. Initial owner smoke **FAIL**: Interactive window never
 appeared; legacy notifications still worked, including their expected grace.
-The first October 16 correction passed its bounded diagnostic, but the owner
-retest still **FAILED** at placement. The second correction and production-manifest
-diagnostic evidence are recorded below; the full owner retest is still pending.
-Full owner-flow focus, mixed DPI, fullscreen and Narrator acceptance remain **NOT RUN** by the agent.
+At `56f23ce`, the owner's primary monitor **PASSED** and secondary portrait/150%
+monitor **FAILED**. The third correction below reproduces and addresses the
+production lifecycle rejection; real-host nonactivating secondary presentation
+and strict confirmation now pass. Full owner focus/extension retest remains pending.
+Fullscreen and Narrator acceptance remain **NOT RUN** by the agent.
 Automated tests use synthetic evidence, disposable SQLite, owned hidden HWNDs
 and fake placement/focus adapters. They do not establish live shell reliability.
 
@@ -53,8 +54,15 @@ Programmatic closure grants no time.
 The existing transient mailbox carries an effect sequence, runtime epoch,
 observation generation and original expiry. Consumption never renews it. New
 committed events alone may show/refocus; ordinary refresh only updates/closes.
-Commands and changed evidence invalidate authorization; the Dispatcher rechecks
-generation, foreground and expiry after host authorization. Runtime epochs prevent
+Initial authorization consumes that event once and creates one process-local,
+single-use presentation transaction with its own nonrenewable two-second limit.
+Completion requires new healthy Personal/session/input evidence and strict desktop
+membership. Within this transaction only foreground events for the original and
+owned candidate are allowed; external context changes, commands, health faults
+and relevant destruction revoke it. Every signal still invalidates accounting
+normally. The Dispatcher checks the current transaction ID/context/foreground
+before focus, without requiring the original accounting generation/TTL to survive
+its own WPF transition. Runtime epochs prevent
 recovered effect sequences colliding with earlier presentation suppression.
 
 Continued visibility separately requires healthy active Personal context, so the
@@ -65,14 +73,13 @@ Pause, Work/Other, lock, unavailable/stale evidence, reset, style change, storag
 failure, owner stop and exit close the nudge without granting extra time.
 
 Documented read-only `IVirtualDesktopManager` checks run through the existing
-isolated worker in two stages. Before a new window's nonactivating first Show,
-current Personal GUID, foreground GUID, positive current-desktop membership,
-session and shell generation must agree. A hidden new HWND may return exactly
-TYPE_E_ELEMENTNOTFOUND for its own desktop ID; this permits only that first
-nonactivating Show, never focus. After Show, its desktop ID must positively match
-Personal under the original event/expiry/generation before activation. Already-open
-windows always use strict authorization. Other failures and known wrong desktops
-are rejected. There is no registration retry or focus retry. The public declaration
+isolated worker. Initial acceptance verifies the original foreground's membership,
+Personal desktop, session and shell BEFORE WPF construction. After nonactivating
+Show, the candidate's own desktop ID must positively match Personal under fresh
+transaction completion checks before activation. Production no longer needs the
+historical hidden-HWND missing-registration exception. Reused windows follow the
+same strict completion path. Failures and known wrong desktops are rejected.
+There is no registration retry or focus retry. The public declaration
 ends before MoveWindowToDesktop; the private observation ABI, worker deadline,
 exact-build guards and recovery policy remain unchanged. No COM runs on the UI.
 
@@ -224,7 +231,7 @@ Both require an already-approved exact build/x64, print only dimensions/categori
 and stability booleans, start only their owned read-only worker, and never open
 accounting/settings. They are not run in CI or by normal app startup.
 
-## Second October 16 correction: PerMonitorV2 placement and shared timing
+## Second October 16 correction: PerMonitorV2 placement and shared timing (historical)
 
 The owner retest reached the presenter but failed `Place`. Running the cold
 owned-window diagnostic with the **production PerMonitorV2 manifest** reproduced
@@ -287,16 +294,117 @@ separately; it is never part of CI. Full owner-flow focus and extension acceptan
 fullscreen and Narrator remain **NOT RUN / owner retest pending**. No build gate,
 switch/move behavior, browser attribution or notification rendering scope changed.
 
+## Third October 16 correction: mixed-DPI production lifecycle
+
+Owner evidence at `56f23ce`: primary 3440x1440/100% PASS; secondary 4K portrait/150%
+flashed and disappeared. The old standalone worker diagnostic did not exercise
+the actual observer/host/presenter interaction, so its PASS was insufficient.
+
+The owner moved the active Codex window to the secondary for a bounded live
+exercise on **26200.9711/x64**, SDK **10.0.401**. Actual work area: **2160x3768**.
+The production presenter, serialized controller, real native loop/sampler and
+read-only desktop worker ran against disposable settings/SQLite, not user stores.
+
+Before correction: the event had **953 ms** remaining at consumption; placement
+took **86 ms**, Show **67 ms**. Both stage-boundary foreground checks saw the
+original window. The real callback loop nevertheless delivered a **foreground
+event for the owned candidate**. Strict second authorization rejected exactly
+`ObservationGenerationChanged:Foreground` (diagnostic original/candidate/external
+mask **2**, i.e. candidate only), before any new desktop query. Accounting moved
+to Waiting for evidence. This identifies self-transition generation rejection;
+TTL expiry, an external foreground event and wrong desktop were not the observed
+cause. The precise WPF message generating the callback was not traced; the proven
+rejection is the accounting-generation check. The old guard covered synchronous
+positioning only, before Show/deferred layout.
+
+A subsequent verification also caught `ObservationGenerationChanged:Destroyed`
+before initial authorization, after WPF construction. Ownership of that destroyed
+HWND was not identified. The final transaction therefore begins before creating
+the nudge, rather than adding another exception to original-event validation.
+
+The correction treats acceptance/presentation/confirmation as one transaction:
+
+1. Validate the original committed event and foreground/Personal context once,
+   before constructing or initializing a nudge HWND.
+2. Issue a nonrenewable two-second process-local transaction. It authorizes
+   presentation, not focus or extra time; the original event is consumed.
+3. Hold the nonactivation guard through positioning, nonactivating Show and WPF's
+   queued DPI/layout work. Restore the exact style before completion/focus.
+4. Bind the exact UI-owned HWND and complete once using a new safety capture, active Personal session/input, matching
+   shell/health, original-or-owned foreground and strict current-desktop membership.
+5. Verify the published transaction/context and actual foreground, then request focus once.
+
+Before binding, at most one distinct provisional foreground HWND is held for that
+transaction only and is NOT trusted. It must equal the actual candidate at
+completion; any other/second foreground is rejected, including leave-and-return.
+Metadata is cleared on expiry/revocation. Original/confirmed-owned foreground
+events are tolerated only within that transaction. Any
+external/unknown foreground (including leave-and-return), relevant destruction,
+session/desktop/power change, sequence loss, health change or command revokes it.
+The transaction never renews and cannot be replayed or forged by changing its
+fields. The existing read-only worker and build gates are unchanged. No signal is
+ignored by the estimator, no Core interval is invented, and Core/persistence/
+shared reminder timing/extension/notification behavior are unchanged.
+
+Final corrected run on the same secondary setup: **57 ms** initial acceptance,
+**236 ms** unified Show/layout, **61 ms** fresh completion, actual window DPI
+**144 (150%)**, foreground-monitor match true, original foreground at the final boundary, positive
+strict membership, nudge remained visible and reached the activation boundary.
+**Focus was deliberately not requested.** Host accounting was still Waiting for
+evidence, demonstrating separation of fresh presentation safety from estimator
+continuity. This is real mixed-DPI presentation/authorization evidence, not focus,
+Add 1 minute, Narrator/fullscreen or daily reliability acceptance. Primary had a
+real-host baseline PASS before correction and remains covered by deterministic
+single-window/foreground/geometry regressions; no broad owner campaign is required.
+
+The explicit replacement diagnostic is:
+
+```powershell
+# Run from the repository after building this commit's app tests (./run.ps1 test).
+# Keep an application active on the named monitor. No nudge focus is requested.
+$env:DOTNET_ROOT = (Resolve-Path .tools/dotnet).Path
+.tools/dotnet/dotnet.exe run --project tests/OfframpShift.App.Tests -c Release --no-build -- --inspect-nudge-lifecycle secondary
+```
+
+It lasts at most 15 seconds waiting for one committed event, uses the production
+PerMonitorV2 manifest and this checkout's UI resources, and closes its owned nudge
+and controller afterward. Scratch stores are removed after verified owned-path
+cleanup. Normal tests/CI never run it. It prints fixed categories, stage durations,
+geometry and booleans; no HWNDs, desktop GUIDs, app keys, titles or content. The old
+standalone diagnostic flags now direct users here. The initial harness attempt
+accidentally pumped normal Shift startup before exiting; the corrected harness
+uses a plain resource-only Application and cannot enter Shift startup. The owner
+app was not stopped. This distinction applies to the recorded bounded runs above.
+
+Focused regressions cover the observed owned-foreground/accounting-generation
+transition with both original/candidate current foreground; genuine external
+leave-and-return; fresh Work/lock/unknown evidence without callbacks; session,
+desktop, power, relevant destruction, dropped signals, expiry, commands, forged/
+replayed transactions and failed strict membership. WPF tests cover asynchronous
+guard lifetime/restoration, portrait/negative-origin pixel geometry, same-window
+reuse, scoped foreground acceptance and stage diagnostics. Real focus and extension
+acceptance remain pending the five-step owner retest below.
+
+Final application regressions: **82 Core, 83 Persistence, 108 host, 42 WPF groups**
+passed with warnings as errors and SDK 10.0.401. All seven repository-prescribed
+test/format commands **PASS**. Repository check results and
+current-head CI are recorded in the PR; simulated checks and the explicit live
+nonactivating exercise remain separate.
+
+Deferred Home timer-first requirements are captured in
+[the follow-up brief](../decisions/home-timer-first-follow-up.md), recommended for
+a separate subsequent GitHub issue; PR 9 does not change Home's layout.
+
 ### Short owner retest (pending)
 
 Exit the currently running app through the tray and launch the updated build;
 record tested commit/build, then:
 
-1. Enable **Interactive window** and save.
-2. Use a one-minute Personal allowance.
-3. Confirm a nudge appears promptly after exhaustion on the active monitor.
+1. Exit the running Shift instance and launch the updated PR 9 build.
+2. On the secondary portrait monitor at 150%, exhaust a one-minute Personal allowance in **Interactive window** mode.
+3. Confirm the nudge remains visible and takes focus.
 4. Confirm presentation does not change virtual desktops. Any such switch is FAIL.
-5. Confirm **Add 1 minute** defers the next prompt through counted Personal use.
+5. Click **Add 1 minute** and confirm the extension works through counted Personal use.
 
 Restore temporary duration settings afterward. If unsuccessful, report the single
 Home Last reminder line plus monitoring state. Do not widen compatibility or bypass

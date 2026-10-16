@@ -32,10 +32,15 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        if (args is ["--desktop-worker"]) return OfframpShift.App.Program.Main(args);
+        if (args is ["--inspect-nudge-lifecycle", var monitor] && monitor is "primary" or "secondary")
+        {
+            return NudgeLifecycleDiagnostic.Run(monitor == "secondary");
+        }
         if (args is ["--inspect-hidden-nudge"] or ["--inspect-nudge-registration"])
         {
-            _ = new ShiftApplication();
-            return HiddenNudgeDiagnostic.Run(args[0] == "--inspect-nudge-registration");
+            Console.WriteLine("Replaced by --inspect-nudge-lifecycle primary|secondary (real host and observation loop).");
+            return 2;
         }
         if (args is ["--instance-client", var suffix])
         { using var client = new SingleInstance(suffix); return !client.IsOwner && client.Activate() ? 0 : 1; }

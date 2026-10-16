@@ -118,18 +118,34 @@ migrates original v1/v2 layouts without replay or downtime credit.
 
 `NudgePresenter` owns one unowned modeless WPF window. Only new committed mailbox
 events authorize show/refocus. Documented read-only window-desktop checks run in
-the existing isolated worker; UI rechecks generation, foreground and expiry before
-one ordinary activation attempt. Only the nudge is positioned on the foreground
-monitor using target DPI. A new hidden HWND is prepared for nonactivating Show only
-after positive current membership and current/foreground Personal GUID checks.
-Its own desktop ID is strictly verified after Show and before focus; a missing
-hidden registration never grants activation. Already-open windows stay strict.
+the existing isolated worker. Initial authorization consumes the original fresh
+committed event once and creates one nonrenewable, process-local presentation
+transaction, bounded to two seconds from acceptance. After layout/Show, completion
+captures NEW session/input/foreground/desktop evidence and requires positive strict
+membership before one ordinary activation attempt. It does not reuse the original
+accounting event's TTL or require the estimator to have recovered from the nudge's
+own foreground event. All signals still reach accounting normally.
+Acceptance happens BEFORE creating/initializing the nudge HWND. One provisional
+foreground HWND may be held privately during creation, never trusted until it is
+bound to the exact UI-owned candidate at completion. Every observed foreground
+must be original or that candidate; a second distinct provisional HWND revokes it.
+External foreground, relevant destruction, session/desktop/power,
+sequence/health faults and commands revoke it. Fresh context and shell checks are
+independent. The UI also checks its current transaction ID, context and foreground.
+Only the nudge is positioned on the foreground
+monitor using target DPI. The original foreground's membership/current Personal
+desktop/session are strictly verified before construction. The visible candidate's
+own desktop ID is positively verified after Show and before focus. Production no
+longer needs a hidden-HWND missing-registration exception. Reused windows follow
+the same strict completion path.
 Placement measures content plus native frame, not the collapsed hidden Window.
 The temporary documented WS_EX_NOACTIVATE style prevents WPF's nested DPI-change
 positioning from implicitly activating the HWND; its exact original style is
-restored before Show and strict authorization. Failure to apply/restore suppresses
+held through Show and queued DPI/layout settlement, then restored before strict
+completion. Failure to apply/restore suppresses
 presentation. The app-test executable shares the production PerMonitorV2 manifest.
-Home retains one identity-free in-memory reminder stage for diagnosis.
+Home retains one identity-free in-memory reminder stage and bounded phase durations
+for diagnosis. The real-host opt-in diagnostic replaces the old standalone checks.
 Wrong/unknown membership suppresses activation; no switching
 or virtual-desktop movement API is added. Continued visibility tolerates its own
 foreground transition while requiring fresh healthy Personal/session evidence.
@@ -137,7 +153,9 @@ Context/storage/observation changes close it without granting extra time. User
 X/Escape/Alt+F4 request a durable one-minute deferral. Failed saves remain explicit.
 
 See [PR 9 behavior, boundaries and owner checklist](../validation/pr9-interactive-nudges.md).
-Actual focus/placement is **NOT RUN**; any presentation-caused desktop switch blocks
+Real-host nonactivating placement/confirmation passed on the owner's portrait
+2160-pixel-wide secondary monitor at 150%, build 26200.9711/x64. Actual focus and
+extension acceptance remain **owner retest pending**; any presentation-caused desktop switch blocks
 acceptance. Existing NO-GO gates, read-only build restrictions and recovery remain.
 
 ## Break reminders and manual usage reset (PR 8 baseline)

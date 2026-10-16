@@ -1,4 +1,5 @@
 using System.Windows.Interop;
+using System.Diagnostics;
 using OfframpShift.ApplicationHost;
 
 namespace OfframpShift.App;
@@ -7,8 +8,7 @@ internal interface INudgePlatform
 {
     nint ForegroundWindow { get; }
     string PlacementStatus => "Unavailable";
-    bool Place(NudgeWindow window, nint foreground);
-    void Show(NudgeWindow window);
+    Task<bool> PresentAsync(NudgeWindow window, nint foreground);
     bool Activate(NudgeWindow window);
 }
 
@@ -23,6 +23,7 @@ internal sealed class NudgePresenter(Func<HostCommand, Task<HostCommandResult>> 
     private Guid lastEpoch;
     internal void Refresh(bool stopped = false)
     {
+        if (presenting && !stopped) return; // Completion independently revalidates fresh safety.
         var snapshot = latest();
         if (stopped || snapshot is null || !VisibleEligible(snapshot))
         {
@@ -42,11 +43,19 @@ internal sealed class NudgePresenter(Func<HostCommand, Task<HostCommandResult>> 
         if (value.Sequence <= lastSequence) return;
         lastSequence = value.Sequence;
         presenting = true;
+        var elapsed = Stopwatch.StartNew(); long beginMs = 0, showMs = 0, confirmMs = 0;
         try
         {
             Status = "Committed reminder consumed.";
             if (!Eligible(value)) { Status = "Consumed reminder suppressed: context, generation, foreground or freshness changed."; return; }
-            var firstShow = Window is null;
+            // Accept the committed trigger before construction can emit native
+            // window/foreground events. Both new and reused HWNDs follow one path.
+            var result = await execute(new(HostCommandKind.BeginNudgePresentation) { Reminder = value });
+            beginMs = elapsed.ElapsedMilliseconds;
+            if (!result.Succeeded) { Status = "Authorization rejected before creation: " + result.Message; Close(); return; }
+            var transaction = result.Presentation;
+            if (transaction is null || PresentationRejection(transaction, 0) is not null)
+            { Status = "Presentation rejected before creation: " + (transaction is null ? "MissingTransaction" : PresentationRejection(transaction, 0)) + "."; Close(); return; }
             if (Window is null)
             {
                 NudgeWindow? candidate = null;
@@ -56,25 +65,39 @@ internal sealed class NudgePresenter(Func<HostCommand, Task<HostCommandResult>> 
             }
             var target = Window;
             var handle = new WindowInteropHelper(target).EnsureHandle();
-            var result = await execute(new(HostCommandKind.AuthorizeNudge) { Reminder = value, NudgeWindow = handle, PrepareOnly = firstShow });
-            if (!result.Succeeded) { Status = "Authorization rejected before show: " + result.Message; Close(); return; }
-            if (Window != target || !Eligible(value)) { Status = "Authorized reminder expired or changed before placement."; Close(); return; }
-            if (!platform.Place(target, value.ForegroundWindow)) { Status = "Positioning failed: " + platform.PlacementStatus + "."; Close(); return; }
-            // Showing must not activate implicitly. Recheck after layout/display changes.
-            platform.Show(target);
-            if (Window != target || !Eligible(value)) { Status = "Reminder changed during nonactivating show."; Close(); return; }
-            if (firstShow)
-            {
-                result = await execute(new(HostCommandKind.AuthorizeNudge) { Reminder = value, NudgeWindow = handle });
-                if (!result.Succeeded) { Status = "Authorization rejected after show: " + result.Message; Close(); return; }
-            }
-            if (Window != target || !Eligible(value)) { Status = "Reminder changed before focus request."; Close(); return; }
+            var shown = await platform.PresentAsync(target, value.ForegroundWindow);
+            showMs = elapsed.ElapsedMilliseconds - beginMs;
+            if (!shown) { Status = "Positioning failed: " + platform.PlacementStatus + "."; Close(); return; }
+            if (Window != target) { Status = "Window closed during nonactivating show."; Close(); return; }
+            result = await execute(new(HostCommandKind.CompleteNudgePresentation) { Presentation = transaction, NudgeWindow = handle });
+            confirmMs = elapsed.ElapsedMilliseconds - beginMs - showMs;
+            if (!result.Succeeded) { Status = "Authorization rejected after show: " + result.Message; Close(); return; }
+            if (Window != target || PresentationRejection(transaction, handle) is not null)
+            { Status = "Presentation rejected before focus: " + (PresentationRejection(transaction, handle) ?? "WindowClosed") + "."; Close(); return; }
             Status = platform.Activate(target) ? "Window shown; foreground request accepted." :
                 "Window shown; Windows denied focus. Use its taskbar button or wait for the next eligible reminder.";
         }
         catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception or System.Runtime.InteropServices.ExternalException)
         { Status = "Presentation failed: window or native operation unavailable."; Close(); reportFailure(Status + " Wait for the next eligible reminder."); }
-        finally { presenting = false; }
+        finally
+        {
+            Status += $" [begin={beginMs}ms; show/layout={showMs}ms; confirm={confirmMs}ms; total={elapsed.ElapsedMilliseconds}ms]";
+            presenting = false;
+        }
+    }
+    private string? PresentationRejection(NudgePresentation value, nint candidate)
+    {
+        if (Environment.TickCount64 > value.ExpiresTick) return "PresentationExpired";
+        var snapshot = latest();
+        if (snapshot is null) return "SnapshotUnavailable";
+        if (Environment.TickCount64 - snapshot.PublishedTick is < 0 or > 2_000) return "SnapshotExpired";
+        if (snapshot.Settings.ReminderStyle != ReminderStyle.InteractiveWindow) return "ReminderStyleChanged";
+        if (snapshot.State?.Paused == true) return "Paused";
+        if (!snapshot.CanKeepNudgeOpen) return "FreshPersonalContextUnavailable";
+        if (snapshot.PresentationId != value.Id) return "TransactionRevoked";
+        if (snapshot.ReminderEpoch != value.Epoch) return "RuntimeChanged";
+        if (snapshot.Settings.Personal != value.PersonalDesktop) return "PersonalBindingChanged";
+        return NudgePlatform.PresentationForegroundAllowed(platform.ForegroundWindow, value.OriginalForeground, candidate) ? null : "ExternalForeground";
     }
     private bool Eligible(ReminderEvent value) => value.Style == ReminderStyle.InteractiveWindow &&
         Environment.TickCount64 <= value.ExpiresTick && latest() is { } snapshot && VisibleEligible(snapshot) &&

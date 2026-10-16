@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
+using System.Windows.Threading;
 
 namespace OfframpShift.App;
 
@@ -11,46 +12,60 @@ internal sealed class NudgePlatform : INudgePlatform
     internal bool DpiChangedDuringPlacement { get; private set; }
     internal static bool OnForegroundMonitor(nint hwnd, nint foreground) =>
         foreground != 0 && MonitorFromWindow(foreground, 0) is var monitor && monitor != 0 && MonitorFromWindow(hwnd, 0) == monitor;
-    public bool Place(NudgeWindow window, nint foreground)
+    public async Task<bool> PresentAsync(NudgeWindow window, nint foreground)
     {
         var hwnd = new WindowInteropHelper(window).EnsureHandle();
         PlacementStatus = "PreventImplicitActivation";
         // WPF's PerMonitorV2 DPI handler nests a SetWindowPos without NOACTIVATE.
         // Temporarily prohibit implicit activation on this HWND while positioning;
-        // restore the exact style before Show/strict authorization/explicit focus.
-        var placed = WithoutImplicitActivation(() => GetWindowLong(hwnd, -20),
-            value => SetWindowLong(hwnd, -20, value), () => PlaceWithoutActivation(window, foreground), out var restored);
-        if (!restored) PlacementStatus = "RestoreActivationStyle";
-        return placed;
+        // Hold through Show AND deferred WPF DPI/layout, then restore before
+        // strict host confirmation and the single explicit focus request.
+        var result = await WithoutImplicitActivationAsync(() => GetWindowLong(hwnd, -20),
+            value => SetWindowLong(hwnd, -20, value), async () =>
+            {
+                if (!PlaceWithoutActivation(window, foreground)) return false;
+                PlacementStatus = "NonactivatingShow";
+                window.Show();
+                PlacementStatus = "DpiLayoutSettlement";
+                await Dispatcher.Yield(DispatcherPriority.ContextIdle);
+                PlacementStatus = "FinalForegroundValidation";
+                if (!PresentationForegroundAllowed(GetForegroundWindow(), foreground, hwnd)) return false;
+                PlacementStatus = "Shown";
+                return true;
+            });
+        if (!result.Restored) PlacementStatus = "RestoreActivationStyle";
+        return result.Placed;
     }
-    internal static bool WithoutImplicitActivation(Func<int> readStyle, Action<int> writeStyle,
-        Func<bool> place, out bool restored)
+    internal static bool PresentationForegroundAllowed(nint current, nint original, nint candidate) =>
+        current != 0 && (current == original || current == candidate);
+    internal static async Task<(bool Placed, bool Restored)> WithoutImplicitActivationAsync(Func<int> readStyle, Action<int> writeStyle,
+        Func<Task<bool>> present)
     {
         var style = readStyle();
         var guarded = style | 0x08000000; // documented WS_EX_NOACTIVATE
-        restored = false;
+        var restored = false;
         var placed = false;
         try
         {
             writeStyle(guarded);
-            if (readStyle() == guarded) placed = place();
+            if (readStyle() == guarded) placed = await present();
         }
         finally
         {
             writeStyle(style);
             restored = readStyle() == style;
         }
-        return placed && restored;
+        return (placed && restored, restored);
     }
     private bool PlaceWithoutActivation(NudgeWindow window, nint foreground)
     {
         PlacementStatus = "InitialForegroundValidation";
-        if (foreground == 0 || GetForegroundWindow() != foreground) return false;
+        var hwnd = new WindowInteropHelper(window).EnsureHandle();
+        if (foreground == 0 || !PresentationForegroundAllowed(GetForegroundWindow(), foreground, hwnd)) return false;
         PlacementStatus = "MonitorWorkArea";
         var monitor = MonitorFromWindow(foreground, 0);
         var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
         if (monitor == 0 || !GetMonitorInfo(monitor, ref info)) return false;
-        var hwnd = new WindowInteropHelper(window).EnsureHandle();
         PlacementStatus = "InitialNonactivatingPosition";
         var previousDpi = GetDpiForWindow(hwnd);
         // Seed the HWND on the target monitor without activation, allowing WPF's
@@ -80,7 +95,7 @@ internal sealed class NudgePlatform : INudgePlatform
         PlacementStatus = "Centering";
         if (!TryCenter(info.Work.Left, info.Work.Top, info.Work.Right, info.Work.Bottom, width, height, out var area)) return false;
         PlacementStatus = "FinalForegroundValidation";
-        if (GetForegroundWindow() != foreground) return false;
+        if (!PresentationForegroundAllowed(GetForegroundWindow(), foreground, hwnd)) return false;
         PlacementStatus = "FinalNonactivatingPosition";
         if (!SetWindowPos(hwnd, 0, area.X, area.Y, area.Width, area.Height, 0x0014)) return false;
         PlacementStatus = "Placed";
@@ -105,7 +120,6 @@ internal sealed class NudgePlatform : INudgePlatform
         area = (left + ((int)availableWidth - width) / 2, top + ((int)availableHeight - height) / 2, width, height);
         return true;
     }
-    public void Show(NudgeWindow window) => window.Show();
     public bool Activate(NudgeWindow window) => SetForegroundWindow(new WindowInteropHelper(window).Handle);
     [StructLayout(LayoutKind.Sequential)] private struct Rectangle { public int Left, Top, Right, Bottom; }
     [StructLayout(LayoutKind.Sequential)] private struct MonitorInfo { public int Size; public Rectangle Monitor, Work; public uint Flags; }

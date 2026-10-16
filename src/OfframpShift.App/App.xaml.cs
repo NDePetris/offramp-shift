@@ -23,7 +23,7 @@ public partial class ShiftApplication : Application
         base.OnStartup(e);
         controller = WindowsApplication.Start();
         window = new(Execute, ExitAsync, CloseAsync); MainWindow = window;
-        nudges = new(command => command.Kind == HostCommandKind.AuthorizeNudge ? controller.ExecuteAsync(command) : Execute(command),
+        nudges = new(command => command.Kind is HostCommandKind.BeginNudgePresentation or HostCommandKind.CompleteNudgePresentation ? controller.ExecuteAsync(command) : Execute(command),
             () => controller.Completion.IsCompleted || exiting ? null : controller.Latest,
             detail => { window.ReportAction(detail); tray?.ReportNudgeFailure(detail); }, new NudgePlatform());
         try { tray = new(() => Open(false), () => Open(true), Execute, ExitAsync); }

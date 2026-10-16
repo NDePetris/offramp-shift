@@ -30,12 +30,13 @@ internal sealed class FakeSource(Fixture fixture) : IObservationSource
     public long IdleAgeMs { get; set; }
     public Capability Input { get; set; } = Capability.Available;
     public ApplicationIdentity Application { get; set; } = new("opaque-test", true);
+    public nint Window { get; set; } = 1;
     public bool NudgeDesktopValid { get; set; } = true;
     public NudgeDesktopCheck? NudgeCheckOverride { get; set; }
     public List<bool> NudgeCheckPhases { get; } = [];
     public Action? OnNudgeCheck { get; set; }
     public bool CheckNudgeDesktop(nint nudge, nint foreground, Guid personal)
-    { OnNudgeCheck?.Invoke(); return NudgeDesktopValid && nudge != 0 && foreground == 1 && (Current ?? fixture.Personal) == personal; }
+    { OnNudgeCheck?.Invoke(); return NudgeDesktopValid && nudge != 0 && foreground == Window && (Current ?? fixture.Personal) == personal; }
     public NudgeDesktopCheck CheckNudgePresentation(nint nudge, nint foreground, Guid personal, bool prepareOnly)
     {
         NudgeCheckPhases.Add(prepareOnly);
@@ -44,12 +45,12 @@ internal sealed class FakeSource(Fixture fixture) : IObservationSource
     private readonly Queue<NativeSignal> queue = new();
     private long sequence;
     public void Tick() => Emit(SignalKind.Tick);
-    public void Emit(SignalKind kind, uint detail = 0) => queue.Enqueue(new(++sequence, kind, fixture.Clock.Now, fixture.Ms, null, Detail: detail));
+    public void Emit(SignalKind kind, uint detail = 0, nint window = 0) => queue.Enqueue(new(++sequence, kind, fixture.Clock.Now, fixture.Ms, null, window, detail));
     public EvidencePoint Read()
     {
         Reads++;
         if (FailRead) throw new InvalidOperationException("Injected provider failure");
-        return new(fixture.Clock.Now, fixture.Ms, (ulong)fixture.Ms * 10_000, 1, 1, Application,
+        return new(fixture.Clock.Now, fixture.Ms, (ulong)fixture.Ms * 10_000, Window, 1, Application,
             IdleAgeMs, Session, new(Capability.Available, Current ?? fixture.Personal, Topology ?? [fixture.Personal, fixture.Work], ShellGeneration),
             Foreground, Input, Capability.Available);
     }

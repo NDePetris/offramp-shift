@@ -13,9 +13,10 @@ internal static class InteractiveUiRegressions
         public bool Placement { get; set; } = true;
         public bool Activation { get; set; } = true;
         public string PlacementStatus => "ContentMeasurement";
+        public Action<NudgeWindow>? DuringPresentation { get; set; }
         public int Shows, Activations;
-        public bool Place(NudgeWindow window, nint foreground) => Placement;
-        public void Show(NudgeWindow window) => Shows++;
+        public Task<bool> PresentAsync(NudgeWindow window, nint foreground)
+        { if (Placement) Shows++; DuringPresentation?.Invoke(window); return Task.FromResult(Placement); }
         public bool Activate(NudgeWindow window) { Activations++; return Activation; }
     }
     internal static void Run(Action<string, Action> test, Func<HostSnapshot> snapshot)
@@ -33,10 +34,32 @@ internal static class InteractiveUiRegressions
         }
         ReminderEvent Event(HostSnapshot value, long sequence = 1) => new(sequence, value.ReminderGeneration, 1, value.Settings.Personal!.Value,
             Environment.TickCount64 + 2_000, ReminderStyle.InteractiveWindow, value.ReminderEpoch);
+        HostCommandResult Accept(HostCommand command, ref HostSnapshot value)
+        {
+            if (command.Kind == HostCommandKind.BeginNudgePresentation)
+            {
+                var transaction = new NudgePresentation(Guid.NewGuid(), command.Reminder!.Sequence,
+                    command.Reminder.ForegroundWindow, value.Settings.Personal!.Value, value.ReminderEpoch, Environment.TickCount64 + 2_000);
+                value = value with { PresentationId = transaction.Id };
+                return HostCommandResult.Success() with { Presentation = transaction };
+            }
+            return HostCommandResult.Success() with { Presentation = command.Presentation };
+        }
+        test("committed event is accepted before any nudge window is constructed", () =>
+        {
+            var value = Eligible(); var platform = new Platform(); NudgePresenter? presenter = null;
+            presenter = new(command =>
+            {
+                if (command.Kind == HostCommandKind.BeginNudgePresentation) Check(presenter!.Window is null && command.NudgeWindow == 0);
+                return Task.FromResult(Accept(command, ref value));
+            }, () => value, _ => { }, platform);
+            presenter.PresentAsync(Event(value)).GetAwaiter().GetResult();
+            Check(platform.Shows == 1 && platform.Activations == 1); presenter.Close();
+        });
         test("presenter reuses one HWND and activates only once per new eligible event", () =>
         {
             var value = Eligible(); var platform = new Platform(); var commands = new List<HostCommand>();
-            var presenter = new NudgePresenter(command => { commands.Add(command); return Task.FromResult(HostCommandResult.Success()); },
+            var presenter = new NudgePresenter(command => { commands.Add(command); return Task.FromResult(Accept(command, ref value)); },
                 () => value, _ => { }, platform);
             presenter.PresentAsync(Event(value)).GetAwaiter().GetResult(); var window = presenter.Window;
             Check(window is not null && window.Owner is null && !window.Topmost && !window.ShowActivated);
@@ -59,17 +82,18 @@ internal static class InteractiveUiRegressions
                 if (failure == "expired") reminder = reminder with { ExpiresTick = Environment.TickCount64 - 1 };
                 if (failure == "stale") value = value with { PublishedTick = Environment.TickCount64 - 2_001 };
                 if (failure == "focus-denied") platform.Activation = false;
-                var presenter = new NudgePresenter(_ =>
+                var presenter = new NudgePresenter(command =>
                 {
-                    if (failure == "generation") value = value with { ReminderGeneration = value.ReminderGeneration + 1 };
-                    return Task.FromResult(failure == "membership" ? HostCommandResult.Failure("wrong desktop") : HostCommandResult.Success());
+                    var accepted = Accept(command, ref value);
+                    if (failure == "generation") value = value with { ReminderGeneration = value.ReminderGeneration + 1, PresentationId = Guid.Empty };
+                    return Task.FromResult(failure == "membership" ? HostCommandResult.Failure("wrong desktop") : accepted);
                 },
                     () => value, _ => { }, platform);
                 presenter.PresentAsync(reminder).GetAwaiter().GetResult(); presenter.Refresh();
                 Check(platform.Activations == (failure == "focus-denied" ? 1 : 0));
                 if (failure == "focus-denied") Check(presenter.Window is not null);
                 else Check(presenter.Window is null);
-                if (failure == "placement") Check(presenter.Status == "Positioning failed: ContentMeasurement.");
+                if (failure == "placement") Check(presenter.Status.StartsWith("Positioning failed: ContentMeasurement.", StringComparison.Ordinal));
                 presenter.Close();
             });
         test("nudge actions are accessible explicit and failed saves stay unsuccessful", () =>
@@ -105,6 +129,7 @@ internal static class InteractiveUiRegressions
             Check(area == (-1580, 270, 600, 500));
             Check(NudgePlatform.TryCenter(0, 0, 300, 200, 800, 600, out area) && area == (0, 0, 300, 200));
             Check(!NudgePlatform.TryCenter(0, 0, 0, 200, 400, 300, out _));
+            Check(NudgePlatform.TryCenter(3440, -500, 5600, 3268, 600, 700, out area) && area == (4220, 1034, 600, 700));
         });
         test("DPI placement prohibits nested activation and restores exact original style on every outcome", () =>
         {
@@ -117,17 +142,17 @@ internal static class InteractiveUiRegressions
                     if (outcome == "apply-denied" || outcome == "restore-denied" && value == original) return;
                     style = value;
                 }
-                bool Position()
+                Task<bool> Position()
                 {
                     called = true; Check((style & 0x08000000) != 0);
                     if (outcome == "exception") throw new ApplicationException("synthetic DPI positioning failure");
-                    return outcome != "failure";
+                    return Task.FromResult(outcome != "failure");
                 }
                 try
                 {
-                    var placed = NudgePlatform.WithoutImplicitActivation(() => style, Write, Position, out var restored);
-                    Check(placed == (outcome == "success"));
-                    Check(restored == (outcome != "restore-denied"));
+                    var result = NudgePlatform.WithoutImplicitActivationAsync(() => style, Write, Position).GetAwaiter().GetResult();
+                    Check(result.Placed == (outcome == "success"));
+                    Check(result.Restored == (outcome != "restore-denied"));
                 }
                 catch (ApplicationException) when (outcome == "exception") { }
                 Check(called == (outcome != "apply-denied"));
@@ -150,24 +175,55 @@ internal static class InteractiveUiRegressions
             var value = Eligible(); var platform = new Platform(); var phases = new List<bool>();
             var presenter = new NudgePresenter(command =>
             {
-                phases.Add(command.PrepareOnly);
+                phases.Add(command.Kind == HostCommandKind.BeginNudgePresentation);
                 if (phases.Count == 2) Check(platform.Shows == 1 && platform.Activations == 0);
-                return Task.FromResult(HostCommandResult.Success());
+                return Task.FromResult(Accept(command, ref value));
             }, () => value, _ => { }, platform);
             presenter.PresentAsync(Event(value)).GetAwaiter().GetResult();
             Check(phases.SequenceEqual(new[] { true, false }) && platform.Activations == 1);
             presenter.PresentAsync(Event(value, 2)).GetAwaiter().GetResult();
-            Check(phases.SequenceEqual(new[] { true, false, false }));
+            Check(phases.SequenceEqual(new[] { true, false, true, false }));
             presenter.Close();
         });
         test("unregistered candidate after nonactivating show is closed without focus and reported locally", () =>
         {
             var value = Eligible(); var platform = new Platform();
-            var presenter = new NudgePresenter(command => Task.FromResult(command.PrepareOnly ? HostCommandResult.Success() :
+            var presenter = new NudgePresenter(command => Task.FromResult(command.Kind == HostCommandKind.BeginNudgePresentation ? Accept(command, ref value) :
                 HostCommandResult.Failure("Desktop check: CandidateIdentityUnavailable.")), () => value, _ => { }, platform);
             presenter.PresentAsync(Event(value)).GetAwaiter().GetResult();
             Check(platform.Shows == 1 && platform.Activations == 0 && presenter.Window is null);
             Check(presenter.Status.Contains("after show") && presenter.Status.Contains("CandidateIdentityUnavailable"));
+        });
+        foreach (var foreground in new[] { "candidate", "original", "external" })
+            test("presentation transition checks owned foreground independently of accounting generation: " + foreground, () =>
+            {
+                var value = Eligible(); var platform = new Platform();
+                platform.DuringPresentation = window =>
+                {
+                    value = value with { ReminderGeneration = value.ReminderGeneration + 1 };
+                    platform.ForegroundWindow = foreground == "candidate" ? new System.Windows.Interop.WindowInteropHelper(window).Handle :
+                        foreground == "original" ? 1 : 99;
+                };
+                var presenter = new NudgePresenter(command => Task.FromResult(Accept(command, ref value)), () => value, _ => { }, platform);
+                presenter.PresentAsync(Event(value)).GetAwaiter().GetResult();
+                Check(platform.Activations == (foreground == "external" ? 0 : 1));
+                Check((presenter.Window is not null) == (foreground != "external"));
+                presenter.Close();
+            });
+        test("nonactivation guard spans asynchronous DPI layout and restores before completion", () =>
+        {
+            var context = SynchronizationContext.Current;
+            SynchronizationContext.SetSynchronizationContext(null);
+            try
+            {
+                var style = 0x40000; var layout = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                var operation = NudgePlatform.WithoutImplicitActivationAsync(() => style, v => style = v, () => layout.Task);
+                Check(!operation.IsCompleted && (style & 0x08000000) != 0);
+                layout.SetResult(true);
+                var result = operation.GetAwaiter().GetResult();
+                Check(result.Placed && result.Restored && style == 0x40000);
+            }
+            finally { SynchronizationContext.SetSynchronizationContext(context); }
         });
         test("repeat Settings validates whole minutes and submits independent durable edit", () =>
         {
