@@ -60,7 +60,9 @@ public sealed class MonitoringRuntime : IDisposable
     private long presentationStartedAt;
     private nint presentationWindow, observedPresentationForeground;
     internal Guid PresentationId => presentationFailure.Length == 0 && presentation is { } p &&
-        Environment.TickCount64 <= p.ExpiresTick && elapsed() - presentationStartedAt is >= 0 and <= 2_000 ? p.Id : Guid.Empty;
+        Environment.TickCount64 <= p.ExpiresTick && elapsed() - presentationStartedAt is >= 0 and <= 2_000 &&
+        Health.Healthy && Health.Generation == presentationHealth && clock.Now.Epoch == presentationClock &&
+        Latest?.Desktop.ShellProcess == presentationShell ? p.Id : Guid.Empty;
     internal long ReminderGeneration => reminderGeneration;
     internal Guid ReminderEpoch => deliveryEpoch;
     internal string ReminderStatus { get; private set; } = "No committed nudge event yet.";

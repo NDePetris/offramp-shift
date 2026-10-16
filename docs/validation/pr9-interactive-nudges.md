@@ -385,11 +385,16 @@ guard lifetime/restoration, portrait/negative-origin pixel geometry, same-window
 reuse, scoped foreground acceptance and stage diagnostics. Real focus and extension
 acceptance remain pending the five-step owner retest below.
 
-Final application regressions: **82 Core, 83 Persistence, 108 host, 42 WPF groups**
+Final application regressions: **82 Core, 83 Persistence, 110 host, 42 WPF groups**
 passed with warnings as errors and SDK 10.0.401. All seven repository-prescribed
 test/format commands **PASS**. Repository check results and
 current-head CI are recorded in the PR; simulated checks and the explicit live
 nonactivating exercise remain separate.
+
+Final focus-grant review also covers health/shell changes after successful strict
+confirmation: the published transaction ID becomes unavailable even if ongoing
+Personal visibility remains healthy. Final affected tests/formatting were rerun
+after that projection check; the UI captures each rejection reason once.
 
 Deferred Home timer-first requirements are captured in
 [the follow-up brief](../decisions/home-timer-first-follow-up.md), recommended for

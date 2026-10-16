@@ -54,8 +54,10 @@ internal sealed class NudgePresenter(Func<HostCommand, Task<HostCommandResult>> 
             beginMs = elapsed.ElapsedMilliseconds;
             if (!result.Succeeded) { Status = "Authorization rejected before creation: " + result.Message; Close(); return; }
             var transaction = result.Presentation;
-            if (transaction is null || PresentationRejection(transaction, 0) is not null)
-            { Status = "Presentation rejected before creation: " + (transaction is null ? "MissingTransaction" : PresentationRejection(transaction, 0)) + "."; Close(); return; }
+            if (transaction is null) { Status = "Presentation rejected before creation: MissingTransaction."; Close(); return; }
+            var rejection = PresentationRejection(transaction, 0);
+            if (rejection is not null)
+            { Status = "Presentation rejected before creation: " + rejection + "."; Close(); return; }
             if (Window is null)
             {
                 NudgeWindow? candidate = null;
@@ -72,8 +74,9 @@ internal sealed class NudgePresenter(Func<HostCommand, Task<HostCommandResult>> 
             result = await execute(new(HostCommandKind.CompleteNudgePresentation) { Presentation = transaction, NudgeWindow = handle });
             confirmMs = elapsed.ElapsedMilliseconds - beginMs - showMs;
             if (!result.Succeeded) { Status = "Authorization rejected after show: " + result.Message; Close(); return; }
-            if (Window != target || PresentationRejection(transaction, handle) is not null)
-            { Status = "Presentation rejected before focus: " + (PresentationRejection(transaction, handle) ?? "WindowClosed") + "."; Close(); return; }
+            rejection = Window != target ? "WindowClosed" : PresentationRejection(transaction, handle);
+            if (rejection is not null)
+            { Status = "Presentation rejected before focus: " + rejection + "."; Close(); return; }
             Status = platform.Activate(target) ? "Window shown; foreground request accepted." :
                 "Window shown; Windows denied focus. Use its taskbar button or wait for the next eligible reminder.";
         }

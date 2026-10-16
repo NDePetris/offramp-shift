@@ -27,6 +27,17 @@ internal static class InteractiveHostRegressions
     }
     internal static void Run()
     {
+        foreach (var fault in new[] { "health", "shell" })
+            Test("published focus confirmation is revoked by subsequent " + fault + " generation", () =>
+            {
+                using var f = new Fixture(); using var app = Interactive(f);
+                var begin = app.Execute(Authorize(Take(app)));
+                Check(app.Execute(new(HostCommandKind.CompleteNudgePresentation) { Presentation = begin.Presentation, NudgeWindow = 2 }).Succeeded);
+                Check(app.Snapshot().PresentationId == begin.Presentation!.Id);
+                if (fault == "health") f.Source!.Dropped++; else f.Source!.ShellGeneration++;
+                f.Advance(app, 4_000);
+                Check(app.Snapshot().CanKeepNudgeOpen && app.Snapshot().PresentationId == Guid.Empty);
+            });
         Test("window creation destruction callbacks occur inside the accepted transaction without suppressing its trigger", () =>
         {
             using var f = new Fixture(); using var app = Interactive(f);
