@@ -11,6 +11,16 @@ internal static class Program
     {
         if (args.Length != 0) return 2; // A broken spawn guard must not recursively run tests.
         var cases = 0;
+        var personal = Guid.NewGuid();
+        var missing = unchecked((int)0x8002802B);
+        if (WindowDesktopMembership.CheckCandidate(true, missing, Guid.Empty, personal, true, false) != NudgeDesktopCheck.Allowed ||
+            WindowDesktopMembership.CheckCandidate(true, missing, Guid.Empty, personal, false, false) != NudgeDesktopCheck.CandidateIdentityUnavailable ||
+            WindowDesktopMembership.CheckCandidate(true, missing, Guid.Empty, personal, true, true) != NudgeDesktopCheck.CandidateIdentityUnavailable ||
+            WindowDesktopMembership.CheckCandidate(true, -1, Guid.Empty, personal, true, false) != NudgeDesktopCheck.CandidateIdentityUnavailable ||
+            WindowDesktopMembership.CheckCandidate(false, missing, Guid.Empty, personal, true, false) != NudgeDesktopCheck.CandidateNotCurrent ||
+            WindowDesktopMembership.CheckCandidate(true, 0, Guid.NewGuid(), personal, true, false) != NudgeDesktopCheck.CandidateWrongDesktop ||
+            WindowDesktopMembership.CheckCandidate(true, 0, personal, personal, false, true) != NudgeDesktopCheck.Allowed || Native.Calls != 0) return 1;
+        Console.WriteLine("PASS: hidden candidate preparation never grants strict activation; wrong/unknown desktop and other HRESULTs fail closed (pure decisions).");
         foreach (var build in new[] { "26200.9456", "26200.9458", "26200.9710", "26200.9712", "26100.9711", "26200" })
         {
             Registry.Build = build;

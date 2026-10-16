@@ -52,6 +52,8 @@ public sealed class MonitoringRuntime : IDisposable
     private nint authorizedWindow;
     internal long ReminderGeneration => reminderGeneration;
     internal Guid ReminderEpoch => deliveryEpoch;
+    internal string ReminderStatus { get; private set; } = "No committed nudge event yet.";
+    internal string NudgeAuthorizationFailure { get; private set; } = "Reminder eligibility changed or expired.";
 
     public bool CanKeepNudgeOpen => session.Status == PersistenceStatus.Ready && !session.State.Paused &&
         session.State.Exhausted && session.State.Intervention == InterventionState.Nudging &&
@@ -65,12 +67,17 @@ public sealed class MonitoringRuntime : IDisposable
         p.Input == Capability.Available && !p.InputDiscontinuity && p.IdleAgeMs is >= 0 && p.IdleAgeMs < configuration.IdleThresholdMs &&
         p.Foreground == Capability.Available && p.CollectionMs is >= 0 and <= 500;
 
-    internal bool AuthorizeNudge(ReminderEvent value, nint window)
+    internal bool AuthorizeNudge(ReminderEvent value, nint window, bool prepareOnly = false)
     {
+        NudgeAuthorizationFailure = "Reminder eligibility changed or expired.";
         Drain(); RefreshHealth();
-        if (!ValidEvent(value) || window == 0 || !source.CheckNudgeDesktop(window, value.ForegroundWindow, personal)) return false;
+        if (!ValidEvent(value) || window == 0) return false;
+        var membership = source.CheckNudgePresentation(window, value.ForegroundWindow, personal, prepareOnly);
+        if (membership != NudgeDesktopCheck.Allowed)
+        { NudgeAuthorizationFailure = "Desktop check: " + membership + "."; return false; }
         Drain(); RefreshHealth();
         if (!ValidEvent(value)) return false;
+        if (prepareOnly) return true; // Does not authorize focus or consume the final grant.
         authorizedWindow = window;
         authorizedSequence = value.Sequence;
         return true;
@@ -237,6 +244,8 @@ public sealed class MonitoringRuntime : IDisposable
                 var healthGeneration = Health.Generation;
                 var before = session.State;
                 var result = session.Observe(observation, interactive);
+                if (result.Effects.Any(x => x.Kind == EffectKind.Nudge))
+                    ReminderStatus = "Nudge committed; delivery eligibility checked next.";
                 if (!before.BreakCompleted) maximumIncompleteBreakMs = Math.Max(maximumIncompleteBreakMs, before.BreakProgressMs);
                 if (!result.State.BreakCompleted) maximumIncompleteBreakMs = Math.Max(maximumIncompleteBreakMs, result.State.BreakProgressMs);
                 if (!before.BreakCompleted && !result.State.BreakCompleted && result.State.BreakProgressMs < before.BreakProgressMs)
@@ -283,6 +292,7 @@ public sealed class MonitoringRuntime : IDisposable
                         offeredEvent = new(effect.Sequence, reminderGeneration, Latest!.Window, personal,
                             nowTick + Math.Min(2_000, remainingAge), interactive ? ReminderStyle.InteractiveWindow : ReminderStyle.WindowsNotification, deliveryEpoch);
                         Reminders?.Offer(effect.Sequence, nowTick, offeredEvent);
+                        ReminderStatus = "Committed nudge offered to the transient mailbox.";
                     }
                 }
                 UpdateReminderEligibility(accounting, breakReminders);

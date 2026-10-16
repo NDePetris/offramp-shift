@@ -35,6 +35,7 @@
        <Button Content="_Resume" Click="Resume" IsEnabled="{Binding CanResume}" />
       </WrapPanel>
       <TextBlock x:Name="ActionResult" AutomationProperties.LiveSetting="Polite" Margin="0,0,0,12" />
+      <TextBlock x:Name="NudgeStatus" Visibility="Collapsed" Margin="0,0,0,12" />
       <TextBlock Text="Current desktop context" FontWeight="SemiBold" />
       <TextBlock Text="{Binding Context}" Margin="0,4,0,0" FontSize="18" />
       <TextBlock Text="Usage and allowance" Style="{StaticResource SectionTitle}" />

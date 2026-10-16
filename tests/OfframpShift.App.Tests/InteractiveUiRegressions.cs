@@ -104,6 +104,41 @@ internal static class InteractiveUiRegressions
             Check(NudgePlatform.TryCenter(0, 0, 300, 200, 800, 600, out area) && area == (0, 0, 300, 200));
             Check(!NudgePlatform.TryCenter(0, 0, 0, 200, 400, 300, out _));
         });
+        test("a real never-shown HWND measures visible content instead of collapsed Window", () =>
+        {
+            var window = new NudgeWindow(_ => Task.FromResult(HostCommandResult.Success()));
+            new System.Windows.Interop.WindowInteropHelper(window).EnsureHandle();
+            window.Measure(new(400, 800));
+            Check(!window.IsVisible && window.DesiredSize.Height == 0);
+            var height = NudgePlatform.MeasureContentHeight(window, 384, 760);
+            Check(height > 0 && height <= 760);
+            Check(NudgePlatform.TryCenter(0, 0, 1920, 1080, 400, (int)Math.Ceiling(height) + 40, out _));
+            window.CloseAutomatically();
+        });
+        test("first show is nonactivating preparation followed by strict final authorization", () =>
+        {
+            var value = Eligible(); var platform = new Platform(); var phases = new List<bool>();
+            var presenter = new NudgePresenter(command =>
+            {
+                phases.Add(command.PrepareOnly);
+                if (phases.Count == 2) Check(platform.Shows == 1 && platform.Activations == 0);
+                return Task.FromResult(HostCommandResult.Success());
+            }, () => value, _ => { }, platform);
+            presenter.PresentAsync(Event(value)).GetAwaiter().GetResult();
+            Check(phases.SequenceEqual(new[] { true, false }) && platform.Activations == 1);
+            presenter.PresentAsync(Event(value, 2)).GetAwaiter().GetResult();
+            Check(phases.SequenceEqual(new[] { true, false, false }));
+            presenter.Close();
+        });
+        test("unregistered candidate after nonactivating show is closed without focus and reported locally", () =>
+        {
+            var value = Eligible(); var platform = new Platform();
+            var presenter = new NudgePresenter(command => Task.FromResult(command.PrepareOnly ? HostCommandResult.Success() :
+                HostCommandResult.Failure("Desktop check: CandidateIdentityUnavailable.")), () => value, _ => { }, platform);
+            presenter.PresentAsync(Event(value)).GetAwaiter().GetResult();
+            Check(platform.Shows == 1 && platform.Activations == 0 && presenter.Window is null);
+            Check(presenter.Status.Contains("after show") && presenter.Status.Contains("CandidateIdentityUnavailable"));
+        });
         test("repeat Settings validates whole minutes and submits independent durable edit", () =>
         {
             var commands = new List<HostCommand>();

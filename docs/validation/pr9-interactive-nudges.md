@@ -1,7 +1,9 @@
 # PR 9 — interactive nudges
 
-Owner evaluation only. Live focus, virtual-desktop placement, mixed DPI,
-fullscreen behavior and Narrator acceptance are **NOT RUN** by the agent.
+Owner evaluation only. Initial owner smoke **FAIL**: Interactive window never
+appeared; legacy notifications still worked, including their expected grace.
+The October 16 correction and bounded registration evidence are recorded below.
+Full owner-flow focus, mixed DPI, fullscreen and Narrator acceptance remain **NOT RUN** by the agent.
 Automated tests use synthetic evidence, disposable SQLite, owned hidden HWNDs
 and fake placement/focus adapters. They do not establish live shell reliability.
 
@@ -56,9 +58,15 @@ It becomes idle normally. No synthetic activity or UI countdown advances Core.
 Pause, Work/Other, lock, unavailable/stale evidence, reset, style change, storage
 failure, owner stop and exit close the nudge without granting extra time.
 
-Documented read-only `IVirtualDesktopManager` membership/desktop-ID checks run
-through the existing isolated worker. Current Personal GUID, foreground, session
-and shell generation are corroborated around the query. The public declaration
+Documented read-only `IVirtualDesktopManager` checks run through the existing
+isolated worker in two stages. Before a new window's nonactivating first Show,
+current Personal GUID, foreground GUID, positive current-desktop membership,
+session and shell generation must agree. A hidden new HWND may return exactly
+TYPE_E_ELEMENTNOTFOUND for its own desktop ID; this permits only that first
+nonactivating Show, never focus. After Show, its desktop ID must positively match
+Personal under the original event/expiry/generation before activation. Already-open
+windows always use strict authorization. Other failures and known wrong desktops
+are rejected. There is no registration retry or focus retry. The public declaration
 ends before MoveWindowToDesktop; the private observation ABI, worker deadline,
 exact-build guards and recovery policy remain unchanged. No COM runs on the UI.
 
@@ -136,3 +144,86 @@ accuracy/reliability (#9), native notification branding/placement (#17), PR 10
 switching and distribution/licensing remain outside scope. Automatic switching,
 virtual-desktop window movement and production browser attribution remain **NO-GO**.
 No telemetry, activity history or remote service is added.
+
+## October 16 correction: missing nudge
+
+Two independent blocking conditions were reproduced on Windows build
+**26200.9711/x64**, pinned SDK 10.0.401, using an owned test HWND and the existing
+isolated worker. No user accounting/settings were opened or changed.
+
+1. For the new hidden HWND, IsWindowOnCurrentVirtualDesktop returned S_OK/true,
+   but GetWindowDesktopId returned **0x8002802B (TYPE_E_ELEMENTNOTFOUND)** with
+   no identity. The old worker treated this as rejection, before Show.
+2. Window.Measure on the never-shown WPF Window returned **DesiredSize.Height=0**,
+   while its content measured **389.5033 DIPs**. Old positioning would reject
+   zero height even if authorization passed. Earlier fake placement tests and
+   content-only renders did not exercise this path.
+
+The correction separates permission to first-show without activation from strict
+permission to request focus, retaining all original context/foreground/freshness
+checks. Positioning measures visible content and adds DPI-correct native frame
+dimensions; it does not measure the collapsed top-level Window. No Core,
+notification timing, extension semantics, settings or checkpoint migration changes.
+
+A single bounded nonactivating registration exercise then reported:
+hidden strict check CandidateIdentityUnavailable; preparation Allowed; positioning
+true; post-Show strict check Allowed; foreground and desktop unchanged. The owned
+window was closed automatically. **No activation was attempted.** This is real
+read-only COM/owned-window registration evidence on that exact build, not an
+owner-flow, focus, multi-monitor/scaling or accounting PASS. The running owner
+app remained running; builds use ignored isolated artifacts to avoid its file locks.
+
+The stability claims above are before/after identity equality checks, not a
+certified continuous desktop/focus history. No identities were printed or retained.
+
+Correction validation: all seven established commands **PASS**, with final affected
+host/host-test formatting separately rechecked after the publication regression.
+Final application tests: **81 Core, 77 Persistence, 78 host, 36 app groups**; builds
+retain warnings as errors. Compatibility includes seven pure candidate-membership
+decisions as well as the existing unsupported-build/architecture and owned non-COM
+checks. No automated test runs either opt-in live diagnostic.
+
+Home now retains only the latest process-local reminder stage: whether a committed
+nudge was offered, consumed, rejected before/after Show, failed positioning, or was
+shown with focus accepted/denied. Worker failure categories are discrete codes,
+not foreground/window/desktop identities. This status is not written to storage,
+sent anywhere, or retained as a history. If the short retest fails, report just the
+Home **Last reminder** line and monitoring state; do not capture identities/content.
+
+Focused regressions cover a real never-shown HWND's zero-size behavior, content
+measurement, preparation followed by strict authorization, failure after Show with
+no activation, and candidate-membership decisions (exact unregistered HRESULT only;
+known wrong/unknown desktop, already-visible candidate and other errors fail closed).
+Existing tests still cover committed effects/mailbox, freshness/generation, accounting,
+legacy grace, extensions, migration and failure/retry. Automated checks are separate
+from the bounded live diagnostic and the pending owner retest.
+
+The trace also identified a publication race: the owner could offer a committed
+event before publishing its corresponding exhausted snapshot. Interactive mailbox
+consumption now waits for a matching epoch/generation/effect sequence rather than
+dropping it against older UI state. This does not renew expiry, retry a show, or
+wait for a later eligible context; ordinary eligibility and original freshness
+remain binding. Legacy notification consumption is unchanged. Deterministic tests
+cover publication ordering and expiry; this race is not claimed as the measured
+cause of the owner's failed smoke.
+
+The app-test executable has two explicitly invoked local diagnostics:
+`--inspect-hidden-nudge` never shows/activates; `--inspect-nudge-registration`
+performs the checked nonactivating Show and strict post-Show check, then closes.
+Both require an already-approved exact build/x64, print only dimensions/categories
+and stability booleans, start only their owned read-only worker, and never open
+accounting/settings. They are not run in CI or by normal app startup.
+
+### Short owner retest (pending)
+
+Record tested commit/build, then:
+
+1. Enable **Interactive window** and save.
+2. Use a one-minute Personal allowance.
+3. Confirm a nudge appears promptly after exhaustion on the active monitor.
+4. Confirm presentation does not change virtual desktops. Any such switch is FAIL.
+5. Confirm **Add 1 minute** defers the next prompt through counted Personal use.
+
+Restore temporary duration settings afterward. If unsuccessful, report the single
+Home Last reminder line plus monitoring state. Do not widen compatibility or bypass
+checks; PR 10 and issue #17 remain excluded.

@@ -19,6 +19,8 @@ public interface IObservationSource : IDisposable
     bool TryTake(out NativeSignal? signal);
     void ReplaceDesktopWorker();
     bool CheckNudgeDesktop(nint nudge, nint foreground, Guid personal) => false;
+    NudgeDesktopCheck CheckNudgePresentation(nint nudge, nint foreground, Guid personal, bool prepareOnly) =>
+        CheckNudgeDesktop(nudge, foreground, personal) ? NudgeDesktopCheck.Allowed : NudgeDesktopCheck.QueryUnavailable;
     object Diagnostics => new { };
 }
 
@@ -67,6 +69,8 @@ public sealed class WindowsObservationSource : IObservationSource
     };
     public bool TryTake(out NativeSignal? signal) => loop.TryTake(out signal, 0);
     public bool CheckNudgeDesktop(nint nudge, nint foreground, Guid personal) => worker?.CheckNudge(nudge, foreground, personal) == true;
+    public NudgeDesktopCheck CheckNudgePresentation(nint nudge, nint foreground, Guid personal, bool prepareOnly) =>
+        worker?.CheckNudgeStatus(nudge, foreground, personal, prepareOnly) ?? NudgeDesktopCheck.WorkerUnavailable;
     public void ReplaceDesktopWorker()
     {
         resources.Retire(worker?.OwnedProcess); worker?.Dispose(); worker = null;

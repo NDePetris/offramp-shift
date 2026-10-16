@@ -117,7 +117,13 @@ migrates original v1/v2 layouts without replay or downtime credit.
 events authorize show/refocus. Documented read-only window-desktop checks run in
 the existing isolated worker; UI rechecks generation, foreground and expiry before
 one ordinary activation attempt. Only the nudge is positioned on the foreground
-monitor using target DPI. Wrong/unknown membership suppresses delivery; no switching
+monitor using target DPI. A new hidden HWND is prepared for nonactivating Show only
+after positive current membership and current/foreground Personal GUID checks.
+Its own desktop ID is strictly verified after Show and before focus; a missing
+hidden registration never grants activation. Already-open windows stay strict.
+Placement measures content plus native frame, not the collapsed hidden Window.
+Home retains one identity-free in-memory reminder stage for diagnosis.
+Wrong/unknown membership suppresses activation; no switching
 or virtual-desktop movement API is added. Continued visibility tolerates its own
 foreground transition while requiring fresh healthy Personal/session evidence.
 Context/storage/observation changes close it without granting extra time. User

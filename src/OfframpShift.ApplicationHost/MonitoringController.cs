@@ -22,7 +22,7 @@ public sealed class MonitoringController
             var mailbox = Volatile.Read(ref reminders);
             if (stopping || stopped.Task.IsCompleted || commandInProgress || commands.Count != 0)
             { mailbox?.Invalidate(); return false; }
-            return mailbox?.TryTake(Environment.TickCount64, out value) == true;
+            return mailbox?.TryTakePublished(Environment.TickCount64, Volatile.Read(ref latest), out value) == true;
         }
     }
 

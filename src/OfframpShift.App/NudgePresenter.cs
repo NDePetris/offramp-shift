@@ -16,13 +16,18 @@ internal sealed class NudgePresenter(Func<HostCommand, Task<HostCommandResult>> 
     Func<HostSnapshot?> latest, Action<string> reportFailure, INudgePlatform platform)
 {
     internal NudgeWindow? Window { get; private set; }
+    internal string Status { get; private set; } = "No interactive reminder consumed yet.";
     private bool presenting, submitting;
     private long lastSequence;
     private Guid lastEpoch;
     internal void Refresh(bool stopped = false)
     {
         var snapshot = latest();
-        if (stopped || snapshot is null || !VisibleEligible(snapshot)) Close();
+        if (stopped || snapshot is null || !VisibleEligible(snapshot))
+        {
+            if (Window is not null) Status = "Window closed: monitoring, context, intervention or freshness no longer eligible.";
+            Close();
+        }
         else Window?.ApplyBrand();
     }
     private static bool VisibleEligible(HostSnapshot value) => value.CanKeepNudgeOpen &&
@@ -38,7 +43,9 @@ internal sealed class NudgePresenter(Func<HostCommand, Task<HostCommandResult>> 
         presenting = true;
         try
         {
-            if (!Eligible(value)) return;
+            Status = "Committed reminder consumed.";
+            if (!Eligible(value)) { Status = "Consumed reminder suppressed: context, generation, foreground or freshness changed."; return; }
+            var firstShow = Window is null;
             if (Window is null)
             {
                 NudgeWindow? candidate = null;
@@ -48,16 +55,24 @@ internal sealed class NudgePresenter(Func<HostCommand, Task<HostCommandResult>> 
             }
             var target = Window;
             var handle = new WindowInteropHelper(target).EnsureHandle();
-            var result = await execute(new(HostCommandKind.AuthorizeNudge) { Reminder = value, NudgeWindow = handle });
-            if (!result.Succeeded || Window != target || !Eligible(value) || !platform.Place(target, value.ForegroundWindow))
-            { Close(); return; }
+            var result = await execute(new(HostCommandKind.AuthorizeNudge) { Reminder = value, NudgeWindow = handle, PrepareOnly = firstShow });
+            if (!result.Succeeded) { Status = "Authorization rejected before show: " + result.Message; Close(); return; }
+            if (Window != target || !Eligible(value)) { Status = "Authorized reminder expired or changed before placement."; Close(); return; }
+            if (!platform.Place(target, value.ForegroundWindow)) { Status = "Positioning failed: foreground monitor, DPI or layout unavailable."; Close(); return; }
             // Showing must not activate implicitly. Recheck after layout/display changes.
             platform.Show(target);
-            if (Window != target || !Eligible(value)) { Close(); return; }
-            platform.Activate(target); // Best effort, exactly once. Never retry or toggle topmost.
+            if (Window != target || !Eligible(value)) { Status = "Reminder changed during nonactivating show."; Close(); return; }
+            if (firstShow)
+            {
+                result = await execute(new(HostCommandKind.AuthorizeNudge) { Reminder = value, NudgeWindow = handle });
+                if (!result.Succeeded) { Status = "Authorization rejected after show: " + result.Message; Close(); return; }
+            }
+            if (Window != target || !Eligible(value)) { Status = "Reminder changed before focus request."; Close(); return; }
+            Status = platform.Activate(target) ? "Window shown; foreground request accepted." :
+                "Window shown; Windows denied focus. Use its taskbar button or wait for the next eligible reminder.";
         }
         catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception or System.Runtime.InteropServices.ExternalException)
-        { Close(); reportFailure("The nudge could not be presented safely. " + "Wait for the next eligible reminder."); }
+        { Status = "Presentation failed: window or native operation unavailable."; Close(); reportFailure(Status + " Wait for the next eligible reminder."); }
         finally { presenting = false; }
     }
     private bool Eligible(ReminderEvent value) => value.Style == ReminderStyle.InteractiveWindow &&

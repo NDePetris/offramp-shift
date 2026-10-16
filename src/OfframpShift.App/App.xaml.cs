@@ -60,6 +60,8 @@ public partial class ShiftApplication : Application
         }
         window.Apply(value, controller.Completion.IsCompleted); tray?.Apply(value, window.Model);
         nudges?.Refresh(controller.Completion.IsCompleted || exiting);
+        window.NudgeStatus.Visibility = value.Settings.ReminderStyle == ReminderStyle.InteractiveWindow ? Visibility.Visible : Visibility.Collapsed;
+        window.NudgeStatus.Text = "Last reminder: " + value.ReminderStatus + " " + nudges?.Status;
         if (controller.TryTakeReminder(out var reminder) && actionsInFlight == 0 && Environment.TickCount64 - value.PublishedTick is >= 0 and <= 2_000)
         {
             if (reminder?.Style == ReminderStyle.InteractiveWindow) _ = nudges?.PresentAsync(reminder);

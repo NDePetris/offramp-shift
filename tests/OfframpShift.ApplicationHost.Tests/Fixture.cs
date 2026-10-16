@@ -31,9 +31,16 @@ internal sealed class FakeSource(Fixture fixture) : IObservationSource
     public Capability Input { get; set; } = Capability.Available;
     public ApplicationIdentity Application { get; set; } = new("opaque-test", true);
     public bool NudgeDesktopValid { get; set; } = true;
+    public NudgeDesktopCheck? NudgeCheckOverride { get; set; }
+    public List<bool> NudgeCheckPhases { get; } = [];
     public Action? OnNudgeCheck { get; set; }
     public bool CheckNudgeDesktop(nint nudge, nint foreground, Guid personal)
     { OnNudgeCheck?.Invoke(); return NudgeDesktopValid && nudge != 0 && foreground == 1 && (Current ?? fixture.Personal) == personal; }
+    public NudgeDesktopCheck CheckNudgePresentation(nint nudge, nint foreground, Guid personal, bool prepareOnly)
+    {
+        NudgeCheckPhases.Add(prepareOnly);
+        return NudgeCheckOverride ?? (CheckNudgeDesktop(nudge, foreground, personal) ? NudgeDesktopCheck.Allowed : NudgeDesktopCheck.QueryUnavailable);
+    }
     private readonly Queue<NativeSignal> queue = new();
     private long sequence;
     public void Tick() => Emit(SignalKind.Tick);

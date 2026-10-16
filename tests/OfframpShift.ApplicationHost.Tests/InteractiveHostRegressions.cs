@@ -21,6 +21,40 @@ internal static class InteractiveHostRegressions
     private static HostCommand Authorize(ReminderEvent value) => new(HostCommandKind.AuthorizeNudge) { Reminder = value, NudgeWindow = 2 };
     internal static void Run()
     {
+        Test("interactive mailbox waits for matching publication without consuming or renewing the event", () =>
+        {
+            using var f = new Fixture(); using var app = Interactive(f); var current = app.Snapshot();
+            var old = current with { State = current.State! with { EffectSequence = 0 }, CanKeepNudgeOpen = false };
+            var now = Environment.TickCount64;
+            Check(!app.Reminders.TryTakePublished(now, old, out _));
+            Check(app.Reminders.TryTakePublished(now, current, out var value) && value is not null);
+            Check(!app.Reminders.TryTakePublished(now, current, out _));
+        });
+        Test("publication waiting never replays an expired interactive event", () =>
+        {
+            using var f = new Fixture(); using var app = Interactive(f); var current = app.Snapshot();
+            var now = Environment.TickCount64;
+            Check(!app.Reminders.TryTakePublished(now, null, out _));
+            Check(!app.Reminders.TryTakePublished(now + 2_001, current, out _));
+            Check(!app.Reminders.TryTakePublished(now, current, out _));
+        });
+        Test("preparation retains original committed event for strict post-show authorization", () =>
+        {
+            using var f = new Fixture(); using var app = Interactive(f); var value = Take(app);
+            Check(app.Snapshot().ReminderStatus.Contains("Committed nudge offered"));
+            Check(app.Execute(Authorize(value) with { PrepareOnly = true }).Succeeded);
+            Check(app.Execute(Authorize(value)).Succeeded);
+            Check(f.Source!.NudgeCheckPhases.SequenceEqual(new[] { true, false }));
+            Check(!app.Execute(Authorize(value)).Succeeded);
+        });
+        Test("worker rejection category reaches authorization result without identities", () =>
+        {
+            using var f = new Fixture(); using var app = Interactive(f); var value = Take(app);
+            f.Source!.NudgeCheckOverride = NudgeDesktopCheck.CandidateIdentityUnavailable;
+            var result = app.Execute(Authorize(value));
+            Check(!result.Succeeded && result.Message == "Desktop check: CandidateIdentityUnavailable.");
+            Check(!result.Message.Contains(f.Personal.ToString(), StringComparison.Ordinal));
+        });
         Test("v2 on/off strictly migrates to notification/off without writing or enabling interactive", () =>
         {
             using var f = new Fixture(); f.Enable(); var path = Path.Combine(f.PathName, "windows-settings.json");

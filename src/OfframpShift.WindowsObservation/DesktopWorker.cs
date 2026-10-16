@@ -75,18 +75,21 @@ internal sealed class DesktopWorker : IDisposable
         finally { owned.Dispose(); process = null; failed = true; }
     }
 
-    public bool CheckNudge(nint window, nint foreground, Guid personal)
+    public bool CheckNudge(nint window, nint foreground, Guid personal) => CheckNudgeStatus(window, foreground, personal) == NudgeDesktopCheck.Allowed;
+
+    public NudgeDesktopCheck CheckNudgeStatus(nint window, nint foreground, Guid personal, bool prepareOnly = false)
     {
-        if (failed || process is null || window == 0 || foreground == 0 || personal == Guid.Empty) return false;
+        if (failed || process is null || window == 0 || foreground == 0 || personal == Guid.Empty) return NudgeDesktopCheck.WorkerUnavailable;
         try
         {
-            process.StandardInput.WriteLine(FormattableString.Invariant($"nudge {window.ToInt64()} {foreground.ToInt64()} {personal:D}"));
+            var operation = prepareOnly ? "prepare-nudge" : "nudge";
+            process.StandardInput.WriteLine(FormattableString.Invariant($"{operation} {window.ToInt64()} {foreground.ToInt64()} {personal:D}"));
             process.StandardInput.Flush();
             var line = process.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromMilliseconds(2_000)).GetAwaiter().GetResult();
-            if (line is not ("true" or "false")) throw new InvalidOperationException();
-            return line == "true";
+            if (!Enum.TryParse<NudgeDesktopCheck>(line, out var result) || !Enum.IsDefined(result) || line != result.ToString()) throw new InvalidOperationException();
+            return result;
         }
-        catch { failed = true; Dispose(); return false; }
+        catch { failed = true; Dispose(); return NudgeDesktopCheck.WorkerUnavailable; }
     }
 
     // Private stdin protocol only reads observation/window membership; no mutation operation.
@@ -99,11 +102,12 @@ internal sealed class DesktopWorker : IDisposable
             while (Console.ReadLine() is { } request)
             {
                 if (request == "read") Console.WriteLine(JsonSerializer.Serialize(reader.Read()));
-                else if (request.Length <= 160 && request.Split(' ') is ["nudge", var window, var foreground, var desktop] &&
+                else if (request.Length <= 160 && request.Split(' ') is [var operation, var window, var foreground, var desktop] &&
+                    operation is "nudge" or "prepare-nudge" &&
                     long.TryParse(window, NumberStyles.None, CultureInfo.InvariantCulture, out var hwnd) && hwnd > 0 &&
                     long.TryParse(foreground, NumberStyles.None, CultureInfo.InvariantCulture, out var active) && active > 0 &&
                     Guid.TryParseExact(desktop, "D", out var personal) && personal != Guid.Empty)
-                    Console.WriteLine(WindowDesktopMembership.Check(reader, (nint)hwnd, (nint)active, personal) ? "true" : "false");
+                    Console.WriteLine(WindowDesktopMembership.Check(reader, (nint)hwnd, (nint)active, personal, operation == "prepare-nudge"));
                 else return 2;
             }
             return 0;
@@ -117,26 +121,40 @@ internal sealed class DesktopWorker : IDisposable
 [SupportedOSPlatform("windows")]
 internal static class WindowDesktopMembership
 {
-    internal static bool Check(DesktopComReader reader, nint window, nint foreground, Guid personal)
+    internal static NudgeDesktopCheck Check(DesktopComReader reader, nint window, nint foreground, Guid personal, bool prepareOnly)
     {
         IWindowDesktopMembership? membership = null;
         try
         {
-            if (Native.GetForegroundWindow() != foreground || Native.Session() != OfframpShift.Core.SessionState.Active) return false;
+            if (Native.GetForegroundWindow() != foreground) return NudgeDesktopCheck.ForegroundChanged;
+            if (Native.Session() != OfframpShift.Core.SessionState.Active) return NudgeDesktopCheck.SessionUnavailable;
             var before = reader.Read();
-            if (before.Current != personal) return false;
+            if (before.Current != personal) return NudgeDesktopCheck.PersonalDesktopChanged;
             membership = (IWindowDesktopMembership)Activator.CreateInstance(Type.GetTypeFromCLSID(new("AA509086-5CA9-4C25-8F95-589D3C07B48A"), true)!)!;
             Marshal.ThrowExceptionForHR(membership.IsWindowOnCurrentVirtualDesktop(window, out var onCurrent));
-            Marshal.ThrowExceptionForHR(membership.GetWindowDesktopId(window, out var windowDesktop));
-            Marshal.ThrowExceptionForHR(membership.GetWindowDesktopId(foreground, out var foregroundDesktop));
+            var identityCode = membership.GetWindowDesktopId(window, out var windowDesktop);
+            // Windows may not register a new hidden HWND until its first Show.
+            // This exception authorizes only a nonactivating first Show, never focus.
+            var candidate = CheckCandidate(onCurrent, identityCode, windowDesktop, personal, prepareOnly, IsWindowVisible(window));
+            if (candidate != NudgeDesktopCheck.Allowed) return candidate;
+            if (membership.GetWindowDesktopId(foreground, out var foregroundDesktop) < 0) return NudgeDesktopCheck.ForegroundIdentityUnavailable;
+            if (foregroundDesktop != personal) return NudgeDesktopCheck.ForegroundWrongDesktop;
             var after = reader.Read();
-            return onCurrent && windowDesktop == personal && foregroundDesktop == personal && after.Current == personal &&
-                before.ShellProcess == after.ShellProcess && Native.GetForegroundWindow() == foreground &&
-                Native.Session() == OfframpShift.Core.SessionState.Active;
+            if (after.Current != personal || before.ShellProcess != after.ShellProcess) return NudgeDesktopCheck.PersonalDesktopChanged;
+            if (Native.GetForegroundWindow() != foreground) return NudgeDesktopCheck.ForegroundChanged;
+            return Native.Session() == OfframpShift.Core.SessionState.Active ? NudgeDesktopCheck.Allowed : NudgeDesktopCheck.SessionUnavailable;
         }
-        catch { return false; }
+        catch { return NudgeDesktopCheck.QueryUnavailable; }
         finally { if (membership is not null) Marshal.ReleaseComObject(membership); }
     }
+    internal static NudgeDesktopCheck CheckCandidate(bool onCurrent, int identityCode, Guid desktop, Guid personal, bool prepareOnly, bool visible)
+    {
+        if (!onCurrent) return NudgeDesktopCheck.CandidateNotCurrent;
+        if (identityCode < 0)
+            return prepareOnly && !visible && identityCode == unchecked((int)0x8002802B) ? NudgeDesktopCheck.Allowed : NudgeDesktopCheck.CandidateIdentityUnavailable;
+        return desktop == personal && personal != Guid.Empty ? NudgeDesktopCheck.Allowed : NudgeDesktopCheck.CandidateWrongDesktop;
+    }
+    [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool IsWindowVisible(nint window);
 }
 
 [ComImport, Guid("A5CD92FF-29BE-454C-8D04-D82879FB3F1B"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]

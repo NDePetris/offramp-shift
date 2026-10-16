@@ -157,8 +157,8 @@ internal sealed class MonitoringApplication : IDisposable
                     runtime?.RefreshInterventionConfiguration(); break;
                 case HostCommandKind.AuthorizeNudge:
                     Require(CanAccount && !providerFault && settings.ReminderStyle == ReminderStyle.InteractiveWindow &&
-                        command.Reminder is { } reminder && runtime?.AuthorizeNudge(reminder, command.NudgeWindow) == true,
-                        "The reminder is no longer eligible.");
+                        command.Reminder is not null && runtime is not null, "Monitoring or reminder style is no longer eligible.");
+                    Require(runtime!.AuthorizeNudge(command.Reminder!, command.NudgeWindow, command.PrepareOnly), runtime.NudgeAuthorizationFailure);
                     break;
                 case HostCommandKind.DeferInteractive:
                     Require(CanAccount && !providerFault && settings.ReminderStyle == ReminderStyle.InteractiveWindow &&
@@ -262,7 +262,8 @@ internal sealed class MonitoringApplication : IDisposable
                 (!settings.Consent || settings.Build != build), DesktopObserved,
             Assignment(settings.Personal), Assignment(settings.Work), settings.Consent && settings.Build != build,
             CanAccount && !providerFault && settings.ReminderStyle == ReminderStyle.InteractiveWindow && runtime?.CanKeepNudgeOpen == true,
-            runtime?.ReminderGeneration ?? 0, runtime?.ReminderEpoch ?? Guid.Empty);
+            runtime?.ReminderGeneration ?? 0, runtime?.ReminderEpoch ?? Guid.Empty,
+            runtime?.ReminderStatus ?? "Observation unavailable; no reminder delivery.");
     }
 
     private static string StorageDetail(PersistenceStatus status, StorageFailure? failure) => status switch

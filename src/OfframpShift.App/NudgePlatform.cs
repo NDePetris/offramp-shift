@@ -23,11 +23,26 @@ internal sealed class NudgePlatform : INudgePlatform
         if (info.Work.Right - info.Work.Left < window.MinWidth * scale) return false;
         window.Width = Math.Min(400, (info.Work.Right - info.Work.Left) / scale);
         window.MaxHeight = (info.Work.Bottom - info.Work.Top) / scale;
-        window.Measure(new(window.Width, window.MaxHeight));
+        var frame = new Rectangle();
+        if (!AdjustWindowRectExForDpi(ref frame, (uint)GetWindowLong(hwnd, -16), false, (uint)GetWindowLong(hwnd, -20), dpi)) return false;
+        var frameWidth = frame.Right - frame.Left;
+        var frameHeight = frame.Bottom - frame.Top;
+        var clientWidth = window.Width - frameWidth / scale;
+        var clientHeight = window.MaxHeight - frameHeight / scale;
+        var contentHeight = MeasureContentHeight(window, clientWidth, clientHeight);
+        if (contentHeight <= 0 || !double.IsFinite(contentHeight)) return false;
         var width = (int)Math.Ceiling(window.Width * scale);
-        var height = (int)Math.Ceiling(window.DesiredSize.Height * scale);
+        var height = (int)Math.Ceiling(contentHeight * scale) + frameHeight;
         if (!TryCenter(info.Work.Left, info.Work.Top, info.Work.Right, info.Work.Bottom, width, height, out var area)) return false;
         return GetForegroundWindow() == foreground && SetWindowPos(hwnd, 0, area.X, area.Y, area.Width, area.Height, 0x0014);
+    }
+    internal static double MeasureContentHeight(NudgeWindow window, double width, double height)
+    {
+        if (width <= 0 || height <= 0 || window.Content is not FrameworkElement content) return 0;
+        // A never-shown Window is collapsed: Window.Measure returns DesiredSize=0.
+        // Its visible content can be measured without Show or activation.
+        content.Measure(new(width, height));
+        return content.DesiredSize.Height;
     }
     internal static bool TryCenter(int left, int top, int right, int bottom, int width, int height,
         out (int X, int Y, int Width, int Height) area)
@@ -48,6 +63,8 @@ internal sealed class NudgePlatform : INudgePlatform
     [DllImport("user32.dll")] private static extern nint MonitorFromWindow(nint window, uint flags);
     [DllImport("user32.dll", EntryPoint = "GetMonitorInfoW")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool GetMonitorInfo(nint monitor, ref MonitorInfo info);
     [DllImport("user32.dll")] private static extern uint GetDpiForWindow(nint window);
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongW")] private static extern int GetWindowLong(nint window, int index);
+    [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool AdjustWindowRectExForDpi(ref Rectangle rect, uint style, [MarshalAs(UnmanagedType.Bool)] bool menu, uint extendedStyle, uint dpi);
     [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool SetWindowPos(nint window, nint after, int x, int y, int width, int height, uint flags);
     [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool SetForegroundWindow(nint window);
 }

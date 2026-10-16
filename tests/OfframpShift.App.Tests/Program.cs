@@ -32,6 +32,11 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        if (args is ["--inspect-hidden-nudge"] or ["--inspect-nudge-registration"])
+        {
+            _ = new ShiftApplication();
+            return HiddenNudgeDiagnostic.Run(args[0] == "--inspect-nudge-registration");
+        }
         if (args is ["--instance-client", var suffix])
         { using var client = new SingleInstance(suffix); return !client.IsOwner && client.Activate() ? 0 : 1; }
         Test("tray projects saved allowance and qualifying break in every observed context", () =>

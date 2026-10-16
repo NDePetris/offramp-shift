@@ -3,6 +3,12 @@ using OfframpShift.Core;
 namespace WindowsObservation;
 
 public enum Capability { Available, Unavailable, Unsupported }
+public enum NudgeDesktopCheck
+{
+    Allowed, ForegroundChanged, SessionUnavailable, PersonalDesktopChanged, CandidateNotCurrent,
+    CandidateIdentityUnavailable, CandidateWrongDesktop, ForegroundIdentityUnavailable,
+    ForegroundWrongDesktop, QueryUnavailable, WorkerUnavailable
+}
 public enum ForegroundFailure
 {
     None, NoWindowOrProcess, ProcessQueryUnavailable, ProcessTimesUnavailable,

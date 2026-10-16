@@ -10,7 +10,8 @@ public sealed record HostSnapshot(long Sequence, long PublishedTick, Persistence
     bool ObservationAllowed = false, bool CanConsent = false, bool CanAssign = false,
     AssignmentStatus PersonalAssignment = AssignmentStatus.Unavailable,
     AssignmentStatus WorkAssignment = AssignmentStatus.Unavailable, bool ConsentNeedsReview = false,
-    bool CanKeepNudgeOpen = false, long ReminderGeneration = 0, Guid ReminderEpoch = default);
+    bool CanKeepNudgeOpen = false, long ReminderGeneration = 0, Guid ReminderEpoch = default,
+    string ReminderStatus = "No committed nudge event yet.");
 
 public enum AssignmentStatus { Unassigned, Valid, Unavailable, Missing, Invalid }
 
@@ -39,4 +40,5 @@ public sealed record HostCommand(HostCommandKind Kind)
     public long DurationMs { get; init; }
     public ReminderEvent? Reminder { get; init; }
     public nint NudgeWindow { get; init; }
+    public bool PrepareOnly { get; init; }
 }
