@@ -95,7 +95,10 @@ public partial class ShiftApplication : Application
         try
         {
             var result = await controller.ExecuteAsync(command);
-            window?.ReportAction(result.Message.Length == 0 ? "Saved action completed." : result.Message);
+            // NudgePresenter reports actionable deferral failures once, after
+            // distinguishing a failed save from automatic context closure.
+            if (command.Kind != HostCommandKind.DeferInteractive || result.Succeeded)
+                window?.ReportAction(result.Message.Length == 0 ? "Saved action completed." : result.Message);
             Refresh(); return result;
         }
         finally { actionsInFlight--; }

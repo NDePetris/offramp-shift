@@ -284,7 +284,14 @@ internal static class Program
                 else { Check(!worker.WaitForExit(200)); worker.Kill(); Check(worker.WaitForExit(3_000)); }
             }
         });
-        var app = new ShiftApplication();
+        // Async Closing tests pump messages. A plain resource-only Application
+        // cannot enter production monitoring, tray creation or user storage.
+#pragma warning disable WPF0001
+        var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown, ThemeMode = ThemeMode.System };
+#pragma warning restore WPF0001
+        var xaml = System.Xml.Linq.XDocument.Load(Path.GetFullPath("src/OfframpShift.App/App.xaml"));
+        var resources = xaml.Descendants().First(x => x.Name.LocalName == "ResourceDictionary");
+        app.Resources = (ResourceDictionary)System.Windows.Markup.XamlReader.Parse(resources.ToString());
         Test("canonical symbols and all seven native icon sizes decode from packaged resources", () =>
         {
             foreach (var dark in new[] { false, true })
@@ -360,7 +367,9 @@ internal static class Program
             Directory.CreateDirectory(output);
             foreach (var theme in new[] { AppTheme.Light, AppTheme.Dark })
             {
-                app.ApplyTheme(theme);
+#pragma warning disable WPF0001
+                app.ThemeMode = theme == AppTheme.Dark ? ThemeMode.Dark : ThemeMode.Light;
+#pragma warning restore WPF0001
                 {
                     var nudge = new NudgeWindow(_ => Task.FromResult(HostCommandResult.Success()));
                     var content = (FrameworkElement)nudge.Content;

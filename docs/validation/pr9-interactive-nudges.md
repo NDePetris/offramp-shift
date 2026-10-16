@@ -5,7 +5,11 @@ appeared; legacy notifications still worked, including their expected grace.
 At `56f23ce`, the owner's primary monitor **PASSED** and secondary portrait/150%
 monitor **FAILED**. The third correction below reproduces and addresses the
 production lifecycle rejection; real-host nonactivating secondary presentation
-and strict confirmation now pass. Full owner focus/extension retest remains pending.
+and strict confirmation now pass. The owner subsequently tested `729ea52`:
+secondary portrait/150% presentation, foreground activation and Add 1 minute
+**PASS**; no unexpected virtual-desktop switching reported. Primary is
+3440×1440 landscape/100%; secondary is 4K portrait/150%.
+The remaining owner-reported failure is dismissal via X, addressed below.
 Fullscreen and Narrator acceptance remain **NOT RUN** by the agent.
 Automated tests use synthetic evidence, disposable SQLite, owned hidden HWNDs
 and fake placement/focus adapters. They do not establish live shell reliability.
@@ -382,8 +386,8 @@ leave-and-return; fresh Work/lock/unknown evidence without callbacks; session,
 desktop, power, relevant destruction, dropped signals, expiry, commands, forged/
 replayed transactions and failed strict membership. WPF tests cover asynchronous
 guard lifetime/restoration, portrait/negative-origin pixel geometry, same-window
-reuse, scoped foreground acceptance and stage diagnostics. Real focus and extension
-acceptance remain pending the five-step owner retest below.
+reuse, scoped foreground acceptance and stage diagnostics. The owner subsequently
+confirmed focus and extension acceptance on `729ea52`; those checks need not repeat.
 
 Final application regressions: **82 Core, 83 Persistence, 110 host, 42 WPF groups**
 passed with warnings as errors and SDK 10.0.401. All seven repository-prescribed
@@ -400,17 +404,67 @@ Deferred Home timer-first requirements are captured in
 [the follow-up brief](../decisions/home-timer-first-follow-up.md), recommended for
 a separate subsequent GitHub issue; PR 9 does not change Home's layout.
 
-### Short owner retest (pending)
+## Fourth correction: await durable dismissal before destroying the window
+
+The original Closing handler fire-and-forgot a 60,000 ms request without cancelling
+Closing. A delayed-result WPF regression **FAILS on the original implementation**:
+the owned HWND is destroyed while authorization/commit is still pending. The
+working Add 1 minute button kept its HWND until the result instead. Host commands
+are serialized on a separate thread, so this was a real ordering race.
+
+A controlled host regression injects owned-window destruction during the fresh
+`CanDefer` read. With healthy Personal evidence and unchanged durable state, the
+before/after observation-generation comparison rejects with the exact reported
+message, `Extra time is unavailable in the current context.` Removing that
+injected interruption allows the same one-minute command. This identifies a
+concrete causal path, not a live trace of the owner's individual rejection:
+that generic message does not record which internal eligibility clause fired.
+No claim is made that desktop membership, a timeout or DPI caused this dismissal.
+
+Ordinary Closing is now cancelled synchronously. X, Escape and Windows SC_CLOSE
+(Alt+F4) reserve one shared Add 1 minute submission, yield so Closing can unwind,
+then await the existing authorization and durable command. Buttons are disabled
+while pending. Success closes with a command-completed reason; failure restores
+controls and accessible inline feedback. A synchronous result cannot recursively
+close a window inside Closing. Rapid dismissal, or closing during Add 1/5 minutes,
+cannot overlap commands. Context closure and shutdown bypass dismissal and grant
+no time; queued submissions are abandoned before dispatch. Already-dispatched
+commands remain governed by the existing host's fresh Personal checks and durable
+outcome; UI closure does not cancel or roll back a committed transaction.
+
+The presenter reports genuine eligible failures once through the existing local
+feedback path. Obsolete failures after genuine context closure/shutdown are
+suppressed. Storage failures remain explicit even if storage safety closed the
+window; the existing exact pending-save recovery is unchanged. No Core, settings,
+checkpoint, native notification, presentation, DPI or desktop-safety logic changes.
+
+Focused tests use delayed, failed, faulted and immediate tasks, actual cancellable
+Closing on owned hidden HWNDs, routed Escape and an owned SC_CLOSE message. They
+check retained HWNDs, duplicate suppression, successful single-command closure,
+actionable failure/retry, automatic closure before dispatch and during submission,
+Add 1/5 minutes and feedback suppression, including explicit storage errors after
+safety closure. Tests use a plain resource-only Application while pumping real WPF
+Dispatcher continuations, so production monitoring startup cannot run. These
+are automated lifecycle/synthetic-host checks, not a live dismissal acceptance.
+
+Application regression results for this correction: **82 Core, 83 Persistence,
+111 host and 64 WPF groups PASS**, SDK 10.0.401 with warnings as errors. The
+original delayed-dismissal test failed before the correction. All seven prescribed
+repository checks pass; final pushed-head CI is recorded on PR #18. Live X/Escape
+dismissal and the following counted-Personal repeat remain owner retest pending.
+
+### Short owner dismissal retest (pending)
 
 Exit the currently running app through the tray and launch the updated build;
 record tested commit/build, then:
 
 1. Exit the running Shift instance and launch the updated PR 9 build.
 2. On the secondary portrait monitor at 150%, exhaust a one-minute Personal allowance in **Interactive window** mode.
-3. Confirm the nudge remains visible and takes focus.
-4. Confirm presentation does not change virtual desktops. Any such switch is FAIL.
-5. Click **Add 1 minute** and confirm the extension works through counted Personal use.
+3. Click X.
+4. Confirm the nudge closes without an error notification.
+5. Confirm another nudge appears after one additional minute of counted Personal use.
+6. Repeat using Escape to confirm equivalent behavior.
 
-Restore temporary duration settings afterward. If unsuccessful, report the single
-Home Last reminder line plus monitoring state. Do not widen compatibility or bypass
+Restore temporary duration settings afterward. If unsuccessful, report the inline
+failure/tray details plus monitoring state. Do not widen compatibility or bypass
 checks; PR 10 and issue #17 remain excluded.

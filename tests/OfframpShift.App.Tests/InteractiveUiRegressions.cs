@@ -7,6 +7,22 @@ using OfframpShift.Core;
 
 internal static class InteractiveUiRegressions
 {
+    // Program uses a plain resource-only Application: pumping cannot start monitoring.
+    private sealed class UiContinuations : IDisposable
+    {
+        private readonly SynchronizationContext? previous = SynchronizationContext.Current;
+        internal UiContinuations() => SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext());
+        internal void Drain()
+        {
+            var frame = new System.Windows.Threading.DispatcherFrame();
+            System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background,
+                () => frame.Continue = false);
+            System.Windows.Threading.Dispatcher.PushFrame(frame);
+        }
+        public void Dispose() => SynchronizationContext.SetSynchronizationContext(previous);
+    }
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern nint SendMessageW(nint window, uint message, nint wParam, nint lParam);
     private sealed class Platform : INudgePlatform
     {
         public nint ForegroundWindow { get; set; } = 1;
@@ -108,20 +124,154 @@ internal static class InteractiveUiRegressions
             Check(durations.SequenceEqual(new[] { 300_000L }) && window.Result.Text.Contains("not saved") && window.OneMinute.IsEnabled);
             window.CloseAutomatically(); Check(durations.Count == 1);
         });
-        test("user closure grants one minute and extension submission cannot duplicate on closure", () =>
+        test("dismissal retains the authorized HWND until delayed durable confirmation", () =>
         {
+            using var ui = new UiContinuations();
             var durations = new List<long>();
-            var window = new NudgeWindow(duration => { durations.Add(duration); return Task.FromResult(HostCommandResult.Success()); });
-            new System.Windows.Interop.WindowInteropHelper(window).EnsureHandle();
-            window.Close(); Check(durations.SequenceEqual(new[] { 60_000L }));
             var pending = new TaskCompletionSource<HostCommandResult>();
-            var second = new NudgeWindow(duration => { durations.Add(duration); return pending.Task; });
-            new System.Windows.Interop.WindowInteropHelper(second).EnsureHandle();
-            var request = second.Submit(300_000);
-            second.Submit(60_000).GetAwaiter().GetResult();
-            Check(!second.OneMinute.IsEnabled && !second.FiveMinutes.IsEnabled);
-            second.Close(); Check(durations.SequenceEqual(new[] { 60_000L, 300_000L }));
-            pending.SetResult(HostCommandResult.Success()); request.GetAwaiter().GetResult();
+            var window = new NudgeWindow(duration => { durations.Add(duration); return pending.Task; });
+            var native = new System.Windows.Interop.WindowInteropHelper(window);
+            var handle = native.EnsureHandle(); var closed = false;
+            window.Closed += (_, _) => closed = true;
+            window.Close(); ui.Drain();
+            try
+            {
+                Check(durations.SequenceEqual(new[] { 60_000L }));
+                Check(!closed && native.Handle == handle);
+                window.Close(); ui.Drain();
+                Check(durations.Count == 1 && !window.OneMinute.IsEnabled && !window.FiveMinutes.IsEnabled);
+                pending.SetResult(HostCommandResult.Success()); ui.Drain();
+                Check(closed && durations.Count == 1);
+            }
+            finally { window.CloseAutomatically(); }
+        });
+        foreach (var action in new[] { "X", "Escape", "Alt+F4" })
+            foreach (var outcome in new[] { "success", "failure", "exception", "immediate" })
+                test($"{action} uses one cancellable dismissal through {outcome} completion", () =>
+                {
+                    using var ui = new UiContinuations();
+                    var pending = new TaskCompletionSource<HostCommandResult>(); var durations = new List<long>();
+                    var window = new NudgeWindow(duration =>
+                    {
+                        durations.Add(duration);
+                        return outcome == "immediate" ? Task.FromResult(HostCommandResult.Success()) : pending.Task;
+                    });
+                    var native = new System.Windows.Interop.WindowInteropHelper(window); native.EnsureHandle();
+                    var closed = false; window.Closed += (_, _) => closed = true;
+                    void Dismiss()
+                    {
+                        if (action == "Escape")
+                            window.RaiseEvent(new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice,
+                                System.Windows.Interop.HwndSource.FromHwnd(native.Handle), 0, System.Windows.Input.Key.Escape)
+                            { RoutedEvent = System.Windows.Input.Keyboard.PreviewKeyDownEvent });
+                        // Alt+F4 is translated by Windows to SC_CLOSE. Deliver that
+                        // same message to an owned hidden HWND; no global keys/focus.
+                        else if (action == "Alt+F4") SendMessageW(native.Handle, 0x112, 0xF060, 0);
+                        else window.Close();
+                    }
+                    try
+                    {
+                        Dismiss(); Dismiss();
+                        Check(!closed && !window.OneMinute.IsEnabled);
+                        ui.Drain(); Check(durations.SequenceEqual(new[] { 60_000L }));
+                        if (outcome == "immediate") { Check(closed); return; }
+                        Dismiss(); ui.Drain(); Check(!closed && durations.Count == 1);
+                        if (outcome == "exception") pending.SetException(new InvalidOperationException("Injected command failure"));
+                        else pending.SetResult(outcome == "success" ? HostCommandResult.Success() : HostCommandResult.Failure("Retry save."));
+                        ui.Drain();
+                        Check(closed == (outcome == "success"));
+                        if (!closed)
+                        {
+                            Check(native.Handle != 0 && window.OneMinute.IsEnabled && window.FiveMinutes.IsEnabled && window.Result.Text.Contains("not saved"));
+                            window.Submit(60_000).GetAwaiter().GetResult(); Check(durations.Count == 2);
+                        }
+                        else Check(durations.Count == 1);
+                    }
+                    finally { window.CloseAutomatically(); }
+                });
+        foreach (var duration in new[] { 60_000L, 300_000L })
+            test($"close during pending Add {duration} cannot close early or submit another command", () =>
+            {
+                using var ui = new UiContinuations(); var pending = new TaskCompletionSource<HostCommandResult>();
+                var durations = new List<long>();
+                var window = new NudgeWindow(value => { durations.Add(value); return pending.Task; });
+                new System.Windows.Interop.WindowInteropHelper(window).EnsureHandle();
+                var closed = false; window.Closed += (_, _) => closed = true;
+                (duration == 60_000 ? window.OneMinute : window.FiveMinutes).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                window.Close(); window.Close(); ui.Drain();
+                Check(!closed && durations.SequenceEqual(new[] { duration }));
+                pending.SetResult(HostCommandResult.Success()); ui.Drain();
+                Check(closed && durations.Count == 1);
+            });
+        test("automatic closure cancels a queued dismissal without issuing extra time", () =>
+        {
+            using var ui = new UiContinuations(); var requests = 0;
+            var window = new NudgeWindow(_ => { requests++; return Task.FromResult(HostCommandResult.Success()); });
+            new System.Windows.Interop.WindowInteropHelper(window).EnsureHandle();
+            var closed = false; window.Closed += (_, _) => closed = true;
+            window.Close(); window.CloseAutomatically(); window.CloseAutomatically(); ui.Drain();
+            Check(closed && requests == 0);
+            window.Submit(60_000).GetAwaiter().GetResult(); Check(requests == 0);
+        });
+        foreach (var invalidation in new[] { "Work", "pause", "lock", "exit" })
+            test("automatic " + invalidation + " closure during dismissal suppresses obsolete failure feedback", () =>
+            {
+                using var ui = new UiContinuations(); var value = Eligible();
+                var pending = new TaskCompletionSource<HostCommandResult>(); var failures = new List<string>(); var commands = new List<HostCommand>();
+                var presenter = new NudgePresenter(command =>
+                {
+                    commands.Add(command);
+                    return command.Kind == HostCommandKind.DeferInteractive ? pending.Task : Task.FromResult(Accept(command, ref value));
+                }, () => value, failures.Add, new Platform());
+                presenter.PresentAsync(Event(value)).GetAwaiter().GetResult();
+                var window = presenter.Window!; window.Close(); ui.Drain();
+                value = value with { CanKeepNudgeOpen = false };
+                if (invalidation == "Work") value = value with { Context = DesktopScope.Work };
+                if (invalidation == "pause") value = value with { State = value.State! with { Paused = true } };
+                presenter.Refresh(invalidation == "exit");
+                pending.SetResult(HostCommandResult.Failure("Extra time is unavailable in the current context.")); ui.Drain();
+                Check(presenter.Window is null && failures.Count == 0 && commands.Count(x => x.Kind == HostCommandKind.DeferInteractive) == 1);
+            });
+        test("eligible dismissal failure reports once and remains actionable for a successful retry", () =>
+        {
+            using var ui = new UiContinuations(); var value = Eligible(); var pending = new TaskCompletionSource<HostCommandResult>();
+            var failures = new List<string>(); var requests = 0;
+            var presenter = new NudgePresenter(command =>
+            {
+                if (command.Kind != HostCommandKind.DeferInteractive) return Task.FromResult(Accept(command, ref value));
+                requests++; Check(command.DurationMs == 60_000 && command.NudgeWindow != 0); return pending.Task;
+            }, () => value, failures.Add, new Platform());
+            presenter.PresentAsync(Event(value)).GetAwaiter().GetResult();
+            var window = presenter.Window!; window.Close(); window.Close(); ui.Drain();
+            pending.SetResult(HostCommandResult.Failure("Retry save.")); ui.Drain();
+            Check(presenter.Window == window && requests == 1 && failures.Count == 1 && window.OneMinute.IsEnabled);
+            Check(window.Result.Text.Contains("Retry save."));
+            pending = new(); window.Close(); ui.Drain();
+            pending.SetResult(HostCommandResult.Success()); ui.Drain();
+            Check(presenter.Window is null && requests == 2 && failures.Count == 1);
+        });
+        test("storage failure remains explicit after safety closes a pending dismissal", () =>
+        {
+            using var ui = new UiContinuations(); var value = Eligible();
+            var pending = new TaskCompletionSource<HostCommandResult>(); var failures = new List<string>();
+            var presenter = new NudgePresenter(command => command.Kind == HostCommandKind.DeferInteractive ? pending.Task :
+                Task.FromResult(Accept(command, ref value)), () => value, failures.Add, new Platform());
+            presenter.PresentAsync(Event(value)).GetAwaiter().GetResult();
+            presenter.Window!.Close(); ui.Drain();
+            value = value with { CanKeepNudgeOpen = false, Persistence = OfframpShift.Persistence.PersistenceStatus.PendingCommit };
+            presenter.Refresh();
+            pending.SetResult(HostCommandResult.Failure("Checkpoint pending. Retry save.")); ui.Drain();
+            Check(presenter.Window is null && failures.Count == 1 && failures[0].Contains("Retry save."));
+        });
+        test("automatic closure during an already dispatched successful request never resurrects a window", () =>
+        {
+            using var ui = new UiContinuations(); var pending = new TaskCompletionSource<HostCommandResult>(); var requests = 0;
+            var window = new NudgeWindow(_ => { requests++; return pending.Task; });
+            new System.Windows.Interop.WindowInteropHelper(window).EnsureHandle();
+            var closures = 0; window.Closed += (_, _) => closures++;
+            window.Close(); ui.Drain(); window.CloseAutomatically();
+            pending.SetResult(HostCommandResult.Success()); ui.Drain();
+            Check(closures == 1 && requests == 1);
         });
         test("physical monitor placement handles negative origins scaling-sized windows and small work areas", () =>
         {

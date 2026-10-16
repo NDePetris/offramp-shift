@@ -23,6 +23,7 @@ internal sealed class FakeSource(Fixture fixture) : IObservationSource
     public int Replacements { get; private set; }
     public bool FailRead { get; set; }
     public int Reads { get; private set; }
+    public Action? OnRead { get; set; }
     public Guid? Current { get; set; }
     public Guid[]? Topology { get; set; }
     public Capability Foreground { get; set; } = Capability.Available;
@@ -50,6 +51,7 @@ internal sealed class FakeSource(Fixture fixture) : IObservationSource
     {
         Reads++;
         if (FailRead) throw new InvalidOperationException("Injected provider failure");
+        OnRead?.Invoke();
         return new(fixture.Clock.Now, fixture.Ms, (ulong)fixture.Ms * 10_000, Window, 1, Application,
             IdleAgeMs, Session, new(Capability.Available, Current ?? fixture.Personal, Topology ?? [fixture.Personal, fixture.Work], ShellGeneration),
             Foreground, Input, Capability.Available);

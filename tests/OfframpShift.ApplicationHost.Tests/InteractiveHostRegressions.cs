@@ -27,6 +27,23 @@ internal static class InteractiveHostRegressions
     }
     internal static void Run()
     {
+        Test("destroying the nudge during fresh deferral authorization rejects without granting time", () =>
+        {
+            using var f = new Fixture(); using var app = Interactive(f);
+            Check(AuthorizeFully(app, Take(app)).Succeeded);
+            var before = app.Snapshot().State;
+            var generation = app.Snapshot().ReminderGeneration;
+            f.Source!.OnRead = () => f.Source.Emit(SignalKind.Destroyed, window: 2);
+            var rejected = app.Execute(new(HostCommandKind.DeferInteractive) { NudgeWindow = 2, DurationMs = 60_000 });
+            Check(!rejected.Succeeded && rejected.Message == "Extra time is unavailable in the current context.");
+            Check(app.Snapshot().State == before && app.Snapshot().ReminderGeneration > generation);
+            // Still healthy Personal: the injected destruction interrupts the exact
+            // before/after generation check in CanDefer, not desktop membership.
+            Check(app.Snapshot().CanKeepNudgeOpen);
+            f.Source.OnRead = null;
+            Check(app.Execute(new(HostCommandKind.DeferInteractive) { NudgeWindow = 2, DurationMs = 60_000 }).Succeeded);
+            Check(app.Snapshot().State!.SnoozeRemainingMs == 60_000);
+        });
         foreach (var fault in new[] { "health", "shell" })
             Test("published focus confirmation is revoked by subsequent " + fault + " generation", () =>
             {

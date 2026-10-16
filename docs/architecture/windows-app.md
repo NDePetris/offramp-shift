@@ -150,12 +150,18 @@ Wrong/unknown membership suppresses activation; no switching
 or virtual-desktop movement API is added. Continued visibility tolerates its own
 foreground transition while requiring fresh healthy Personal/session evidence.
 Context/storage/observation changes close it without granting extra time. User
-X/Escape/Alt+F4 request a durable one-minute deferral. Failed saves remain explicit.
+X/Escape/Alt+F4 cancel ordinary Closing and await the same durable one-minute
+deferral as Add 1 minute, retaining the HWND until confirmed success. One pending
+submission owns dismissal; automatic context closure/shutdown never submits one.
+Eligible failures leave actionable inline feedback and one local failure report;
+obsolete context-cancellation failures are suppressed, storage failures stay explicit.
 
 See [PR 9 behavior, boundaries and owner checklist](../validation/pr9-interactive-nudges.md).
 Real-host nonactivating placement/confirmation passed on the owner's portrait
 2160-pixel-wide secondary monitor at 150%, build 26200.9711/x64. Actual focus and
-extension acceptance remain **owner retest pending**; any presentation-caused desktop switch blocks
+extension acceptance were subsequently **owner-reported PASS on `729ea52`** with
+3440×1440/100% primary and 4K portrait/150% secondary. X/Escape dismissal acceptance
+remains pending the narrow retest; any presentation-caused desktop switch blocks
 acceptance. Existing NO-GO gates, read-only build restrictions and recovery remain.
 
 ## Break reminders and manual usage reset (PR 8 baseline)

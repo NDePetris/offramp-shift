@@ -1,6 +1,7 @@
 using System.Windows.Interop;
 using System.Diagnostics;
 using OfframpShift.ApplicationHost;
+using OfframpShift.Persistence;
 
 namespace OfframpShift.App;
 
@@ -112,9 +113,19 @@ internal sealed class NudgePresenter(Func<HostCommand, Task<HostCommandResult>> 
         submitting = true;
         try
         {
-            var result = await execute(new(HostCommandKind.DeferInteractive)
-            { DurationMs = duration, NudgeWindow = new WindowInteropHelper(target).Handle });
-            if (!result.Succeeded) reportFailure("Extra time was not saved. " + result.Message);
+            HostCommandResult result;
+            try
+            {
+                result = await execute(new(HostCommandKind.DeferInteractive)
+                { DurationMs = duration, NudgeWindow = new WindowInteropHelper(target).Handle });
+            }
+            catch (Exception) { result = HostCommandResult.Failure("The extra-time request could not complete. Try again."); }
+            // Refresh may already have closed this window after a genuine context
+            // change or shutdown. Do not turn that cancellation into a tray error.
+            // Storage failures still need explicit feedback even if Refresh closed it.
+            if (!result.Succeeded && latest() is { } snapshot &&
+                (snapshot.Persistence != PersistenceStatus.Ready || Window == target && target.CanReportFailure && VisibleEligible(snapshot)))
+                reportFailure("Extra time was not saved. " + result.Message);
             return result;
         }
         finally { submitting = false; }
