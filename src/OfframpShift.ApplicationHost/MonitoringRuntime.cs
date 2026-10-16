@@ -243,7 +243,9 @@ public sealed class MonitoringRuntime : IDisposable
                 var deliveryGeneration = reminderGeneration;
                 var healthGeneration = Health.Generation;
                 var before = session.State;
-                var result = session.Observe(observation, interactive);
+                // Both enabled styles share immediate exhaustion and the same
+                // Personal-only cadence. Off still accounts without delivering.
+                var result = session.Observe(observation, true);
                 if (result.Effects.Any(x => x.Kind == EffectKind.Nudge))
                     ReminderStatus = "Nudge committed; delivery eligibility checked next.";
                 if (!before.BreakCompleted) maximumIncompleteBreakMs = Math.Max(maximumIncompleteBreakMs, before.BreakProgressMs);

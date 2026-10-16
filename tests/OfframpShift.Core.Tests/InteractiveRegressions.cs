@@ -12,12 +12,19 @@ internal static class InteractiveRegressions
             var result = Personal(f, 30);
             check(result.Effects.Count(x => x.Kind == EffectKind.Nudge) == 1 && result.State.ReminderRemainingMs == 60_000);
             f.Send(10_000, DesktopScope.Work); f.Send(10_000, DesktopScope.Other);
+            PersonalInterval(f, 1_000, input: InputState.Idle);
+            PersonalInterval(f, 1_000, session: SessionState.Locked);
+            PersonalInterval(f, 1_000, confidence: EvidenceConfidence.Unknown);
+            f.Engine.SetPaused(true); Personal(f, 1_000); f.Engine.SetPaused(false);
             check(f.Engine.State.ReminderRemainingMs == 60_000);
             check(Personal(f, 59_999).Effects.Length == 0);
             check(Personal(f, 1).Effects.Count(x => x.Kind == EffectKind.Nudge) == 1);
             var legacy = Create(); check(legacy.Send(30).State.Intervention == InterventionState.Grace);
             check(legacy.Send(6).State.ReminderRemainingMs == 10);
         });
+        TransitionResult PersonalInterval(Fixture f, long ms, InputState input = InputState.Active,
+            SessionState session = SessionState.Active, EvidenceConfidence confidence = EvidenceConfidence.Confirmed) =>
+            f.Engine.Observe(f.Interval(ms, input: input, session: session, confidence: confidence), true);
         foreach (var duration in new[] { 60_000L, 300_000L })
             test($"interactive {duration} extension freezes outside counted Personal and survives restart", () =>
             {
@@ -55,6 +62,16 @@ internal static class InteractiveRegressions
             }
             foreach (var bad in new[] { 0L, 1, 120_000, long.MaxValue })
             { try { f.Engine.DeferInteractive(bad); check(false); } catch (ArgumentException) { } }
+        });
+        test("duration edits preserve shared cadence and cadence reduction clamps prospectively", () =>
+        {
+            var f = Create(); f.Engine.ChangeInteractiveRepeat(3_600_000); Personal(f, 30);
+            f.Engine.ChangeConfiguration(f.Engine.Configuration with { AllowanceMs = 100 });
+            check(f.Engine.State.ReminderRemainingMs == 3_600_000 && f.Engine.State.UsageMs == 30);
+            f.Engine.ChangeInteractiveRepeat(120_000);
+            check(f.Engine.State.ReminderRemainingMs == 120_000);
+            check(Personal(f, 119_999).Effects.Length == 0);
+            check(Personal(f, 1).Effects.Count(x => x.Kind == EffectKind.Nudge) == 1);
         });
         test("changing from legacy grace to interactive waits for fresh counted evidence", () =>
         {

@@ -16,10 +16,10 @@ internal static class Pr8Regressions
             session.ChangeConfiguration(session.Configuration with
             { AllowanceMs = 2_000, GraceMs = 1_000, RepeatNudgeMs = 3_000, RequiredBreakMs = 10_000, IdleThresholdMs = 6_000 });
         var app = f.App();
-        for (var ms = 0; ms <= 4_000; ms += 1_000)
+        for (var ms = 0; ms <= 3_000; ms += 1_000)
         {
             f.Advance(app, ms);
-            if (ms < 4_000) Check(!app.Reminders.TryTake(Environment.TickCount64));
+            if (ms < 3_000) Check(!app.Reminders.TryTake(Environment.TickCount64));
         }
         Check(app.Snapshot().State!.Intervention == InterventionState.Nudging);
         return app;
@@ -92,10 +92,10 @@ internal static class Pr8Regressions
             using var f = new Fixture(); using var app = ReminderApp(f);
             Check(app.Reminders.TryTake(Environment.TickCount64));
             for (var i = 0; i < 5; i++) { app.Snapshot(); app.Step(); Check(!app.Reminders.TryTake(Environment.TickCount64)); }
-            for (var ms = 5_000; ms <= 7_000; ms += 1_000)
+            for (var ms = 4_000; ms <= 63_000; ms += 1_000)
             {
                 f.Advance(app, ms);
-                Check(app.Reminders.TryTake(Environment.TickCount64) == (ms == 7_000));
+                Check(app.Reminders.TryTake(Environment.TickCount64) == (ms == 63_000));
             }
         });
         Test("mailbox expires without refresh renewal, deduplicates, invalidates and has one consumer", () =>
@@ -149,13 +149,13 @@ internal static class Pr8Regressions
             {
                 using var f = new Fixture(); using var app = ReminderApp(f);
                 Check(app.Reminders.TryTake(Environment.TickCount64));
-                f.Advance(app, 5_000); f.Advance(app, 6_000);
+                for (var ms = 4_000; ms <= 62_000; ms += 1_000) f.Advance(app, ms);
                 f.Fault = point => { if (point == stage) throw new IOException(); };
-                f.Advance(app, 7_000);
+                f.Advance(app, 63_000);
                 Check(app.Snapshot().Persistence == PersistenceStatus.PendingCommit && !app.Reminders.TryTake(Environment.TickCount64));
                 f.Fault = null; Check(app.Execute(new(HostCommandKind.RetrySave)).Succeeded);
                 Check(!app.Reminders.TryTake(Environment.TickCount64));
-                f.Advance(app, 8_000); f.Advance(app, 9_000); Check(!app.Reminders.TryTake(Environment.TickCount64));
+                f.Advance(app, 64_000); f.Advance(app, 65_000); Check(!app.Reminders.TryTake(Environment.TickCount64));
             });
         Test("slow commit and contradictory signals after commit suppress new reminders", () =>
         {
@@ -163,14 +163,14 @@ internal static class Pr8Regressions
             {
                 using var f = new Fixture(); using var app = ReminderApp(f);
                 Check(app.Reminders.TryTake(Environment.TickCount64));
-                f.Advance(app, 5_000); f.Advance(app, 6_000);
+                for (var ms = 4_000; ms <= 62_000; ms += 1_000) f.Advance(app, ms);
                 f.Fault = stage =>
                 {
                     if (stage != StorageFault.AfterCommit) return;
-                    if (slow) f.Clock.Now = f.Clock.Now with { Milliseconds = 10_000 };
+                    if (slow) f.Clock.Now = f.Clock.Now with { Milliseconds = 66_000 };
                     else f.Source!.Emit(SignalKind.InputDesktopChanged);
                 };
-                f.Advance(app, 7_000); Check(!app.Reminders.TryTake(Environment.TickCount64));
+                f.Advance(app, 63_000); Check(!app.Reminders.TryTake(Environment.TickCount64));
             }
         });
         Test("restart restores cadence but never pending reminder delivery", () =>

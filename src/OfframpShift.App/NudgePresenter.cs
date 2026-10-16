@@ -6,6 +6,7 @@ namespace OfframpShift.App;
 internal interface INudgePlatform
 {
     nint ForegroundWindow { get; }
+    string PlacementStatus => "Unavailable";
     bool Place(NudgeWindow window, nint foreground);
     void Show(NudgeWindow window);
     bool Activate(NudgeWindow window);
@@ -58,7 +59,7 @@ internal sealed class NudgePresenter(Func<HostCommand, Task<HostCommandResult>> 
             var result = await execute(new(HostCommandKind.AuthorizeNudge) { Reminder = value, NudgeWindow = handle, PrepareOnly = firstShow });
             if (!result.Succeeded) { Status = "Authorization rejected before show: " + result.Message; Close(); return; }
             if (Window != target || !Eligible(value)) { Status = "Authorized reminder expired or changed before placement."; Close(); return; }
-            if (!platform.Place(target, value.ForegroundWindow)) { Status = "Positioning failed: foreground monitor, DPI or layout unavailable."; Close(); return; }
+            if (!platform.Place(target, value.ForegroundWindow)) { Status = "Positioning failed: " + platform.PlacementStatus + "."; Close(); return; }
             // Showing must not activate implicitly. Recheck after layout/display changes.
             platform.Show(target);
             if (Window != target || !Eligible(value)) { Status = "Reminder changed during nonactivating show."; Close(); return; }

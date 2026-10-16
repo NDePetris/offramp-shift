@@ -22,14 +22,10 @@ internal static class HiddenNudgeDiagnostic
         Process? worker = null;
         try
         {
-            var hwnd = new WindowInteropHelper(window).EnsureHandle();
-            window.MaxHeight = 800;
-            window.Measure(new(400, 800));
-            var hiddenHeight = window.DesiredSize.Height;
-            var content = (FrameworkElement)window.Content;
-            content.Measure(new(400, 800));
-            var contentHeight = content.DesiredSize.Height;
+            // Exercise the production cold path: no diagnostic-only layout warmup.
             var foreground = GetForegroundWindow();
+            var platform = new NudgePlatform();
+            var hwnd = new WindowInteropHelper(window).EnsureHandle();
             var start = new ProcessStartInfo(System.IO.Path.Combine(AppContext.BaseDirectory, "OfframpShift.App.exe"))
             { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true };
             start.ArgumentList.Add("--desktop-worker");
@@ -43,6 +39,7 @@ internal static class HiddenNudgeDiagnostic
             var membership = Category(worker.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(2)).GetAwaiter().GetResult());
             string? prepared = null, afterShow = null;
             var placed = false;
+            var placementStage = "NotAttempted";
             if (registration)
             {
                 worker.StandardInput.WriteLine(FormattableString.Invariant($"prepare-nudge {hwnd.ToInt64()} {foreground.ToInt64()} {current:D}"));
@@ -50,7 +47,8 @@ internal static class HiddenNudgeDiagnostic
                 prepared = Category(worker.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(2)).GetAwaiter().GetResult());
                 if (prepared == nameof(NudgeDesktopCheck.Allowed))
                 {
-                    var platform = new NudgePlatform(); placed = platform.Place(window, foreground);
+                    placed = platform.Place(window, foreground);
+                    placementStage = platform.PlacementStatus;
                     if (placed)
                     {
                         platform.Show(window); // ShowActivated=false; never call Activate.
@@ -68,8 +66,12 @@ internal static class HiddenNudgeDiagnostic
                 build,
                 architecture = RuntimeInformation.ProcessArchitecture.ToString(),
                 hidden = !window.IsVisible,
-                hiddenWindowHeight = hiddenHeight,
-                contentHeight,
+                placementStage,
+                dpiChangedDuringPlacement = platform.DpiChangedDuringPlacement,
+                windowDpi = System.Windows.Media.VisualTreeHelper.GetDpi(window).PixelsPerInchX,
+                onForegroundMonitor = NudgePlatform.OnForegroundMonitor(hwnd, foreground),
+                candidateIsForeground = GetForegroundWindow() == hwnd,
+                foregroundUnavailable = GetForegroundWindow() == 0,
                 foregroundStable = GetForegroundWindow() == foreground,
                 desktopStable = final?.Current == current,
                 membership,
@@ -78,7 +80,8 @@ internal static class HiddenNudgeDiagnostic
                 afterShow
             }));
             return !registration || placed && afterShow == nameof(NudgeDesktopCheck.Allowed) &&
-                GetForegroundWindow() == foreground && final?.Current == current ? 0 : 1;
+                GetForegroundWindow() == foreground && final?.Current == current &&
+                NudgePlatform.OnForegroundMonitor(hwnd, foreground) ? 0 : 1;
         }
         catch { Console.WriteLine("Hidden nudge diagnostic: unavailable; no presentation attempted."); return 1; }
         finally

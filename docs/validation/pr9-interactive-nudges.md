@@ -2,7 +2,9 @@
 
 Owner evaluation only. Initial owner smoke **FAIL**: Interactive window never
 appeared; legacy notifications still worked, including their expected grace.
-The October 16 correction and bounded registration evidence are recorded below.
+The first October 16 correction passed its bounded diagnostic, but the owner
+retest still **FAILED** at placement. The second correction and production-manifest
+diagnostic evidence are recorded below; the full owner retest is still pending.
 Full owner-flow focus, mixed DPI, fullscreen and Narrator acceptance remain **NOT RUN** by the agent.
 Automated tests use synthetic evidence, disposable SQLite, owned hidden HWNDs
 and fake placement/focus adapters. They do not establish live shell reliability.
@@ -12,10 +14,10 @@ and fake placement/focus adapters. They do not establish live shell reliability.
 Windows settings v3 replaces the Boolean preference with Off, Windows notification
 and Interactive window. v1 migrates to Off; v2 enabled/disabled migrates to Windows
 notification/Off. Original shapes are validated strictly; load never writes or
-enables interactive focus. The next explicit atomic save writes v3. Existing
-notification grace/repeat values remain unchanged (ordinary defaults 1/10 minutes).
+enables interactive focus. The next explicit atomic save writes v3. The owner has
+now explicitly approved replacing the previous notification grace/repeat policy.
 
-Interactive mode prompts at the durably accepted exhaustion boundary, without
+Both enabled styles prompt at the durably accepted exhaustion boundary, without
 automatic grace, subject to existing sampling, holdback and freshness limits.
 Add 1 minute, Add 5 minutes, X, Escape and Alt+F4 use a distinct durable deferral.
 Extensions and repeats advance only through counted Personal usage. Work, lock,
@@ -23,12 +25,16 @@ idle, neutral, Unknown, Pause and downtime consume none; a qualifying break
 clears the intervention normally. Usage continues; extra time grants no allowance.
 Legacy `Snooze()` retains its all-verified-time clock.
 
-Core stores a separate interactive repeat interval: default 60,000 ms, restricted
+Core stores one shared reminder repeat interval: default 60,000 ms, restricted
 to 1–60 whole minutes. Its dedicated edit preserves unfinished break progress,
 usage and Pause. Style and cadence have separate saves in their existing stores;
 no cross-file transaction is implied.
 
-Checkpoint v3 adds only `InteractiveRepeatNudgeMs`. The appended `PersonalDeferred`
+Checkpoint v3 retains the original `InteractiveRepeatNudgeMs` field and shape;
+the existing value now applies to both styles. No destructive reset/version bump
+is needed. Old Grace state becomes due on the next eligible Personal interval;
+old Nudging remainders are capped to the shared interval. Neither load nor a
+Settings save emits historical effects. The appended `PersonalDeferred`
 intervention value distinguishes the clocks using the existing snooze remainder;
 there is no new state field or absolute deadline. v1/v2 layouts and original
 invariants are validated before transactional migration. Migration preserves
@@ -122,8 +128,8 @@ and reject the new linked read-only membership branch; live probe behavior is un
 Record commit, exact supported Windows build/x64, monitor layout and scaling.
 Record PASS/FAIL/NOT RUN; note original durations before temporarily changing them.
 
-1. Confirm an existing enabled v2 reminder preference becomes Windows notification
-   and retains its grace/repeat behavior. Do not edit settings under a running app.
+1. Confirm an existing enabled v2 reminder preference becomes Windows notification,
+   with the newly approved immediate/shared timing. Do not edit settings under a running app.
 2. Explicitly save Interactive window and temporarily shorten the allowance. Use
    Personal through exhaustion. Confirm the nudge, expected foreground monitor,
    two approved buttons, no automatic grace, and no desktop switching. Record
@@ -145,7 +151,11 @@ switching and distribution/licensing remain outside scope. Automatic switching,
 virtual-desktop window movement and production browser attribution remain **NO-GO**.
 No telemetry, activity history or remote service is added.
 
-## October 16 correction: missing nudge
+## First October 16 correction: missing nudge (historical)
+
+The evidence in this section predates the owner's placement failure and the
+shared notification timing decision. Its no-timing-change statement describes
+that first correction only; the current policy is documented above.
 
 Two independent blocking conditions were reproduced on Windows build
 **26200.9711/x64**, pinned SDK 10.0.401, using an owned test HWND and the existing
@@ -214,9 +224,73 @@ Both require an already-approved exact build/x64, print only dimensions/categori
 and stability booleans, start only their owned read-only worker, and never open
 accounting/settings. They are not run in CI or by normal app startup.
 
+## Second October 16 correction: PerMonitorV2 placement and shared timing
+
+The owner retest reached the presenter but failed `Place`. Running the cold
+owned-window diagnostic with the **production PerMonitorV2 manifest** reproduced
+`FinalForegroundValidation` rejection on **26200.9711/x64**, SDK **10.0.401**.
+Tracing showed the foreground became the hidden candidate during the initial
+monitor-positioning call. The outer call already supplied SWP_NOACTIVATE. WPF's
+[DPI handler](https://github.com/dotnet/wpf/blob/main/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/InterOp/HwndTarget.cs)
+issues a nested SetWindowPos without that flag when the HWND changes DPI.
+The earlier test executable lacked the production manifest and masked this path.
+The owner's single generic status alone cannot establish which internal stage
+failed on their process; this is the reproduced placement defect, pending owner retest.
+
+Placement now applies documented WS_EX_NOACTIVATE only around positioning of the
+owned HWND, verifies that it applied, and restores/verifies the exact original
+extended style in finally before Show, strict authorization or explicit focus.
+It suppresses implicit activation rather than forcing focus. No permanent style
+change affects keyboard/accessibility or taskbar behavior. Apply/restore failure
+suppresses the event. The original foreground check remains binding. Creating
+the HWND at target coordinates was also tried locally but still activated during
+WPF initialization; that approach is not part of the correction.
+
+The corrected bounded registration diagnostic, now with the production manifest
+and no layout warmup, reported: `Placed`, DPI changed during placement,
+foreground-monitor match true, target window DPI **144 (150%)**,
+candidate-is-foreground false, foreground/desktop
+stable true, preparation Allowed and strict post-Show membership Allowed. No
+activation was requested; the owned window closed afterward. The owner app was
+not stopped; no user accounting/settings were opened. These before/after checks
+are bounded evidence, not continuous shell monitoring or full owner acceptance.
+
+Home's process-local status now identifies initial foreground validation,
+monitor/work area, nonactivating initial position, DPI, minimum width, native frame,
+content measurement, centering, final foreground validation and final positioning.
+Guard-application/restoration failures have separate categories. No foreground
+application/window/desktop identities, history, telemetry or permanent log are added.
+
+The owner explicitly superseded legacy notification timing preservation: both
+styles now use immediate durably accepted exhaustion and one shared 1–60 whole
+minute repeat setting, default one minute. Settings calls it **Reminder repeat
+interval** and explains both styles. The old v3 field name/shape remains readable;
+v1/v2/v3, pending commits, usage, break progress, Personal-only extensions and
+the legacy low-level Snooze clock remain intact. Duration edits preserve the
+shared cadence; a repeat reduction caps its remainder without replaying effects.
+Windows notification remains nonfocusing, single outstanding and lower priority
+than retained errors. Native notification rendering/branding stays in issue #17.
+
+Focused deterministic coverage includes guard application/restoration on success,
+failure and exception; discrete presenter failure without Show/focus; both styles'
+immediate committed event/shared cadence; countdown freezes; exhausted style
+transitions; extension preservation across style changes; duration/cadence edits;
+and restoration of Grace/Nudging from all three checkpoint versions without
+Settings-time or historical effects. Existing strict desktop, mailbox, freshness,
+migration and single-window tests remain. Automated and owner results are separate.
+
+Final local validation: all seven repository-prescribed commands **PASS**, plus
+final affected formatting checks after the last cadence/label regression edits.
+Application results: **82 Core, 83 Persistence, 84 host, 37 WPF groups**, warnings
+as errors, SDK 10.0.401. The bounded production-manifest live diagnostic passed
+separately; it is never part of CI. Full owner-flow focus and extension acceptance,
+fullscreen and Narrator remain **NOT RUN / owner retest pending**. No build gate,
+switch/move behavior, browser attribution or notification rendering scope changed.
+
 ### Short owner retest (pending)
 
-Record tested commit/build, then:
+Exit the currently running app through the tray and launch the updated build;
+record tested commit/build, then:
 
 1. Enable **Interactive window** and save.
 2. Use a one-minute Personal allowance.

@@ -236,13 +236,18 @@ public sealed class MonitoringCoordinator
             ClearContinuity();
             if (preserveCompleted)
                 state = state with { BreakCompleted = true, BreakProgressMs = replacement.RequiredBreakMs };
+            // Duration/accounting edits must not shorten the shared app cadence
+            // to the retained legacy field. Explicit legacy cadence edits still
+            // use their original limit for low-level clients.
+            var repeatLimit = replacement.RepeatNudgeMs == configuration.RepeatNudgeMs
+                ? Math.Max(replacement.RepeatNudgeMs, replacement.InteractiveRepeatNudgeMs) : replacement.RepeatNudgeMs;
             configuration = replacement;
             var effects = ImmutableArray.CreateBuilder<AdvisoryEffect>();
             if (!state.Exhausted && state.UsageMs >= configuration.AllowanceMs) Exhaust(effects);
             else state = state with
             {
                 ReminderRemainingMs = Math.Min(state.ReminderRemainingMs,
-                    state.Intervention == InterventionState.Grace ? configuration.GraceMs : configuration.RepeatNudgeMs),
+                    state.Intervention == InterventionState.Grace ? configuration.GraceMs : repeatLimit),
                 SnoozeRemainingMs = state.Intervention == InterventionState.PersonalDeferred ? state.SnoozeRemainingMs :
                     Math.Min(state.SnoozeRemainingMs, configuration.SnoozeMs)
             };
@@ -277,8 +282,8 @@ public sealed class MonitoringCoordinator
             // Cadence only: do not establish an accounting boundary or discard an unfinished break.
             configuration = replacement;
             if (state.Intervention == InterventionState.Nudging)
-                state = state with { ReminderRemainingMs = Math.Min(state.ReminderRemainingMs, Math.Max(configuration.RepeatNudgeMs, durationMs)) };
-            return Result(ActivityKind.Uncertain, "Interactive repeat interval saved.", [], true);
+                state = state with { ReminderRemainingMs = Math.Min(state.ReminderRemainingMs, durationMs) };
+            return Result(ActivityKind.Uncertain, "Reminder repeat interval saved.", [], true);
         }
     }
 

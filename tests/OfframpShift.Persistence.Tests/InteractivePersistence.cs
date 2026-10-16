@@ -7,6 +7,36 @@ internal static class InteractivePersistence
 {
     internal static void Run()
     {
+        foreach (var version in new[] { 1, 2, 3 })
+            foreach (var grace in new[] { true, false })
+                Test($"existing v{version} {(grace ? "grace" : "repeat")} restores then adopts shared policy only on Personal evidence", () =>
+                {
+                    using var f = new Fixture();
+                    using (var initial = f.Session()) initial.Observe(f.Clock.Interval(grace ? 30 : 36));
+                    var node = JsonNode.Parse(f.Row().Payload)!;
+                    node["Version"] = version;
+                    if (version < 3) node["Configuration"]!.AsObject().Remove("InteractiveRepeatNudgeMs");
+                    if (version == 1)
+                    {
+                        foreach (var name in new[] { "Accounting", "EstimationPolicyVersion" }) node["Configuration"]!.AsObject().Remove(name);
+                        foreach (var name in new[] { "EstimatedUsageMs", "BreakUncertaintyMs", "ConsecutiveUncertaintyMs" }) node["State"]!.AsObject().Remove(name);
+                    }
+                    f.Payload(node.ToJsonString());
+                    using var restored = f.Session();
+                    Equal(PersistenceStatus.Ready, restored.Status);
+                    var before = restored.State;
+                    Equal(grace ? InterventionState.Grace : InterventionState.Nudging, before.Intervention);
+                    Equal(0, restored.Observe(f.Clock.Interval(1, DesktopScope.Other), true).Effects.Length);
+                    Equal(before, restored.State);
+                    var result = restored.Observe(f.Clock.Interval(grace ? 1 : 10), true);
+                    Equal(1, result.Effects.Count(x => x.Kind == EffectKind.Nudge));
+                    Equal(60_000L, restored.State.ReminderRemainingMs);
+                    Equal(before.UsageMs + (grace ? 1 : 10), restored.State.UsageMs);
+                    var saved = JsonNode.Parse(f.Row().Payload)!;
+                    Equal(3, saved["Version"]!.GetValue<int>());
+                    True(saved["Configuration"]!["InteractiveRepeatNudgeMs"] is not null);
+                    True(saved["Configuration"]!["ReminderRepeatNudgeMs"] is null);
+                });
         Test("v2 migration preserves legacy state and initializes interactive cadence only", () =>
         {
             using var f = new Fixture();

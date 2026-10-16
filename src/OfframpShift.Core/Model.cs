@@ -54,6 +54,7 @@ public sealed record MonitoringConfiguration
     public long GraceMs { get; init; } = 60_000;
     public long RepeatNudgeMs { get; init; } = 10 * 60_000;
     public long SnoozeMs { get; init; } = 10 * 60_000;
+    // Shared app reminder interval. Keep this v3 serialized name for compatibility.
     public long InteractiveRepeatNudgeMs { get; init; } = 60_000;
     // Receipt freshness is independent of certified interval duration.
     public long MaximumEvidenceAgeMs { get; init; } = 5_000;

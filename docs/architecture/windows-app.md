@@ -106,9 +106,12 @@ Blocked permits explicit reopen after correcting clock/access/ownership.
 
 Windows settings v3 offers Off, Windows notification and explicitly selected
 Interactive window. v1 migrates to Off; enabled v2 reminders migrate to Windows
-notification with existing timing intact. Core's interactive observation policy
-uses zero initial grace and a separate durable repeat interval (1–60 minutes,
-default one minute). A cadence-only edit preserves unfinished break progress.
+notification, never interactive focus. Both enabled styles use zero initial grace
+and one shared durable repeat interval (1–60 minutes, default one minute), advanced
+only by counted Personal usage. The v3 `InteractiveRepeatNudgeMs` serialized name
+is retained; its meaning is now shared. Existing grace is retired on the next
+eligible Personal interval, and old repeat remainders are capped to this interval.
+Settings edits never replay effects. A cadence-only edit preserves unfinished break progress.
 `PersonalDeferred` uses the existing snooze remainder for Personal-only extra
 time; legacy `Snooze()` retains its all-verified-time clock. Checkpoint v3 strictly
 migrates original v1/v2 layouts without replay or downtime credit.
@@ -122,6 +125,10 @@ after positive current membership and current/foreground Personal GUID checks.
 Its own desktop ID is strictly verified after Show and before focus; a missing
 hidden registration never grants activation. Already-open windows stay strict.
 Placement measures content plus native frame, not the collapsed hidden Window.
+The temporary documented WS_EX_NOACTIVATE style prevents WPF's nested DPI-change
+positioning from implicitly activating the HWND; its exact original style is
+restored before Show and strict authorization. Failure to apply/restore suppresses
+presentation. The app-test executable shares the production PerMonitorV2 manifest.
 Home retains one identity-free in-memory reminder stage for diagnosis.
 Wrong/unknown membership suppresses activation; no switching
 or virtual-desktop movement API is added. Continued visibility tolerates its own
@@ -136,8 +143,8 @@ acceptance. Existing NO-GO gates, read-only build restrictions and recovery rema
 ## Break reminders and manual usage reset (PR 8 baseline)
 
 Break reminders are opt-in and default off. They consume only newly committed
-Core `Nudge` effects after estimator delivery acceptance. Core's grace and repeat
-cadence continues to use eligible Personal usage, not elapsed UI time. Preference
+Core `Nudge` effects after estimator delivery acceptance. PR 9 supersedes this
+baseline's automatic grace and separate cadence with the shared timing above. Preference
 changes patch only Windows settings; they preserve usage, configuration and
 unfinished break progress. Enabling the preference does not emit an immediate
 notification from saved exhaustion/advisory state.

@@ -37,8 +37,10 @@ deferred PR 5 acceptance exercises.
 
 PR 9 adds explicitly selected **Interactive window** reminders, with immediate
 exhaustion prompts, durable one/five-minute Personal-only extensions, and a
-configurable repeat interval. Existing Windows notification users retain their
-preference and timing. Focus is best effort and desktop switching remains absent.
+shared repeat interval. Both enabled styles now prompt immediately at accepted
+exhaustion and repeat after counted Personal usage (default one minute). Existing
+notification preferences never migrate to interactive focus. Focus is best effort
+and desktop switching remains absent.
 See the [short PR 9 owner checklist and safety boundaries](docs/validation/pr9-interactive-nudges.md).
 
 CI uses these automated test commands on Windows runners, with Node.js 24 for the browser probe. Browser tests use mocked extension APIs and synthetic native callers; neither job interacts with a live browser or switches desktops. CI cannot establish actual virtual-desktop or browser-to-window compatibility.

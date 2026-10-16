@@ -12,6 +12,7 @@ internal static class InteractiveUiRegressions
         public nint ForegroundWindow { get; set; } = 1;
         public bool Placement { get; set; } = true;
         public bool Activation { get; set; } = true;
+        public string PlacementStatus => "ContentMeasurement";
         public int Shows, Activations;
         public bool Place(NudgeWindow window, nint foreground) => Placement;
         public void Show(NudgeWindow window) => Shows++;
@@ -68,6 +69,7 @@ internal static class InteractiveUiRegressions
                 Check(platform.Activations == (failure == "focus-denied" ? 1 : 0));
                 if (failure == "focus-denied") Check(presenter.Window is not null);
                 else Check(presenter.Window is null);
+                if (failure == "placement") Check(presenter.Status == "Positioning failed: ContentMeasurement.");
                 presenter.Close();
             });
         test("nudge actions are accessible explicit and failed saves stay unsuccessful", () =>
@@ -103,6 +105,34 @@ internal static class InteractiveUiRegressions
             Check(area == (-1580, 270, 600, 500));
             Check(NudgePlatform.TryCenter(0, 0, 300, 200, 800, 600, out area) && area == (0, 0, 300, 200));
             Check(!NudgePlatform.TryCenter(0, 0, 0, 200, 400, 300, out _));
+        });
+        test("DPI placement prohibits nested activation and restores exact original style on every outcome", () =>
+        {
+            foreach (var outcome in new[] { "success", "failure", "exception", "apply-denied", "restore-denied" })
+            {
+                const int original = 0x40000;
+                var style = original; var called = false;
+                void Write(int value)
+                {
+                    if (outcome == "apply-denied" || outcome == "restore-denied" && value == original) return;
+                    style = value;
+                }
+                bool Position()
+                {
+                    called = true; Check((style & 0x08000000) != 0);
+                    if (outcome == "exception") throw new ApplicationException("synthetic DPI positioning failure");
+                    return outcome != "failure";
+                }
+                try
+                {
+                    var placed = NudgePlatform.WithoutImplicitActivation(() => style, Write, Position, out var restored);
+                    Check(placed == (outcome == "success"));
+                    Check(restored == (outcome != "restore-denied"));
+                }
+                catch (ApplicationException) when (outcome == "exception") { }
+                Check(called == (outcome != "apply-denied"));
+                if (outcome != "restore-denied") Check(style == original);
+            }
         });
         test("a real never-shown HWND measures visible content instead of collapsed Window", () =>
         {
@@ -144,6 +174,8 @@ internal static class InteractiveUiRegressions
             var commands = new List<HostCommand>();
             var window = new MainWindow(command => { commands.Add(command); return Task.FromResult(HostCommandResult.Success()); }, () => Task.CompletedTask, () => Task.CompletedTask);
             window.Apply(snapshot());
+            Check(AutomationProperties.GetName(window.RepeatInput) == "Reminder repeat interval in whole minutes");
+            Check((string)window.SaveRepeatButton.Content == "Save reminder repeat interval");
             foreach (var bad in new[] { "0", "61", "1.5", "bad" })
             { window.RepeatInput.Text = bad; window.SaveRepeatButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); }
             Check(commands.Count == 0);

@@ -8,10 +8,11 @@ using static Program;
 
 internal static class InteractiveHostRegressions
 {
-    private static MonitoringApplication Interactive(Fixture f)
+    private static MonitoringApplication Interactive(Fixture f, ReminderStyle style = ReminderStyle.InteractiveWindow, long repeat = 60_000)
     {
-        f.Enable(); f.Settings.Save(f.Settings.Load() with { ReminderStyle = ReminderStyle.InteractiveWindow });
-        using (var session = f.Session()) session.ChangeConfiguration(session.Configuration with { AllowanceMs = 2_000, RequiredBreakMs = 600_000 });
+        f.Enable(); f.Settings.Save(f.Settings.Load() with { ReminderStyle = style });
+        using (var session = f.Session()) session.ChangeConfiguration(session.Configuration with
+        { AllowanceMs = 2_000, RequiredBreakMs = 600_000, InteractiveRepeatNudgeMs = repeat });
         var app = f.App();
         for (var ms = 0; ms <= 3_000; ms += 1_000) f.Advance(app, ms);
         return app;
@@ -21,6 +22,46 @@ internal static class InteractiveHostRegressions
     private static HostCommand Authorize(ReminderEvent value) => new(HostCommandKind.AuthorizeNudge) { Reminder = value, NudgeWindow = 2 };
     internal static void Run()
     {
+        foreach (var style in new[] { ReminderStyle.WindowsNotification, ReminderStyle.InteractiveWindow })
+            foreach (var repeat in new[] { 60_000L, 120_000L })
+                Test($"{style} prompts at committed exhaustion and repeats at shared {repeat} interval", () =>
+                {
+                    using var f = new Fixture(); using var app = Interactive(f, style, repeat);
+                    var value = Take(app);
+                    Check(value.Style == style && app.Snapshot().State!.UsageMs == 2_000);
+                    for (var ms = 4_000L; ms <= 3_000 + repeat; ms += 1_000)
+                    {
+                        f.Advance(app, ms);
+                        Check(app.Reminders.TryTake(Environment.TickCount64, out var next) == (ms == 3_000 + repeat));
+                        if (next is not null) Check(next.Style == style && next.Sequence > value.Sequence);
+                    }
+                });
+        Test("exhausted style transitions preserve cadence and never replay at Settings save", () =>
+        {
+            using var f = new Fixture(); using var app = Interactive(f); Take(app);
+            var before = app.Snapshot().State;
+            foreach (var style in new[] { ReminderStyle.WindowsNotification, ReminderStyle.Off, ReminderStyle.InteractiveWindow })
+            {
+                Check(app.Execute(new(HostCommandKind.ChangeBreakReminders) { ReminderStyle = style }).Succeeded);
+                Check(app.Snapshot().State == before && !app.Reminders.TryTake(Environment.TickCount64));
+            }
+            Check(app.Execute(new(HostCommandKind.ChangeBreakReminders) { ReminderStyle = ReminderStyle.WindowsNotification }).Succeeded);
+            for (var ms = 4_000; ms <= 63_000; ms += 1_000) f.Advance(app, ms);
+            Check(Take(app).Style == ReminderStyle.WindowsNotification);
+        });
+        Test("switching an active interactive extension to notification preserves its Personal-only remainder", () =>
+        {
+            using var f = new Fixture(); using var app = Interactive(f);
+            Check(app.Execute(Authorize(Take(app))).Succeeded);
+            Check(app.Execute(new(HostCommandKind.DeferInteractive) { NudgeWindow = 2, DurationMs = 60_000 }).Succeeded);
+            var before = app.Snapshot().State;
+            Check(app.Execute(new(HostCommandKind.ChangeBreakReminders) { ReminderStyle = ReminderStyle.WindowsNotification }).Succeeded);
+            Check(app.Snapshot().State == before && !app.Reminders.TryTake(Environment.TickCount64));
+            f.Source!.Current = f.Work; f.Source.Emit(SignalKind.InputDesktopChanged);
+            for (var ms = 4_000; ms <= 7_000; ms += 1_000) f.Advance(app, ms);
+            Check(app.Snapshot().State!.SnoozeRemainingMs == 60_000);
+            Check(!app.Reminders.TryTake(Environment.TickCount64));
+        });
         Test("interactive mailbox waits for matching publication without consuming or renewing the event", () =>
         {
             using var f = new Fixture(); using var app = Interactive(f); var current = app.Snapshot();

@@ -89,12 +89,12 @@
       <TextBlock Text="Break reminders" Style="{StaticResource SectionTitle}" />
       <Label Content="_Reminder style" Target="{Binding ElementName=RemindersInput}" />
       <ComboBox x:Name="RemindersInput" IsEnabled="{Binding CanEditReminders}" HorizontalAlignment="Left" MinWidth="220" AutomationProperties.Name="Reminder style" />
-      <TextBlock Text="Off by default. Windows notification keeps the existing grace period and repeat timing; Windows may suppress or delay it. Interactive window prompts immediately when your allowance runs out and can take foreground focus. Changing style preserves usage and break progress." Margin="0,8,0,8" />
+      <TextBlock Text="Off by default. Both styles remind you as soon as your Personal allowance runs out. Windows notifications may be suppressed or delayed by Windows. Interactive window can take foreground focus. Changing style preserves usage and break progress." Margin="0,8,0,8" />
       <Button x:Name="SaveRemindersButton" Content="Save reminder preference" Click="SaveReminders" IsEnabled="{Binding CanEditReminders}" HorizontalAlignment="Left" />
-      <Label Content="Interactive window repeat interval (_minutes, 1–60)" Target="{Binding ElementName=RepeatInput}" />
-      <TextBox x:Name="RepeatInput" HorizontalAlignment="Left" AutomationProperties.Name="Interactive repeat interval in whole minutes" IsEnabled="{Binding CanEdit}" />
-      <TextBlock Text="Repeats and extra time advance only during counted Personal use. Time on Work or away from the computer doesn't count." Margin="0,0,0,8" />
-      <Button x:Name="SaveRepeatButton" Content="Save interactive repeat interval" Click="SaveRepeat" IsEnabled="{Binding CanEdit}" HorizontalAlignment="Left" />
+      <Label Content="Reminder repeat interval (_minutes, 1–60)" Target="{Binding ElementName=RepeatInput}" />
+      <TextBox x:Name="RepeatInput" HorizontalAlignment="Left" AutomationProperties.Name="Reminder repeat interval in whole minutes" IsEnabled="{Binding CanEdit}" />
+      <TextBlock Text="Applies to both reminder styles. Repeats and extra time advance only during counted Personal use. Time on Work or away from the computer doesn't count." Margin="0,0,0,8" />
+      <Button x:Name="SaveRepeatButton" Content="Save reminder repeat interval" Click="SaveRepeat" IsEnabled="{Binding CanEdit}" HorizontalAlignment="Left" />
       <TextBlock Text="Appearance and closing" Style="{StaticResource SectionTitle}" />
       <Label Content="_Theme" Target="{Binding ElementName=ThemeInput}" />
       <ComboBox x:Name="ThemeInput" HorizontalAlignment="Left" MinWidth="160" AutomationProperties.Name="Theme" />

@@ -1,6 +1,10 @@
 # Transactional local checkpoint persistence (PR 2)
 
-PR 9 writes payload v3 with interactive repeat configuration. Strict original
+PR 9 writes payload v3 with shared reminder repeat configuration, retaining the
+original `InteractiveRepeatNudgeMs` field name and exact v3 shape. No additional
+migration, version bump or reset accompanies the shared timing decision. Grace
+and legacy repeat state adopt the new policy only on eligible counted Personal
+evidence; load/settings do not replay effects. Strict original
 v1/v2 layouts/invariants are validated before transactional migration, preserving
 durable state and save metadata. Normal runtime restoration still discards
 unfinished continuity. SQLite schema, lease, recovery and exact pending-commit
