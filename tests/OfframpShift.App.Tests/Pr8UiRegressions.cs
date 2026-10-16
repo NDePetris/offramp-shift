@@ -70,15 +70,15 @@ internal static class Pr8UiRegressions
             var value = snapshot(); window.Apply(value);
             var root = (FrameworkElement)window.Content;
             root.Measure(new(820, 760)); root.Arrange(new(0, 0, 820, 760)); root.UpdateLayout();
-            Check(window.RemindersInput.IsChecked == false);
-            window.Apply(value with { Settings = value.Settings with { BreakRemindersEnabled = true } });
-            Check(window.RemindersInput.IsChecked == true);
+            Check(window.RemindersInput.SelectedIndex == 0);
+            window.Apply(value with { Settings = value.Settings with { ReminderStyle = ReminderStyle.WindowsNotification } });
+            Check(window.RemindersInput.SelectedIndex == 1);
             window.SaveRemindersButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-            Check(commands.Count == 1 && commands[0].Kind == HostCommandKind.ChangeBreakReminders && commands[0].BreakRemindersEnabled);
+            Check(commands.Count == 1 && commands[0].Kind == HostCommandKind.ChangeBreakReminders && commands[0].ReminderStyle == ReminderStyle.WindowsNotification);
             Check(window.SettingsResult.Text.Contains("could not be saved") && window.ActionResult.Text == window.SettingsResult.Text);
-            Check(AutomationProperties.GetName(window.RemindersInput) == "Enable break reminders");
+            Check(AutomationProperties.GetName(window.RemindersInput) == "Reminder style");
             var checkPeer = UIElementAutomationPeer.CreatePeerForElement(window.RemindersInput);
-            Check(checkPeer?.GetAutomationControlType() == AutomationControlType.CheckBox);
+            Check(checkPeer?.GetAutomationControlType() == AutomationControlType.ComboBox);
             foreach (var button in new[] { window.ResetUsageButton, window.SaveRemindersButton })
             {
                 Check(button.Focusable && System.Windows.Input.KeyboardNavigation.GetIsTabStop(button));

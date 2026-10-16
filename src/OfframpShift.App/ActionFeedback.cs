@@ -41,6 +41,7 @@ internal sealed class TrayActionFeedback
         return changed;
     }
     public void Dismiss() { Message = ""; failedCommand = null; }
+    internal void RecordNudgeFailure(string message) { Message = message; failedCommand = HostCommandKind.DeferInteractive; }
 }
 
 internal static class ClosePreference

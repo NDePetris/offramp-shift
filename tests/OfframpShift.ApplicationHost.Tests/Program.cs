@@ -315,6 +315,7 @@ internal static class Program
             Check(File.ReadAllText(path) == "{\"Version\":999}"); Check(f.ProviderCreates == 0);
         });
         Pr8Regressions.Run();
+        InteractiveHostRegressions.Run();
         Console.WriteLine($"Host: {passed} passed, {failed} failed, {assertions} assertions (synthetic providers, real local SQLite).");
         return failed == 0 ? 0 : 1;
     }

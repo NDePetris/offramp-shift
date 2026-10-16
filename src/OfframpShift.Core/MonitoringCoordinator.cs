@@ -82,7 +82,7 @@ public sealed class MonitoringCoordinator
         }
     }
 
-    public TransitionResult Observe(MonitoringObservation observation)
+    public TransitionResult Observe(MonitoringObservation observation, bool interactive = false)
     {
         ArgumentNullException.ThrowIfNull(observation);
         lock (gate)
@@ -134,7 +134,8 @@ public sealed class MonitoringCoordinator
             var duration = observation.End.Milliseconds - observation.Start.Milliseconds;
             state = state with { ConsecutiveUncertaintyMs = 0 };
             // Snooze consumes verified time of every known classification, not gaps.
-            var snoozedAtStart = state.Intervention == InterventionState.Snoozed;
+            var snoozedAtStart = state.Intervention == InterventionState.Snoozed ||
+                state.Intervention == InterventionState.PersonalDeferred && activity == ActivityKind.CountedPersonal;
             var suppressedDuration = snoozedAtStart ? Math.Min(duration, state.SnoozeRemainingMs) : 0;
             if (snoozedAtStart)
             {
@@ -153,7 +154,7 @@ public sealed class MonitoringCoordinator
             {
                 case ActivityKind.CountedPersonal:
                     ClearBreak();
-                    CountPersonal(duration, suppressedDuration, effects);
+                    CountPersonal(duration, suppressedDuration, effects, interactive);
                     if (observation.Confidence == EvidenceConfidence.Estimated)
                         state = state with { EstimatedUsageMs = AddCapped(state.EstimatedUsageMs, duration, state.UsageMs) };
                     break;
@@ -209,7 +210,7 @@ public sealed class MonitoringCoordinator
         {
             if (state.Recovery == RecoveryStatus.Required || state.Paused || !state.Exhausted)
                 return Result(ActivityKind.Uncertain, "Snooze unavailable.", [], false);
-            if (state.Intervention == InterventionState.Snoozed)
+            if (state.Intervention is InterventionState.Snoozed or InterventionState.PersonalDeferred)
                 return Result(ActivityKind.Uncertain, "Already snoozed.", [], false);
             CommandBoundary();
             state = state with { Intervention = InterventionState.Snoozed, SnoozeRemainingMs = configuration.SnoozeMs, ReminderRemainingMs = 0 };
@@ -235,25 +236,67 @@ public sealed class MonitoringCoordinator
             ClearContinuity();
             if (preserveCompleted)
                 state = state with { BreakCompleted = true, BreakProgressMs = replacement.RequiredBreakMs };
+            // Duration/accounting edits must not shorten the shared app cadence
+            // to the retained legacy field. Explicit legacy cadence edits still
+            // use their original limit for low-level clients.
+            var repeatLimit = replacement.RepeatNudgeMs == configuration.RepeatNudgeMs
+                ? Math.Max(replacement.RepeatNudgeMs, replacement.InteractiveRepeatNudgeMs) : replacement.RepeatNudgeMs;
             configuration = replacement;
             var effects = ImmutableArray.CreateBuilder<AdvisoryEffect>();
             if (!state.Exhausted && state.UsageMs >= configuration.AllowanceMs) Exhaust(effects);
             else state = state with
             {
                 ReminderRemainingMs = Math.Min(state.ReminderRemainingMs,
-                    state.Intervention == InterventionState.Grace ? configuration.GraceMs : configuration.RepeatNudgeMs),
-                SnoozeRemainingMs = Math.Min(state.SnoozeRemainingMs, configuration.SnoozeMs)
+                    state.Intervention == InterventionState.Grace ? configuration.GraceMs : repeatLimit),
+                SnoozeRemainingMs = state.Intervention == InterventionState.PersonalDeferred ? state.SnoozeRemainingMs :
+                    Math.Min(state.SnoozeRemainingMs, configuration.SnoozeMs)
             };
             return Result(ActivityKind.Uncertain, "Configuration changed prospectively.", effects.ToImmutable(), true);
         }
     }
 
-    private void CountPersonal(long duration, long suppressedDuration, ImmutableArray<AdvisoryEffect>.Builder effects)
+    // Unlike legacy Snooze, only counted Personal observations consume this remainder.
+    public TransitionResult DeferInteractive(long durationMs)
+    {
+        if (durationMs is not (60_000 or 300_000)) throw new ArgumentException("Choose one or five minutes.");
+        lock (gate)
+        {
+            if (state.Recovery != RecoveryStatus.Ready || state.Paused || !state.Exhausted)
+                throw new InvalidOperationException("Extra time is unavailable.");
+            if (state.Intervention is InterventionState.PersonalDeferred or InterventionState.Snoozed)
+                return Result(ActivityKind.Uncertain, "Extra time is already active.", [], false);
+            CommandBoundary();
+            state = state with { Intervention = InterventionState.PersonalDeferred, SnoozeRemainingMs = durationMs, ReminderRemainingMs = 0 };
+            return Result(ActivityKind.Uncertain, "Extra Personal time saved; usage continues.", [], true);
+        }
+    }
+
+    public TransitionResult ChangeInteractiveRepeat(long durationMs)
+    {
+        lock (gate)
+        {
+            var replacement = configuration with { InteractiveRepeatNudgeMs = durationMs };
+            replacement.Validate();
+            if (state.Recovery != RecoveryStatus.Ready) throw new InvalidOperationException("Storage is unavailable.");
+            if (replacement == configuration) return Result(ActivityKind.Uncertain, "Repeat interval unchanged.", [], false);
+            // Cadence only: do not establish an accounting boundary or discard an unfinished break.
+            configuration = replacement;
+            if (state.Intervention == InterventionState.Nudging)
+                state = state with { ReminderRemainingMs = Math.Min(state.ReminderRemainingMs, durationMs) };
+            return Result(ActivityKind.Uncertain, "Reminder repeat interval saved.", [], true);
+        }
+    }
+
+    private void CountPersonal(long duration, long suppressedDuration, ImmutableArray<AdvisoryEffect>.Builder effects, bool interactive)
     {
         var untilExhausted = state.Exhausted ? 0 : configuration.AllowanceMs - state.UsageMs;
         state = state with { UsageMs = AddCapped(state.UsageMs, duration, long.MaxValue) };
         if (!state.Exhausted && duration >= untilExhausted) Exhaust(effects);
-        if (!state.Exhausted || state.Intervention == InterventionState.Snoozed) return;
+        if (!state.Exhausted || state.Intervention is InterventionState.Snoozed or InterventionState.PersonalDeferred) return;
+        var repeat = interactive ? configuration.InteractiveRepeatNudgeMs : configuration.RepeatNudgeMs;
+        if (interactive) state = state with { ReminderRemainingMs = state.Intervention == InterventionState.Grace ? 0 : Math.Min(state.ReminderRemainingMs, repeat) };
+        else if (state.Intervention == InterventionState.Nudging)
+            state = state with { ReminderRemainingMs = Math.Min(state.ReminderRemainingMs, repeat) };
         var eligible = duration - Math.Max(untilExhausted, suppressedDuration);
         if (eligible < state.ReminderRemainingMs)
         {
@@ -262,7 +305,7 @@ public sealed class MonitoringCoordinator
         }
         // At most one nudge per accepted interval: missed reminders are coalesced.
         Emit(EffectKind.Nudge, effects);
-        state = state with { Intervention = InterventionState.Nudging, ReminderRemainingMs = configuration.RepeatNudgeMs };
+        state = state with { Intervention = InterventionState.Nudging, ReminderRemainingMs = repeat };
     }
 
     private void Exhaust(ImmutableArray<AdvisoryEffect>.Builder effects)

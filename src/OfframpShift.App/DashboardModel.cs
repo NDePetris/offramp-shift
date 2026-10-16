@@ -74,6 +74,8 @@ public sealed class DashboardModel : INotifyPropertyChanged
             Break = state.BreakCompleted ? "Break completed; allowance reset" :
                 $"{Duration(state.BreakProgressMs)} of {Duration(configuration.RequiredBreakMs)} qualifying break";
             Advisory = state.Exhausted ? snapshot.Available && !stale && !state.Paused && snapshot.Settings.MonitoringEnabled ?
+                state.Intervention == OfframpShift.Core.InterventionState.PersonalDeferred ? "Extra Personal time active; usage continues." :
+                state.Intervention == OfframpShift.Core.InterventionState.Snoozed ? "Reminders snoozed; usage continues." :
                 state.Intervention == OfframpShift.Core.InterventionState.Nudging ? "Allowance exhausted — take a qualifying break." : "Allowance exhausted — grace period." :
                 "Allowance exhausted. Advisory progress is suspended while monitoring is paused or unavailable." : "Allowance available";
             UsageProgress = Math.Clamp((double)state.UsageMs / configuration.AllowanceMs * 100, 0, 100);

@@ -13,14 +13,16 @@ public sealed class MonitoringController
     private bool commandInProgress;
     public HostSnapshot? Latest => Volatile.Read(ref latest);
     public Task Completion => stopped.Task;
-    public bool TryTakeReminder()
+    public bool TryTakeReminder() => TryTakeReminder(out _);
+    public bool TryTakeReminder(out ReminderEvent? value)
     {
         lock (submissionGate)
         {
+            value = null;
             var mailbox = Volatile.Read(ref reminders);
             if (stopping || stopped.Task.IsCompleted || commandInProgress || commands.Count != 0)
             { mailbox?.Invalidate(); return false; }
-            return mailbox?.TryTake(Environment.TickCount64) == true;
+            return mailbox?.TryTakePublished(Environment.TickCount64, Volatile.Read(ref latest), out value) == true;
         }
     }
 

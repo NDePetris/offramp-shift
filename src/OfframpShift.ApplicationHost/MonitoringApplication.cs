@@ -56,7 +56,7 @@ internal sealed class MonitoringApplication : IDisposable
     {
         EnsureRuntime();
         if (runtime is null || providerFault) { Reminders.Invalidate(); return; }
-        try { runtime.Step(CanAccount, settings.BreakRemindersEnabled); }
+        try { runtime.Step(CanAccount, settings.ReminderStyle != ReminderStyle.Off, settings.ReminderStyle == ReminderStyle.InteractiveWindow); }
         catch { Reminders.Invalidate(); providerFault = true; message = "Observation or cleanup failed. Accounting stopped. Retry monitoring explicitly."; }
     }
 
@@ -71,6 +71,7 @@ internal sealed class MonitoringApplication : IDisposable
     public HostCommandResult Execute(HostCommand command)
     {
         Reminders.Invalidate();
+        if (command.Kind is not (HostCommandKind.BeginNudgePresentation or HostCommandKind.CompleteNudgePresentation)) runtime?.RevokePresentation();
         message = "";
         try
         {
@@ -149,7 +150,29 @@ internal sealed class MonitoringApplication : IDisposable
                 case HostCommandKind.ChangeAppearance:
                     SaveSettings(settings with { Theme = command.Theme, CloseToTray = command.CloseToTray }); break;
                 case HostCommandKind.ChangeBreakReminders:
-                    SaveSettings(settings with { BreakRemindersEnabled = command.BreakRemindersEnabled }); break;
+                    SaveSettings(settings with { ReminderStyle = command.ReminderStyle }); break;
+                case HostCommandKind.ChangeInteractiveRepeat:
+                    Require(Ready, "Storage is unavailable.");
+                    session.ChangeInteractiveRepeat(command.DurationMs);
+                    runtime?.RefreshInterventionConfiguration(); break;
+                case HostCommandKind.BeginNudgePresentation:
+                    Require(CanAccount && !providerFault && settings.ReminderStyle == ReminderStyle.InteractiveWindow &&
+                        command.Reminder is not null && runtime is not null, "Monitoring or reminder style is no longer eligible.");
+                    var presentation = runtime!.BeginNudgePresentation(command.Reminder!);
+                    Require(presentation is not null, runtime.NudgeAuthorizationFailure);
+                    return HostCommandResult.Success() with { Presentation = presentation };
+                case HostCommandKind.CompleteNudgePresentation:
+                    Require(CanAccount && !providerFault && settings.ReminderStyle == ReminderStyle.InteractiveWindow &&
+                        command.Presentation is not null && runtime is not null, "Monitoring or reminder style is no longer eligible.");
+                    Require(runtime!.CompleteNudgePresentation(command.Presentation!, command.NudgeWindow), runtime.NudgeAuthorizationFailure);
+                    return HostCommandResult.Success() with { Presentation = command.Presentation };
+                case HostCommandKind.DeferInteractive:
+                    Require(CanAccount && !providerFault && settings.ReminderStyle == ReminderStyle.InteractiveWindow &&
+                        Ready && session.State.Exhausted && !session.State.Paused && runtime?.CanDefer(command.NudgeWindow) == true,
+                        "Extra time is unavailable in the current context.");
+                    session.DeferInteractive(command.DurationMs);
+                    runtime?.ResetConfiguration();
+                    message = "Extra Personal time saved; usage continues."; break;
                 case HostCommandKind.ResetUsage:
                     Require(command.Confirmed && Ready, "Confirm Reset usage; ready accounting storage is required.");
                     session.ResetUsage();
@@ -243,7 +266,10 @@ internal sealed class MonitoringApplication : IDisposable
             available, bindings, Math.Max(runtime?.RetryInMs ?? 0, Math.Max(0, 10_000 - (elapsed() - lastProviderAttempt))), CanObserve,
             supported && Ready && settingsStore.Status is SettingsStatus.Ready or SettingsStatus.Missing &&
                 (!settings.Consent || settings.Build != build), DesktopObserved,
-            Assignment(settings.Personal), Assignment(settings.Work), settings.Consent && settings.Build != build);
+            Assignment(settings.Personal), Assignment(settings.Work), settings.Consent && settings.Build != build,
+            CanAccount && !providerFault && settings.ReminderStyle == ReminderStyle.InteractiveWindow && runtime?.CanKeepNudgeOpen == true,
+            runtime?.ReminderGeneration ?? 0, runtime?.ReminderEpoch ?? Guid.Empty,
+            runtime?.ReminderStatus ?? "Observation unavailable; no reminder delivery.", runtime?.PresentationId ?? Guid.Empty);
     }
 
     private static string StorageDetail(PersistenceStatus status, StorageFailure? failure) => status switch

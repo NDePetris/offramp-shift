@@ -77,6 +77,11 @@ internal sealed class TrayService : IDisposable
             RequestBalloon("Offramp Shift — action needs attention",
                 "The action did not complete. Open the tray menu and choose Action needs attention for details.", Forms.ToolTipIcon.Warning);
     }
+    internal void ReportNudgeFailure(string detail)
+    {
+        if (disposed) return;
+        feedback.RecordNudgeFailure(detail); feedbackItem.Visible = true; NotifyFailure();
+    }
     // True means a request returned without exception, never proof of display.
     internal bool RequestReminder()
     {
