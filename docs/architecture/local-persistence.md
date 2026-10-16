@@ -1,5 +1,12 @@
 # Transactional local checkpoint persistence (PR 2)
 
+PR 9 writes payload v3 with interactive repeat configuration. Strict original
+v1/v2 layouts/invariants are validated before transactional migration, preserving
+durable state and save metadata. Normal runtime restoration still discards
+unfinished continuity. SQLite schema, lease, recovery and exact pending-commit
+protocol remain unchanged; older readers reject v3. See
+[PR 9 validation](../validation/pr9-interactive-nudges.md).
+
 PR 4 extends payload compatibility to strict version-1 reads and version-2 writes,
 with atomic migration before Ready and exact pending migration retry. SQLite
 schema/user_version remains 1, and transaction/integrity/delivery guarantees below

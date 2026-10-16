@@ -344,12 +344,29 @@ internal static class Program
             Check(window.ActionResult.Text == window.SettingsResult.Text && window.SettingsResult.Text.Contains("Task View"));
         });
         Pr8UiRegressions.Run(Test, () => Snapshot());
+        InteractiveUiRegressions.Run(Test, () => Snapshot());
         if (args is ["--render", var output])
         {
             Directory.CreateDirectory(output);
             foreach (var theme in new[] { AppTheme.Light, AppTheme.Dark })
             {
                 app.ApplyTheme(theme);
+                {
+                    var nudge = new NudgeWindow(_ => Task.FromResult(HostCommandResult.Success()));
+                    var content = (FrameworkElement)nudge.Content;
+                    content.Measure(new(400, 800));
+                    var height = (int)Math.Ceiling(content.DesiredSize.Height);
+                    content.Arrange(new(0, 0, 400, height)); content.UpdateLayout();
+                    var drawing = new DrawingVisual();
+                    using (var dc = drawing.RenderOpen())
+                    {
+                        dc.DrawRectangle(nudge.Background ?? SystemColors.WindowBrush, null, new Rect(0, 0, 400, height));
+                    }
+                    var bitmap = new RenderTargetBitmap(400, height, 96, 96, PixelFormats.Pbgra32); bitmap.Render(drawing); bitmap.Render(content);
+                    var png = new PngBitmapEncoder(); png.Frames.Add(BitmapFrame.Create(bitmap));
+                    using var file = File.Create(Path.Combine(output, $"{theme}-Nudge.png")); png.Save(file);
+                    nudge.CloseAutomatically();
+                }
                 foreach (var settings in new[] { false, true })
                     foreach (var scenario in new[] { (Name: "Monitoring", Width: 820, Height: 760), (Name: "Setup", Width: 820, Height: 760), (Name: "SetupSmall", Width: 480, Height: 420),
                         (Name: "Reminders", Width: 820, Height: 760), (Name: "RemindersSmall", Width: 480, Height: 420) })

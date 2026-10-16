@@ -16,7 +16,7 @@ internal static class Program
             Registry.Build = build;
             using var worker = new DesktopWorker();
             if (worker.OwnedProcess is not null || worker.Read().Health != Capability.Unsupported ||
-                DesktopWorker.Run() != 2 || Native.Calls != 0) return 1;
+                DesktopWorker.Run() != 2 || worker.CheckNudge(1, 2, Guid.NewGuid()) || Native.Calls != 0) return 1;
             cases++;
         }
         foreach (var build in new[] { "26200.9457", "26200.9711" })
@@ -29,7 +29,7 @@ internal static class Program
                 RuntimeInformation.ProcessArchitecture = architecture;
                 using var worker = new DesktopWorker();
                 if (worker.OwnedProcess is not null || worker.Read().Health != Capability.Unsupported ||
-                    DesktopWorker.Run() != 2 || Native.Calls != 0) return 1;
+                    DesktopWorker.Run() != 2 || worker.CheckNudge(1, 2, Guid.NewGuid()) || Native.Calls != 0) return 1;
                 cases++;
             }
         }
@@ -56,6 +56,8 @@ internal static class Native
 {
     internal static int Calls { get; private set; }
     internal static nint GetShellWindow() { Calls++; throw new InvalidOperationException("NativeActivationForbiddenInGuardTests"); }
+    internal static nint GetForegroundWindow() { Calls++; throw new InvalidOperationException("NativeActivationForbiddenInGuardTests"); }
+    internal static OfframpShift.Core.SessionState Session() { Calls++; throw new InvalidOperationException("NativeActivationForbiddenInGuardTests"); }
     internal static uint GetWindowThreadProcessId(nint _, out uint process)
     { Calls++; process = 0; throw new InvalidOperationException("NativeActivationForbiddenInGuardTests"); }
 }

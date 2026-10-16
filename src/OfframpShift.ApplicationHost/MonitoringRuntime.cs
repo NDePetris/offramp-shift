@@ -45,6 +45,57 @@ public sealed class MonitoringRuntime : IDisposable
     private long reminderSignalSequence;
     private ApplicationIdentity? reminderApplication;
     private MonotonicTime? reminderEnd;
+    private long offeredSequence;
+    private readonly Guid deliveryEpoch = Guid.NewGuid();
+    private ReminderEvent? offeredEvent;
+    private long offeredHealthGeneration, authorizedSequence;
+    private nint authorizedWindow;
+    internal long ReminderGeneration => reminderGeneration;
+    internal Guid ReminderEpoch => deliveryEpoch;
+
+    public bool CanKeepNudgeOpen => session.Status == PersistenceStatus.Ready && !session.State.Paused &&
+        session.State.Exhausted && session.State.Intervention == InterventionState.Nudging &&
+        HealthyPersonal();
+
+    private bool HealthyPersonal() => Health.Healthy && Latest is { } p && p.Time.Epoch == clock.Now.Epoch &&
+        clock.Now.Milliseconds - p.Time.Milliseconds is >= 0 and <= 2_000 &&
+        p.Desktop.Health == Capability.Available && p.Desktop.Current == personal &&
+        p.Desktop.Desktops.Contains(personal) && p.Desktop.Desktops.Contains(work) && p.Desktop.ShellProcess != 0 &&
+        p.SessionHealth == Capability.Available && p.Session == SessionState.Active &&
+        p.Input == Capability.Available && !p.InputDiscontinuity && p.IdleAgeMs is >= 0 && p.IdleAgeMs < configuration.IdleThresholdMs &&
+        p.Foreground == Capability.Available && p.CollectionMs is >= 0 and <= 500;
+
+    internal bool AuthorizeNudge(ReminderEvent value, nint window)
+    {
+        Drain(); RefreshHealth();
+        if (!ValidEvent(value) || window == 0 || !source.CheckNudgeDesktop(window, value.ForegroundWindow, personal)) return false;
+        Drain(); RefreshHealth();
+        if (!ValidEvent(value)) return false;
+        authorizedWindow = window;
+        authorizedSequence = value.Sequence;
+        return true;
+    }
+
+    private bool ValidEvent(ReminderEvent value) => value == offeredEvent && value.Epoch == deliveryEpoch &&
+        value.Sequence == offeredSequence && value.Sequence != authorizedSequence &&
+        offeredHealthGeneration == Health.Generation && value.Generation == reminderGeneration &&
+        value.Style == ReminderStyle.InteractiveWindow && value.PersonalDesktop == personal &&
+        Environment.TickCount64 <= value.ExpiresTick && EligiblePersonal() && CanKeepNudgeOpen &&
+        Latest!.Window == value.ForegroundWindow;
+
+    internal bool CanDefer(nint window)
+    {
+        if (window == 0 || window != authorizedWindow) return false;
+        Drain(); RefreshHealth();
+        var before = reminderGeneration;
+        // Commands precede Step on the owner thread. Capture now so queued context
+        // changes cannot grant extra time against an earlier Personal snapshot.
+        Latest = null;
+        var point = CaptureCurrent();
+        return before == reminderGeneration && HealthyPersonal() &&
+            ApplicationClassifier.Classify(new(point.Time, point.Time, DesktopScope.Personal, point.Session,
+                point.Application, InputState.Active, MonitoringAvailability.Available, EvidenceConfidence.Estimated), configuration) == ActivityKind.CountedPersonal;
+    }
 
     private void InvalidateReminder() { Reminders?.Invalidate(); reminderApplication = null; reminderEnd = null; }
 
@@ -100,6 +151,15 @@ public sealed class MonitoringRuntime : IDisposable
         Latest = null; Health = new(false, ++generation);
     }
 
+    internal void RefreshInterventionConfiguration()
+    {
+        InvalidateReminder();
+        configuration = session.Configuration;
+        // Estimator uses accounting fields only; a cadence edit must preserve its continuity.
+    }
+
+    internal void RevokePresentation() { offeredSequence = 0; reminderGeneration++; InvalidateReminder(); }
+
     public bool RetryProviders()
     {
         InvalidateReminder();
@@ -124,7 +184,7 @@ public sealed class MonitoringRuntime : IDisposable
         return Latest;
     }
 
-    public void Step(bool accounting = true, bool breakReminders = false)
+    public void Step(bool accounting = true, bool breakReminders = false, bool interactive = false)
     {
         Drain();
         if (elapsed() >= next || elapsed() >= eventSampleAt && elapsed() - lastSampleAt >= 100)
@@ -176,7 +236,7 @@ public sealed class MonitoringRuntime : IDisposable
                 var deliveryGeneration = reminderGeneration;
                 var healthGeneration = Health.Generation;
                 var before = session.State;
-                var result = session.Observe(observation);
+                var result = session.Observe(observation, interactive);
                 if (!before.BreakCompleted) maximumIncompleteBreakMs = Math.Max(maximumIncompleteBreakMs, before.BreakProgressMs);
                 if (!result.State.BreakCompleted) maximumIncompleteBreakMs = Math.Max(maximumIncompleteBreakMs, result.State.BreakProgressMs);
                 if (!before.BreakCompleted && !result.State.BreakCompleted && result.State.BreakProgressMs < before.BreakProgressMs)
@@ -215,7 +275,14 @@ public sealed class MonitoringRuntime : IDisposable
                     {
                         reminderApplication = observation.Application;
                         reminderEnd = observation.End;
-                        Reminders?.Offer(effect.Sequence, Environment.TickCount64);
+                        offeredSequence = effect.Sequence;
+                        offeredHealthGeneration = Health.Generation;
+                        var nowTick = Environment.TickCount64;
+                        var remainingAge = Math.Min(EstimationPolicy.MaximumAgeMs, configuration.MaximumEvidenceAgeMs) -
+                            (clock.Now.Milliseconds - observation.End.Milliseconds);
+                        offeredEvent = new(effect.Sequence, reminderGeneration, Latest!.Window, personal,
+                            nowTick + Math.Min(2_000, remainingAge), interactive ? ReminderStyle.InteractiveWindow : ReminderStyle.WindowsNotification, deliveryEpoch);
+                        Reminders?.Offer(effect.Sequence, nowTick, offeredEvent);
                     }
                 }
                 UpdateReminderEligibility(accounting, breakReminders);

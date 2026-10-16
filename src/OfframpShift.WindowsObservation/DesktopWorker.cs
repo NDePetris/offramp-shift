@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Text.Json;
+using System.Globalization;
 using Microsoft.Win32;
 
 namespace WindowsObservation;
@@ -74,7 +75,21 @@ internal sealed class DesktopWorker : IDisposable
         finally { owned.Dispose(); process = null; failed = true; }
     }
 
-    // Private stdin protocol has one read command; no binding or mutation operation.
+    public bool CheckNudge(nint window, nint foreground, Guid personal)
+    {
+        if (failed || process is null || window == 0 || foreground == 0 || personal == Guid.Empty) return false;
+        try
+        {
+            process.StandardInput.WriteLine(FormattableString.Invariant($"nudge {window.ToInt64()} {foreground.ToInt64()} {personal:D}"));
+            process.StandardInput.Flush();
+            var line = process.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromMilliseconds(2_000)).GetAwaiter().GetResult();
+            if (line is not ("true" or "false")) throw new InvalidOperationException();
+            return line == "true";
+        }
+        catch { failed = true; Dispose(); return false; }
+    }
+
+    // Private stdin protocol only reads observation/window membership; no mutation operation.
     public static int Run()
     {
         if (!IsSupported(Build, RuntimeInformation.ProcessArchitecture)) return 2;
@@ -83,13 +98,52 @@ internal sealed class DesktopWorker : IDisposable
             using var reader = new DesktopComReader();
             while (Console.ReadLine() is { } request)
             {
-                if (request != "read") return 2;
-                Console.WriteLine(JsonSerializer.Serialize(reader.Read()));
+                if (request == "read") Console.WriteLine(JsonSerializer.Serialize(reader.Read()));
+                else if (request.Length <= 160 && request.Split(' ') is ["nudge", var window, var foreground, var desktop] &&
+                    long.TryParse(window, NumberStyles.None, CultureInfo.InvariantCulture, out var hwnd) && hwnd > 0 &&
+                    long.TryParse(foreground, NumberStyles.None, CultureInfo.InvariantCulture, out var active) && active > 0 &&
+                    Guid.TryParseExact(desktop, "D", out var personal) && personal != Guid.Empty)
+                    Console.WriteLine(WindowDesktopMembership.Check(reader, (nint)hwnd, (nint)active, personal) ? "true" : "false");
+                else return 2;
             }
             return 0;
         }
         catch { Console.WriteLine(JsonSerializer.Serialize(new DesktopReading(Capability.Unavailable, null, [], 0))); return 1; }
     }
+}
+
+// Documented public interface, deliberately ending before MoveWindowToDesktop.
+// Shell calls remain in the existing build-gated, deadline-isolated child process.
+[SupportedOSPlatform("windows")]
+internal static class WindowDesktopMembership
+{
+    internal static bool Check(DesktopComReader reader, nint window, nint foreground, Guid personal)
+    {
+        IWindowDesktopMembership? membership = null;
+        try
+        {
+            if (Native.GetForegroundWindow() != foreground || Native.Session() != OfframpShift.Core.SessionState.Active) return false;
+            var before = reader.Read();
+            if (before.Current != personal) return false;
+            membership = (IWindowDesktopMembership)Activator.CreateInstance(Type.GetTypeFromCLSID(new("AA509086-5CA9-4C25-8F95-589D3C07B48A"), true)!)!;
+            Marshal.ThrowExceptionForHR(membership.IsWindowOnCurrentVirtualDesktop(window, out var onCurrent));
+            Marshal.ThrowExceptionForHR(membership.GetWindowDesktopId(window, out var windowDesktop));
+            Marshal.ThrowExceptionForHR(membership.GetWindowDesktopId(foreground, out var foregroundDesktop));
+            var after = reader.Read();
+            return onCurrent && windowDesktop == personal && foregroundDesktop == personal && after.Current == personal &&
+                before.ShellProcess == after.ShellProcess && Native.GetForegroundWindow() == foreground &&
+                Native.Session() == OfframpShift.Core.SessionState.Active;
+        }
+        catch { return false; }
+        finally { if (membership is not null) Marshal.ReleaseComObject(membership); }
+    }
+}
+
+[ComImport, Guid("A5CD92FF-29BE-454C-8D04-D82879FB3F1B"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IWindowDesktopMembership
+{
+    [PreserveSig] int IsWindowOnCurrentVirtualDesktop(nint window, [MarshalAs(UnmanagedType.Bool)] out bool onCurrent);
+    [PreserveSig] int GetWindowDesktopId(nint window, out Guid desktop);
 }
 
 // ABI facts follow VirtualDesktopAccessor ceb648849dcc5760a7f4ed223308ffe3de0b51c6.

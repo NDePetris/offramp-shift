@@ -21,17 +21,18 @@ public static class CheckpointCodec
             var versions = document.RootElement.EnumerateObject().Where(x => x.Name == "Version").ToArray();
             if (versions.Length != 1) throw Invalid();
             var version = versions[0].Value.GetInt32();
-            if (version is not 1 and not MonitoringCheckpoint.CurrentVersion) throw new CheckpointStorageException(StorageFailure.UnsupportedVersion);
+            if (version is not (1 or 2 or MonitoringCheckpoint.CurrentVersion)) throw new CheckpointStorageException(StorageFailure.UnsupportedVersion);
             var root = Object(document.RootElement, "Version", "SavedUtc", "Configuration", "State");
             string[] configurationFields = ["AllowanceMs", "RequiredBreakMs", "IdleThresholdMs", "GraceMs",
                 "RepeatNudgeMs", "SnoozeMs", "MaximumEvidenceAgeMs", "Mode", "Applications"];
             string[] stateFields = ["UsageMs", "Exhausted", "BreakProgressMs", "BreakCompleted", "IdleProgressMs",
                 "Paused", "Intervention", "ReminderRemainingMs", "SnoozeRemainingMs", "EffectSequence", "Recovery"];
-            var c = Object(root["Configuration"], version == 1 ? configurationFields :
-                [.. configurationFields, "Accounting", "EstimationPolicyVersion"]);
+            var c = Object(root["Configuration"], version == 1 ? configurationFields : version == 2 ?
+                [.. configurationFields, "Accounting", "EstimationPolicyVersion"] :
+                [.. configurationFields, "Accounting", "EstimationPolicyVersion", "InteractiveRepeatNudgeMs"]);
             var s = Object(root["State"], version == 1 ? stateFields :
                 [.. stateFields, "EstimatedUsageMs", "BreakUncertaintyMs", "ConsecutiveUncertaintyMs"]);
-            if (version == 2 && c["EstimationPolicyVersion"].GetInt32() > EstimationPolicy.Version)
+            if (version >= 2 && c["EstimationPolicyVersion"].GetInt32() > EstimationPolicy.Version)
                 throw new CheckpointStorageException(StorageFailure.UnsupportedVersion);
             var configuration = new MonitoringConfiguration
             {
@@ -41,6 +42,7 @@ public static class CheckpointCodec
                 GraceMs = c["GraceMs"].GetInt64(),
                 RepeatNudgeMs = c["RepeatNudgeMs"].GetInt64(),
                 SnoozeMs = c["SnoozeMs"].GetInt64(),
+                InteractiveRepeatNudgeMs = version >= 3 ? c["InteractiveRepeatNudgeMs"].GetInt64() : 60_000,
                 MaximumEvidenceAgeMs = c["MaximumEvidenceAgeMs"].GetInt64(),
                 Accounting = version == 1 ? AccountingMode.CertifiedOnly : (AccountingMode)c["Accounting"].GetInt32(),
                 EstimationPolicyVersion = version == 1 ? EstimationPolicy.Version : c["EstimationPolicyVersion"].GetInt32(),

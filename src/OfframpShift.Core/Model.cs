@@ -11,7 +11,7 @@ public enum AccountingMode { CertifiedOnly, BestEffort }
 public enum ContinuityDisposition { Invalidate, PreserveTransient }
 public enum ClassificationMode { CountByDefault, BlocklistOnly }
 public enum ActivityKind { Uncertain, CountedPersonal, Neutral, Work, Idle, Locked }
-public enum InterventionState { Normal, Grace, Nudging, Snoozed }
+public enum InterventionState { Normal, Grace, Nudging, Snoozed, PersonalDeferred }
 public enum EffectKind { AllowanceExhausted, Nudge, AllowanceReset }
 public enum RecoveryStatus { Ready, Required }
 
@@ -54,6 +54,7 @@ public sealed record MonitoringConfiguration
     public long GraceMs { get; init; } = 60_000;
     public long RepeatNudgeMs { get; init; } = 10 * 60_000;
     public long SnoozeMs { get; init; } = 10 * 60_000;
+    public long InteractiveRepeatNudgeMs { get; init; } = 60_000;
     // Receipt freshness is independent of certified interval duration.
     public long MaximumEvidenceAgeMs { get; init; } = 5_000;
     public AccountingMode Accounting { get; init; }
@@ -65,7 +66,8 @@ public sealed record MonitoringConfiguration
     public void Validate()
     {
         if (AllowanceMs <= 0 || RequiredBreakMs <= 0 || IdleThresholdMs < 0 || GraceMs < 0 ||
-            RepeatNudgeMs <= 0 || SnoozeMs <= 0 || MaximumEvidenceAgeMs <= 0 || !Enum.IsDefined(Mode) ||
+            RepeatNudgeMs <= 0 || SnoozeMs <= 0 || InteractiveRepeatNudgeMs is < 60_000 or > 3_600_000 ||
+            InteractiveRepeatNudgeMs % 60_000 != 0 || MaximumEvidenceAgeMs <= 0 || !Enum.IsDefined(Mode) ||
             !Enum.IsDefined(Accounting) || EstimationPolicyVersion != EstimationPolicy.Version)
             throw new ArgumentException("Invalid monitoring configuration.");
         if (Applications.IsDefault || Applications.Any(string.IsNullOrWhiteSpace) ||

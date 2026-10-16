@@ -71,14 +71,16 @@ public sealed class DurableMonitoringSession : IDisposable
                 coordinator = new(clock, fallback);
                 SaveCheckpoint(coordinator.CreateCheckpoint());
             }
-            else if (checkpoint.Version == 1)
+            else if (checkpoint.Version < MonitoringCheckpoint.CurrentVersion)
             {
-                // Validate the original before producing a version-2 replacement.
+                // Validate the original before producing a version-3 replacement.
                 // The existing store revision and exact pending payload protect migration.
                 coordinator = MonitoringCoordinator.Restore(clock, fallback, checkpoint);
                 if (coordinator.State.Recovery != RecoveryStatus.Ready)
                     throw new CheckpointStorageException(StorageFailure.ClockUnavailable);
-                pending = coordinator.CreateCheckpoint();
+                // Migration preserves the original durable state/metadata. Normal
+                // restoration still abandons unfinished runtime continuity afterward.
+                pending = checkpoint with { Version = MonitoringCheckpoint.CurrentVersion };
                 SaveCheckpoint(pending);
                 pendingSaved = true;
                 RestoreCommitted(pending);
@@ -96,10 +98,10 @@ public sealed class DurableMonitoringSession : IDisposable
         }
     }
 
-    public TransitionResult Observe(MonitoringObservation observation)
+    public TransitionResult Observe(MonitoringObservation observation, bool interactive = false)
     {
         ArgumentNullException.ThrowIfNull(observation);
-        return Apply(() => coordinator.Observe(observation));
+        return Apply(() => coordinator.Observe(observation, interactive));
     }
     public TransitionResult ChangeConfiguration(MonitoringConfiguration configuration)
     {
@@ -109,6 +111,16 @@ public sealed class DurableMonitoringSession : IDisposable
     }
     public TransitionResult SetPaused(bool paused) => Apply(() => coordinator.SetPaused(paused));
     public TransitionResult Snooze() => Apply(() => coordinator.Snooze());
+    public TransitionResult DeferInteractive(long durationMs)
+    {
+        if (durationMs is not (60_000 or 300_000)) throw new ArgumentException("Choose one or five minutes.");
+        return Apply(() => coordinator.DeferInteractive(durationMs));
+    }
+    public TransitionResult ChangeInteractiveRepeat(long durationMs)
+    {
+        if (durationMs is < 60_000 or > 3_600_000 || durationMs % 60_000 != 0) throw new ArgumentException("Choose 1–60 whole minutes.");
+        return Apply(() => coordinator.ChangeInteractiveRepeat(durationMs));
+    }
     public TransitionResult ResetUsage() => Apply(() => coordinator.ResetUsage());
 
     private TransitionResult Apply(Func<TransitionResult> transition)

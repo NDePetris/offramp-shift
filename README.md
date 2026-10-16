@@ -35,6 +35,12 @@ The [PR 6 setup and feedback checklist](docs/validation/pr6-setup-feedback.md)
 tracks the focused setup, tray-error and first-close changes separately from the
 deferred PR 5 acceptance exercises.
 
+PR 9 adds explicitly selected **Interactive window** reminders, with immediate
+exhaustion prompts, durable one/five-minute Personal-only extensions, and a
+configurable repeat interval. Existing Windows notification users retain their
+preference and timing. Focus is best effort and desktop switching remains absent.
+See the [short PR 9 owner checklist and safety boundaries](docs/validation/pr9-interactive-nudges.md).
+
 CI uses these automated test commands on Windows runners, with Node.js 24 for the browser probe. Browser tests use mocked extension APIs and synthetic native callers; neither job interacts with a live browser or switches desktops. CI cannot establish actual virtual-desktop or browser-to-window compatibility.
 
 Core and persistence target platform-independent `net10.0`. Core tests use synthetic observations and a fake clock; persistence tests use real temporary SQLite databases and injected interruption faults. The root runner builds/tests Core, Persistence, ApplicationHost and the Windows app and verifies their formatting. Persistence introduces pinned Microsoft.Data.Sqlite with bundled native SQLite and locked transitive dependencies; initial restore/audit needs NuGet access, and subsequent locked restores can use cached packages. Core/Persistence contain no runtime network or native observation code; Windows integration is owned by the application host. See [core monitoring architecture](docs/architecture/core-monitoring.md), [local persistence architecture](docs/architecture/local-persistence.md) and [dependency notices](THIRD-PARTY-NOTICES.md).

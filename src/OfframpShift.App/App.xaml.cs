@@ -15,6 +15,7 @@ public partial class ShiftApplication : Application
     private bool exiting, closing;
     private int actionsInFlight;
     private AppTheme? theme;
+    private NudgePresenter? nudges;
     public ShiftApplication() { InitializeComponent(); }
     internal ShiftApplication(SingleInstance instance) : this() { this.instance = instance; }
     protected override void OnStartup(StartupEventArgs e)
@@ -22,15 +23,20 @@ public partial class ShiftApplication : Application
         base.OnStartup(e);
         controller = WindowsApplication.Start();
         window = new(Execute, ExitAsync, CloseAsync); MainWindow = window;
+        nudges = new(command => command.Kind == HostCommandKind.AuthorizeNudge ? controller.ExecuteAsync(command) : Execute(command),
+            () => controller.Completion.IsCompleted || exiting ? null : controller.Latest,
+            detail => { window.ReportAction(detail); tray?.ReportNudgeFailure(detail); }, new NudgePlatform());
         try { tray = new(() => Open(false), () => Open(true), Execute, ExitAsync); }
         catch { MessageBox.Show("The tray icon could not be created. Keep this window open; closing will exit.", "Offramp Shift"); }
         RefreshBrand();
         instance.Listen(() => Dispatcher.BeginInvoke(() => Open(false)));
         timer = new(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(250) };
         timer.Tick += (_, _) => Refresh(); timer.Start();
+        Microsoft.Win32.SystemEvents.DisplaySettingsChanged += DisplaySettingsChanged;
         window.Show();
         SessionEnding += (_, _) => controller.StopAsync();
     }
+    private void DisplaySettingsChanged(object? sender, EventArgs e) => Dispatcher.BeginInvoke(() => nudges?.Close());
     private void Open(bool settings)
     {
         if (window is null || exiting) return;
@@ -48,12 +54,17 @@ public partial class ShiftApplication : Application
             {
                 window.Model.MarkUnavailable("Application startup failed. Accounting is unavailable; exit and restart after checking local storage.");
                 tray?.MarkUnavailable();
+                nudges?.Close();
             }
             return;
         }
         window.Apply(value, controller.Completion.IsCompleted); tray?.Apply(value, window.Model);
-        if (controller.TryTakeReminder() && actionsInFlight == 0 && Environment.TickCount64 - value.PublishedTick is >= 0 and <= 2_000)
-            tray?.RequestReminder();
+        nudges?.Refresh(controller.Completion.IsCompleted || exiting);
+        if (controller.TryTakeReminder(out var reminder) && actionsInFlight == 0 && Environment.TickCount64 - value.PublishedTick is >= 0 and <= 2_000)
+        {
+            if (reminder?.Style == ReminderStyle.InteractiveWindow) _ = nudges?.PresentAsync(reminder);
+            else if (value.Settings.ReminderStyle == ReminderStyle.WindowsNotification) tray?.RequestReminder();
+        }
         if (theme != value.Settings.Theme)
         {
             theme = value.Settings.Theme;
@@ -123,7 +134,7 @@ public partial class ShiftApplication : Application
             if (answer == MessageBoxResult.Cancel) return;
             if (answer == MessageBoxResult.Yes) { await Execute(new(HostCommandKind.RetrySave)); return; }
         }
-        exiting = true; window.ActionResult.Text = "Stopping monitoring and disposing providers…";
+        exiting = true; nudges?.Close(); window.ActionResult.Text = "Stopping monitoring and disposing providers…";
         var stopped = controller.StopAsync();
         if (await Task.WhenAny(stopped, Task.Delay(12_000)) != stopped)
         {
@@ -137,7 +148,8 @@ public partial class ShiftApplication : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        controller?.StopAsync(); timer?.Stop(); tray?.Dispose();
+        Microsoft.Win32.SystemEvents.DisplaySettingsChanged -= DisplaySettingsChanged;
+        nudges?.Close(); controller?.StopAsync(); timer?.Stop(); tray?.Dispose();
         base.OnExit(e);
     }
 }

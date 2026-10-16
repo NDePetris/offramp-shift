@@ -18,7 +18,7 @@ for the subsequent focused UI changes.
 
 `OfframpShift.ApplicationHost` references ActivityMonitoring, WindowsObservation
 and Persistence. PR 8 adds an explicit durable Core usage-reset operation; the
-checkpoint format remains version 2. The probe
+checkpoint format is now version 3 for PR 9 interactive cadence. The probe
 and WPF app share `MonitoringRuntime`; there is no second estimator/accounting
 loop. `Sampler` and anonymous resource instrumentation moved from the probe into
 the host. Probe final JSON now places aggregate counters under `diagnostics`,
@@ -102,7 +102,32 @@ accounting. RecoveryRequired alone offers explicit reset through the existing
 archive protocol. Incompatible/Blocked states never offer destructive recovery;
 Blocked permits explicit reopen after correcting clock/access/ownership.
 
-## Break reminders and manual usage reset (PR 8)
+## Interactive nudges (PR 9)
+
+Windows settings v3 offers Off, Windows notification and explicitly selected
+Interactive window. v1 migrates to Off; enabled v2 reminders migrate to Windows
+notification with existing timing intact. Core's interactive observation policy
+uses zero initial grace and a separate durable repeat interval (1–60 minutes,
+default one minute). A cadence-only edit preserves unfinished break progress.
+`PersonalDeferred` uses the existing snooze remainder for Personal-only extra
+time; legacy `Snooze()` retains its all-verified-time clock. Checkpoint v3 strictly
+migrates original v1/v2 layouts without replay or downtime credit.
+
+`NudgePresenter` owns one unowned modeless WPF window. Only new committed mailbox
+events authorize show/refocus. Documented read-only window-desktop checks run in
+the existing isolated worker; UI rechecks generation, foreground and expiry before
+one ordinary activation attempt. Only the nudge is positioned on the foreground
+monitor using target DPI. Wrong/unknown membership suppresses delivery; no switching
+or virtual-desktop movement API is added. Continued visibility tolerates its own
+foreground transition while requiring fresh healthy Personal/session evidence.
+Context/storage/observation changes close it without granting extra time. User
+X/Escape/Alt+F4 request a durable one-minute deferral. Failed saves remain explicit.
+
+See [PR 9 behavior, boundaries and owner checklist](../validation/pr9-interactive-nudges.md).
+Actual focus/placement is **NOT RUN**; any presentation-caused desktop switch blocks
+acceptance. Existing NO-GO gates, read-only build restrictions and recovery remain.
+
+## Break reminders and manual usage reset (PR 8 baseline)
 
 Break reminders are opt-in and default off. They consume only newly committed
 Core `Nudge` effects after estimator delivery acceptance. Core's grace and repeat
@@ -152,10 +177,10 @@ or replace the separate Recover accounting protocol. See the
 `%LOCALAPPDATA%\Offramp\Shift\windows-settings.json` is independent of
 `checkpoint.db`. It stores schema/provider/build, nullable role GUIDs, experimental
 consent, enabled-monitoring intent, theme, close behavior and default-off break
-reminder preference. Settings version 2 strictly migrates the exact version-1
-shape in memory, preserving all existing fields and setting reminders off. Load
-does not rewrite the file; the next explicit atomic save writes version 2.
-Version 2 requires the reminder field; version 1 rejects it as unknown. It contains no
+reminder style. Version 3 requires ReminderStyle and rejects the old Boolean.
+Exact v1/v2 shapes migrate strictly in memory: v1/disabled v2 becomes Off;
+enabled v2 becomes Windows notification. Other fields are preserved. Load never
+rewrites the file; the next explicit atomic save writes v3. It contains no
 Core totals/configuration, foreground identities or activity/content history.
 The codec rejects duplicate/unknown/missing fields, unsupported versions and
 invalid values. Saving flushes a unique same-directory temporary file and uses
@@ -181,8 +206,9 @@ but does not guarantee Windows notification attribution: the unpackaged app stil
 uses legacy NotifyIcon balloons and system-selected shell identity. No notification
 registration, installer or new framework is added. Its STA entry point dispatches
 `--desktop-worker` before WPF, singleton or storage initialization. The existing
-same-executable redirected-stdio read-only worker protocol, process isolation,
-COM declarations and two-second worker response deadline remain unchanged.
+same-executable redirected-stdio worker adds only the read-only membership request.
+Process isolation, private observation COM declarations and the two-second worker
+response deadline remain unchanged.
 Non-COM fault modes test the actual apphost executable's redirected streams.
 
 A current-user restricted activation pipe carries one activation byte; a named

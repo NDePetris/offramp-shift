@@ -104,6 +104,18 @@ segmentation remains the future Windows adapter's responsibility.
 
 ## Advisory interventions
 
+PR 9 adds an interactive timing policy: zero automatic grace and separate
+`InteractiveRepeatNudgeMs`, default one minute, restricted to 1–60 whole minutes.
+Legacy policy remains the default. `DeferInteractive(60_000|300_000)` appends
+`PersonalDeferred`, reusing the existing snooze remainder but consuming it only
+on counted Personal intervals. `Snooze()` retains its all-verified-time clock.
+Neither increases allowance; qualifying breaks reset every intervention. Duplicate
+deferrals are no-ops while one is active. A dedicated repeat edit changes no
+accounting boundary or unfinished break progress. Checkpoint v3 adds the cadence
+configuration only; original versions are validated before migration.
+
+The following describes the unchanged legacy timing policy.
+
 `Normal -> Grace -> Nudging` follows allowance exhaustion. Grace and repeat-nudge
 remainders advance **only during counted Personal activity**. Break completion
 returns every intervention state to Normal. Snooze may be requested while

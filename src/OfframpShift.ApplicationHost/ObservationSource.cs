@@ -18,6 +18,7 @@ public interface IObservationSource : IDisposable
     EvidencePoint Read();
     bool TryTake(out NativeSignal? signal);
     void ReplaceDesktopWorker();
+    bool CheckNudgeDesktop(nint nudge, nint foreground, Guid personal) => false;
     object Diagnostics => new { };
 }
 
@@ -65,6 +66,7 @@ public sealed class WindowsObservationSource : IObservationSource
         resources = resources.Snapshot(lifetime.Elapsed.TotalSeconds)
     };
     public bool TryTake(out NativeSignal? signal) => loop.TryTake(out signal, 0);
+    public bool CheckNudgeDesktop(nint nudge, nint foreground, Guid personal) => worker?.CheckNudge(nudge, foreground, personal) == true;
     public void ReplaceDesktopWorker()
     {
         resources.Retire(worker?.OwnedProcess); worker?.Dispose(); worker = null;
