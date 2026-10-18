@@ -35,6 +35,7 @@
        <Button Content="_Resume" Click="Resume" IsEnabled="{Binding CanResume}" />
       </WrapPanel>
       <TextBlock x:Name="ActionResult" AutomationProperties.LiveSetting="Polite" Margin="0,0,0,12" />
+      <TextBlock x:Name="NudgeStatus" Visibility="Collapsed" Margin="0,0,0,12" />
       <TextBlock Text="Current desktop context" FontWeight="SemiBold" />
       <TextBlock Text="{Binding Context}" Margin="0,4,0,0" FontSize="18" />
       <TextBlock Text="Usage and allowance" Style="{StaticResource SectionTitle}" />
@@ -86,9 +87,14 @@
       <Button Content="Save monitoring settings" Click="SaveDurations" IsEnabled="{Binding CanEdit}" HorizontalAlignment="Left" />
       <Button x:Name="ResetUsageButton" Content="Reset _usage…" Click="ResetUsage" IsEnabled="{Binding CanResetUsage}" HorizontalAlignment="Left" AutomationProperties.HelpText="Requires confirmation. Clears accumulated usage and break progress; preserves settings and Pause." />
       <TextBlock Text="Break reminders" Style="{StaticResource SectionTitle}" />
-      <CheckBox x:Name="RemindersInput" Content="Enable b_reak reminders" IsEnabled="{Binding CanEditReminders}" AutomationProperties.Name="Enable break reminders" />
-      <TextBlock Text="Off by default. Gentle reminders use eligible Personal usage after the grace period. Windows may suppress or display notifications late. Changing this preference preserves usage and break progress." Margin="0,8,0,8" />
+      <Label Content="_Reminder style" Target="{Binding ElementName=RemindersInput}" />
+      <ComboBox x:Name="RemindersInput" IsEnabled="{Binding CanEditReminders}" HorizontalAlignment="Left" MinWidth="220" AutomationProperties.Name="Reminder style" />
+      <TextBlock Text="Off by default. Both styles remind you as soon as your Personal allowance runs out. Windows notifications may be suppressed or delayed by Windows. Interactive window can take foreground focus. Changing style preserves usage and break progress." Margin="0,8,0,8" />
       <Button x:Name="SaveRemindersButton" Content="Save reminder preference" Click="SaveReminders" IsEnabled="{Binding CanEditReminders}" HorizontalAlignment="Left" />
+      <Label Content="Reminder repeat interval (_minutes, 1–60)" Target="{Binding ElementName=RepeatInput}" />
+      <TextBox x:Name="RepeatInput" HorizontalAlignment="Left" AutomationProperties.Name="Reminder repeat interval in whole minutes" IsEnabled="{Binding CanEdit}" />
+      <TextBlock Text="Applies to both reminder styles. Repeats and extra time advance only during counted Personal use. Time on Work or away from the computer doesn't count." Margin="0,0,0,8" />
+      <Button x:Name="SaveRepeatButton" Content="Save reminder repeat interval" Click="SaveRepeat" IsEnabled="{Binding CanEdit}" HorizontalAlignment="Left" />
       <TextBlock Text="Appearance and closing" Style="{StaticResource SectionTitle}" />
       <Label Content="_Theme" Target="{Binding ElementName=ThemeInput}" />
       <ComboBox x:Name="ThemeInput" HorizontalAlignment="Left" MinWidth="160" AutomationProperties.Name="Theme" />

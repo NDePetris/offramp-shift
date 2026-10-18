@@ -9,12 +9,15 @@ public sealed record HostSnapshot(long Sequence, long PublishedTick, Persistence
     string Status, string Detail, bool Available, bool BindingsValid, long RetryInMs,
     bool ObservationAllowed = false, bool CanConsent = false, bool CanAssign = false,
     AssignmentStatus PersonalAssignment = AssignmentStatus.Unavailable,
-    AssignmentStatus WorkAssignment = AssignmentStatus.Unavailable, bool ConsentNeedsReview = false);
+    AssignmentStatus WorkAssignment = AssignmentStatus.Unavailable, bool ConsentNeedsReview = false,
+    bool CanKeepNudgeOpen = false, long ReminderGeneration = 0, Guid ReminderEpoch = default,
+    string ReminderStatus = "No committed nudge event yet.", Guid PresentationId = default);
 
 public enum AssignmentStatus { Unassigned, Valid, Unavailable, Missing, Invalid }
 
 public sealed record HostCommandResult(bool Succeeded, string Message = "")
 {
+    public NudgePresentation? Presentation { get; init; }
     public static HostCommandResult Success(string message = "") => new(true, message);
     public static HostCommandResult Failure(string message) => new(false, message);
 }
@@ -23,7 +26,7 @@ public enum HostCommandKind
 {
     Consent, Start, Pause, Resume, RetryMonitoring, RetrySave, ReopenStorage,
     AssignPersonal, AssignWork, ChangeDurations, ChangeAppearance, ChangeCloseBehavior, Recover, RepairSettings,
-    ChangeBreakReminders, ResetUsage
+    ChangeBreakReminders, ResetUsage, ChangeInteractiveRepeat, DeferInteractive, BeginNudgePresentation, CompleteNudgePresentation
 }
 
 public sealed record HostCommand(HostCommandKind Kind)
@@ -34,5 +37,13 @@ public sealed record HostCommand(HostCommandKind Kind)
     public long IdleThresholdMs { get; init; }
     public AppTheme Theme { get; init; }
     public bool? CloseToTray { get; init; }
-    public bool BreakRemindersEnabled { get; init; }
+    public ReminderStyle ReminderStyle { get; init; }
+    public long DurationMs { get; init; }
+    public ReminderEvent? Reminder { get; init; }
+    public nint NudgeWindow { get; init; }
+    public NudgePresentation? Presentation { get; init; }
 }
+
+// Process-local, single-use presentation transaction; never persisted or renewed.
+public sealed record NudgePresentation(Guid Id, long Sequence, nint OriginalForeground,
+    Guid PersonalDesktop, Guid Epoch, long ExpiresTick);

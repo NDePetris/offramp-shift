@@ -27,6 +27,7 @@ public partial class MainWindow : Window
         this.confirmUsageReset = confirmUsageReset ?? (() => MessageBox.Show(this, ResetUsageConfirmation, "Reset usage",
             MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) == MessageBoxResult.Yes);
         ThemeInput.ItemsSource = Enum.GetValues<AppTheme>();
+        RemindersInput.ItemsSource = new[] { "Off", "Windows notification", "Interactive window" };
         Closing += OnClosing;
         ApplyBrand(BrandAssets.IsDark(Background), SystemParameters.HighContrast);
     }
@@ -51,12 +52,13 @@ public partial class MainWindow : Window
             AllowanceInput.Text = ((decimal)config.AllowanceMs / 60_000).ToString(CultureInfo.CurrentCulture);
             BreakInput.Text = ((decimal)config.RequiredBreakMs / 60_000).ToString(CultureInfo.CurrentCulture);
             IdleInput.Text = ((decimal)config.IdleThresholdMs / 1_000).ToString(CultureInfo.CurrentCulture);
+            RepeatInput.Text = (config.InteractiveRepeatNudgeMs / 60_000).ToString(CultureInfo.CurrentCulture);
         }
         if (snapshot.Settings != displayedSettings)
         {
             displayedSettings = snapshot.Settings; ThemeInput.SelectedItem = snapshot.Settings.Theme;
             CloseInput.IsChecked = snapshot.Settings.CloseToTray ?? false;
-            RemindersInput.IsChecked = snapshot.Settings.BreakRemindersEnabled;
+            RemindersInput.SelectedIndex = (int)snapshot.Settings.ReminderStyle;
         }
     }
 
@@ -123,7 +125,13 @@ public partial class MainWindow : Window
     private async void SaveAppearance(object sender, RoutedEventArgs e) => await Run(new(HostCommandKind.ChangeAppearance)
     { Theme = ThemeInput.SelectedItem is AppTheme theme ? theme : AppTheme.System, CloseToTray = CloseInput.IsChecked == true });
     private async void SaveReminders(object sender, RoutedEventArgs e) => await Run(new(HostCommandKind.ChangeBreakReminders)
-    { BreakRemindersEnabled = RemindersInput.IsChecked == true });
+    { ReminderStyle = (ReminderStyle)RemindersInput.SelectedIndex });
+    private async void SaveRepeat(object sender, RoutedEventArgs e)
+    {
+        if (!int.TryParse(RepeatInput.Text, NumberStyles.Integer, CultureInfo.CurrentCulture, out var minutes) || minutes is < 1 or > 60)
+        { SettingsResult.Text = "Enter a whole number of minutes from 1 to 60."; return; }
+        await Run(new(HostCommandKind.ChangeInteractiveRepeat) { DurationMs = minutes * 60_000L });
+    }
     private async void ResetUsage(object sender, RoutedEventArgs e)
     {
         if (busy || !Model.CanResetUsage) return;

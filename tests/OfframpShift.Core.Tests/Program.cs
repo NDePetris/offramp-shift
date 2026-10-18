@@ -529,6 +529,7 @@ Test("deterministic mixed sequences enforce invariants", () =>
 });
 
 ResetUsageRegressions.Run(Test, value => Check(value));
+InteractiveRegressions.Run(Test, value => Check(value));
 BestEffortRegressions.Run(Test, value => Check(value));
 Console.WriteLine($"{passed} tests passed; {failed} failed; {assertions} assertions. Synthetic domain evidence only; no Windows integration validation.");
 return failed == 0 ? 0 : 1;

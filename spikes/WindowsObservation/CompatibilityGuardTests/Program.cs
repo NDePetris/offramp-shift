@@ -11,12 +11,22 @@ internal static class Program
     {
         if (args.Length != 0) return 2; // A broken spawn guard must not recursively run tests.
         var cases = 0;
+        var personal = Guid.NewGuid();
+        var missing = unchecked((int)0x8002802B);
+        if (WindowDesktopMembership.CheckCandidate(true, missing, Guid.Empty, personal, true, false) != NudgeDesktopCheck.Allowed ||
+            WindowDesktopMembership.CheckCandidate(true, missing, Guid.Empty, personal, false, false) != NudgeDesktopCheck.CandidateIdentityUnavailable ||
+            WindowDesktopMembership.CheckCandidate(true, missing, Guid.Empty, personal, true, true) != NudgeDesktopCheck.CandidateIdentityUnavailable ||
+            WindowDesktopMembership.CheckCandidate(true, -1, Guid.Empty, personal, true, false) != NudgeDesktopCheck.CandidateIdentityUnavailable ||
+            WindowDesktopMembership.CheckCandidate(false, missing, Guid.Empty, personal, true, false) != NudgeDesktopCheck.CandidateNotCurrent ||
+            WindowDesktopMembership.CheckCandidate(true, 0, Guid.NewGuid(), personal, true, false) != NudgeDesktopCheck.CandidateWrongDesktop ||
+            WindowDesktopMembership.CheckCandidate(true, 0, personal, personal, false, true) != NudgeDesktopCheck.Allowed || Native.Calls != 0) return 1;
+        Console.WriteLine("PASS: hidden candidate preparation never grants strict activation; wrong/unknown desktop and other HRESULTs fail closed (pure decisions).");
         foreach (var build in new[] { "26200.9456", "26200.9458", "26200.9710", "26200.9712", "26100.9711", "26200" })
         {
             Registry.Build = build;
             using var worker = new DesktopWorker();
             if (worker.OwnedProcess is not null || worker.Read().Health != Capability.Unsupported ||
-                DesktopWorker.Run() != 2 || Native.Calls != 0) return 1;
+                DesktopWorker.Run() != 2 || worker.CheckNudge(1, 2, Guid.NewGuid()) || Native.Calls != 0) return 1;
             cases++;
         }
         foreach (var build in new[] { "26200.9457", "26200.9711" })
@@ -29,7 +39,7 @@ internal static class Program
                 RuntimeInformation.ProcessArchitecture = architecture;
                 using var worker = new DesktopWorker();
                 if (worker.OwnedProcess is not null || worker.Read().Health != Capability.Unsupported ||
-                    DesktopWorker.Run() != 2 || Native.Calls != 0) return 1;
+                    DesktopWorker.Run() != 2 || worker.CheckNudge(1, 2, Guid.NewGuid()) || Native.Calls != 0) return 1;
                 cases++;
             }
         }
@@ -56,6 +66,8 @@ internal static class Native
 {
     internal static int Calls { get; private set; }
     internal static nint GetShellWindow() { Calls++; throw new InvalidOperationException("NativeActivationForbiddenInGuardTests"); }
+    internal static nint GetForegroundWindow() { Calls++; throw new InvalidOperationException("NativeActivationForbiddenInGuardTests"); }
+    internal static OfframpShift.Core.SessionState Session() { Calls++; throw new InvalidOperationException("NativeActivationForbiddenInGuardTests"); }
     internal static uint GetWindowThreadProcessId(nint _, out uint process)
     { Calls++; process = 0; throw new InvalidOperationException("NativeActivationForbiddenInGuardTests"); }
 }

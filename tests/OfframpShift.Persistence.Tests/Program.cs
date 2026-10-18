@@ -189,7 +189,7 @@ internal static class Program
                 {
                     using var f = new Fixture();
                     f.Initialize();
-                    if (domain) f.Payload(f.Row().Payload.Replace("\"Version\":2", "\"Version\":3", StringComparison.Ordinal));
+                    if (domain) f.Payload(f.Row().Payload.Replace("\"Version\":3", "\"Version\":4", StringComparison.Ordinal));
                     else f.Sql("PRAGMA user_version=2");
                     var bytes = File.ReadAllBytes(f.FilePath("checkpoint.db"));
                     using var s = f.Session();
@@ -267,7 +267,7 @@ internal static class Program
                     File.WriteAllText(f.FilePath("initialized"), "bad");
                     using var session = f.Session();
                     Equal(PersistenceStatus.RecoveryRequired, session.Status);
-                    if (domain) f.Payload("{\"Version\":3,\"FutureLayout\":true}");
+                    if (domain) f.Payload("{\"Version\":4,\"FutureLayout\":true}");
                     else f.Sql("PRAGMA user_version=2");
                     var original = File.ReadAllBytes(f.FilePath("checkpoint.db"));
                     Fails(StorageFailure.UnsupportedVersion, () => session.Reinitialize(Fixture.Small));
@@ -353,6 +353,7 @@ internal static class Program
             ReviewRegressions.Run();
             ResetUsagePersistence.Run();
             BestEffortPersistence.Run();
+            InteractivePersistence.Run();
             if (OperatingSystem.IsWindows()) ProcessTermination.Run();
             else Console.WriteLine("Windows process-termination checks NOT RUN on this platform.");
             Console.WriteLine($"Persistence: {tests} tests, {assertions} assertions passed (real local SQLite; exception injection and forced termination reported separately).");

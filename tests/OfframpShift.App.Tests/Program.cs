@@ -32,6 +32,16 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        if (args is ["--desktop-worker"]) return OfframpShift.App.Program.Main(args);
+        if (args is ["--inspect-nudge-lifecycle", var monitor] && monitor is "primary" or "secondary")
+        {
+            return NudgeLifecycleDiagnostic.Run(monitor == "secondary");
+        }
+        if (args is ["--inspect-hidden-nudge"] or ["--inspect-nudge-registration"])
+        {
+            Console.WriteLine("Replaced by --inspect-nudge-lifecycle primary|secondary (real host and observation loop).");
+            return 2;
+        }
         if (args is ["--instance-client", var suffix])
         { using var client = new SingleInstance(suffix); return !client.IsOwner && client.Activate() ? 0 : 1; }
         Test("tray projects saved allowance and qualifying break in every observed context", () =>
@@ -274,7 +284,14 @@ internal static class Program
                 else { Check(!worker.WaitForExit(200)); worker.Kill(); Check(worker.WaitForExit(3_000)); }
             }
         });
-        var app = new ShiftApplication();
+        // Async Closing tests pump messages. A plain resource-only Application
+        // cannot enter production monitoring, tray creation or user storage.
+#pragma warning disable WPF0001
+        var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown, ThemeMode = ThemeMode.System };
+#pragma warning restore WPF0001
+        var xaml = System.Xml.Linq.XDocument.Load(Path.GetFullPath("src/OfframpShift.App/App.xaml"));
+        var resources = xaml.Descendants().First(x => x.Name.LocalName == "ResourceDictionary");
+        app.Resources = (ResourceDictionary)System.Windows.Markup.XamlReader.Parse(resources.ToString());
         Test("canonical symbols and all seven native icon sizes decode from packaged resources", () =>
         {
             foreach (var dark in new[] { false, true })
@@ -344,12 +361,31 @@ internal static class Program
             Check(window.ActionResult.Text == window.SettingsResult.Text && window.SettingsResult.Text.Contains("Task View"));
         });
         Pr8UiRegressions.Run(Test, () => Snapshot());
+        InteractiveUiRegressions.Run(Test, () => Snapshot());
         if (args is ["--render", var output])
         {
             Directory.CreateDirectory(output);
             foreach (var theme in new[] { AppTheme.Light, AppTheme.Dark })
             {
-                app.ApplyTheme(theme);
+#pragma warning disable WPF0001
+                app.ThemeMode = theme == AppTheme.Dark ? ThemeMode.Dark : ThemeMode.Light;
+#pragma warning restore WPF0001
+                {
+                    var nudge = new NudgeWindow(_ => Task.FromResult(HostCommandResult.Success()));
+                    var content = (FrameworkElement)nudge.Content;
+                    content.Measure(new(400, 800));
+                    var height = (int)Math.Ceiling(content.DesiredSize.Height);
+                    content.Arrange(new(0, 0, 400, height)); content.UpdateLayout();
+                    var drawing = new DrawingVisual();
+                    using (var dc = drawing.RenderOpen())
+                    {
+                        dc.DrawRectangle(nudge.Background ?? SystemColors.WindowBrush, null, new Rect(0, 0, 400, height));
+                    }
+                    var bitmap = new RenderTargetBitmap(400, height, 96, 96, PixelFormats.Pbgra32); bitmap.Render(drawing); bitmap.Render(content);
+                    var png = new PngBitmapEncoder(); png.Frames.Add(BitmapFrame.Create(bitmap));
+                    using var file = File.Create(Path.Combine(output, $"{theme}-Nudge.png")); png.Save(file);
+                    nudge.CloseAutomatically();
+                }
                 foreach (var settings in new[] { false, true })
                     foreach (var scenario in new[] { (Name: "Monitoring", Width: 820, Height: 760), (Name: "Setup", Width: 820, Height: 760), (Name: "SetupSmall", Width: 480, Height: 420),
                         (Name: "Reminders", Width: 820, Height: 760), (Name: "RemindersSmall", Width: 480, Height: 420) })

@@ -5,11 +5,12 @@ using System.Text.Json.Nodes;
 namespace OfframpShift.ApplicationHost;
 
 public enum AppTheme { System, Light, Dark }
+public enum ReminderStyle { Off, WindowsNotification, InteractiveWindow }
 public enum SettingsStatus { Ready, Missing, Invalid, Incompatible, Unavailable }
 
 public sealed record WindowsSettings
 {
-    [JsonRequired] public int Version { get; init; } = 2;
+    [JsonRequired] public int Version { get; init; } = 3;
     [JsonRequired] public Guid? Personal { get; init; }
     [JsonRequired] public Guid? Work { get; init; }
     [JsonRequired] public string Provider { get; init; } = "shell-com-53f5ca0b-readonly-v1";
@@ -18,12 +19,12 @@ public sealed record WindowsSettings
     [JsonRequired] public bool MonitoringEnabled { get; init; }
     [JsonRequired] public AppTheme Theme { get; init; }
     [JsonRequired] public bool? CloseToTray { get; init; }
-    [JsonRequired] public bool BreakRemindersEnabled { get; init; }
+    [JsonRequired] public ReminderStyle ReminderStyle { get; init; }
     [JsonIgnore] public bool Complete => Personal is not null && Work is not null && Consent;
 
     public void Validate()
     {
-        if (Version != 2 || Provider != "shell-com-53f5ca0b-readonly-v1" || Build is null ||
+        if (Version != 3 || !Enum.IsDefined(ReminderStyle) || Provider != "shell-com-53f5ca0b-readonly-v1" || Build is null ||
             Build.Length > 40 || !Enum.IsDefined(Theme) || Personal == Guid.Empty || Work == Guid.Empty ||
             Personal is not null && Personal == Work || MonitoringEnabled && !Complete)
             throw new ArgumentException("Invalid Windows settings.");
@@ -50,18 +51,21 @@ public sealed class WindowsSettingsStore(string directory)
             foreach (var item in document.RootElement.EnumerateObject())
                 if (!names.Add(item.Name)) throw new JsonException();
             if (document.RootElement.TryGetProperty("Version", out var version) && version.ValueKind == JsonValueKind.Number &&
-                (!version.TryGetInt32(out var number) || number is not (1 or 2)))
+                (!version.TryGetInt32(out var number) || number is not (1 or 2 or 3)))
             { Status = SettingsStatus.Incompatible; return new(); }
             WindowsSettings settings;
-            if (version.ValueKind == JsonValueKind.Number && version.GetInt32() == 1)
+            if (version.ValueKind == JsonValueKind.Number && version.GetInt32() is 1 or 2)
             {
                 // Validate the exact v1 shape before adding the new required v2 field.
                 // Migration is in memory only; the next explicit atomic save writes v2.
-                if (!names.SetEquals(["Version", "Personal", "Work", "Provider", "Build", "Consent",
-                    "MonitoringEnabled", "Theme", "CloseToTray"])) throw new JsonException();
+                string[] legacyFields = ["Version", "Personal", "Work", "Provider", "Build", "Consent",
+                    "MonitoringEnabled", "Theme", "CloseToTray"];
+                if (!names.SetEquals(version.GetInt32() == 1 ? legacyFields : [.. legacyFields, "BreakRemindersEnabled"])) throw new JsonException();
                 var migrated = JsonNode.Parse(document.RootElement.GetRawText())!;
-                migrated["Version"] = 2;
-                migrated["BreakRemindersEnabled"] = false;
+                var enabled = version.GetInt32() == 2 && document.RootElement.GetProperty("BreakRemindersEnabled").GetBoolean();
+                migrated.AsObject().Remove("BreakRemindersEnabled");
+                migrated["Version"] = 3;
+                migrated["ReminderStyle"] = (int)(enabled ? ReminderStyle.WindowsNotification : ReminderStyle.Off);
                 settings = migrated.Deserialize<WindowsSettings>(Options) ?? throw new JsonException();
             }
             else settings = document.RootElement.Deserialize<WindowsSettings>(Options) ?? throw new JsonException();
@@ -69,7 +73,7 @@ public sealed class WindowsSettingsStore(string directory)
         }
         catch (FileNotFoundException) { Status = SettingsStatus.Missing; }
         catch (DirectoryNotFoundException) { Status = SettingsStatus.Missing; }
-        catch (Exception e) when (e is JsonException or ArgumentException) { Status = SettingsStatus.Invalid; }
+        catch (Exception e) when (e is JsonException or ArgumentException or InvalidOperationException) { Status = SettingsStatus.Invalid; }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Status = SettingsStatus.Unavailable; }
         return new();
     }

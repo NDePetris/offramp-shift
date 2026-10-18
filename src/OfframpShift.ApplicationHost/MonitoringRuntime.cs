@@ -45,6 +45,144 @@ public sealed class MonitoringRuntime : IDisposable
     private long reminderSignalSequence;
     private ApplicationIdentity? reminderApplication;
     private MonotonicTime? reminderEnd;
+    private long offeredSequence;
+    private readonly Guid deliveryEpoch = Guid.NewGuid();
+    private ReminderEvent? offeredEvent;
+    private long offeredHealthGeneration, authorizedSequence;
+    private nint authorizedWindow;
+    private string lastReminderInvalidation = "None";
+    private NudgePresentation? presentation;
+    private bool presentationCompleted;
+    private string presentationFailure = "";
+    private long presentationHealth;
+    private uint presentationShell;
+    private Guid presentationClock;
+    private long presentationStartedAt;
+    private nint presentationWindow, observedPresentationForeground;
+    internal Guid PresentationId => presentationFailure.Length == 0 && presentation is { } p &&
+        Environment.TickCount64 <= p.ExpiresTick && elapsed() - presentationStartedAt is >= 0 and <= 2_000 &&
+        Health.Healthy && Health.Generation == presentationHealth && clock.Now.Epoch == presentationClock &&
+        Latest?.Desktop.ShellProcess == presentationShell ? p.Id : Guid.Empty;
+    internal long ReminderGeneration => reminderGeneration;
+    internal Guid ReminderEpoch => deliveryEpoch;
+    internal string ReminderStatus { get; private set; } = "No committed nudge event yet.";
+    internal string NudgeAuthorizationFailure { get; private set; } = "Reminder eligibility changed or expired.";
+
+    public bool CanKeepNudgeOpen => session.Status == PersistenceStatus.Ready && !session.State.Paused &&
+        session.State.Exhausted && session.State.Intervention == InterventionState.Nudging &&
+        HealthyPersonal();
+
+    private bool HealthyPersonal() => Health.Healthy && Latest is { } p && p.Time.Epoch == clock.Now.Epoch &&
+        clock.Now.Milliseconds - p.Time.Milliseconds is >= 0 and <= 2_000 &&
+        p.Desktop.Health == Capability.Available && p.Desktop.Current == personal &&
+        p.Desktop.Desktops.Contains(personal) && p.Desktop.Desktops.Contains(work) && p.Desktop.ShellProcess != 0 &&
+        p.SessionHealth == Capability.Available && p.Session == SessionState.Active &&
+        p.Input == Capability.Available && !p.InputDiscontinuity && p.IdleAgeMs is >= 0 && p.IdleAgeMs < configuration.IdleThresholdMs &&
+        p.Foreground == Capability.Available && p.CollectionMs is >= 0 and <= 500;
+
+    internal NudgePresentation? BeginNudgePresentation(ReminderEvent value)
+    {
+        NudgeAuthorizationFailure = "Reminder eligibility changed or expired.";
+        presentation = null;
+        Drain(); RefreshHealth();
+        if (!ValidEvent(value)) return null;
+        // Validate the ORIGINAL foreground before any WPF construction. A new
+        // candidate has no shell identity yet and is verified strictly after Show.
+        var membership = source.CheckNudgePresentation(value.ForegroundWindow, value.ForegroundWindow, personal, false);
+        if (membership != NudgeDesktopCheck.Allowed)
+        { NudgeAuthorizationFailure = "Desktop check: " + membership + "."; return null; }
+        Drain(); RefreshHealth();
+        if (!ValidEvent(value)) return null;
+        // Consume the event exactly once. Layout now has a separate bounded contract;
+        // its completion requires NEW safety evidence, not old accounting eligibility.
+        authorizedSequence = value.Sequence;
+        presentationHealth = Health.Generation;
+        presentationShell = Latest!.Desktop.ShellProcess;
+        presentationClock = clock.Now.Epoch;
+        presentationStartedAt = elapsed();
+        presentationWindow = observedPresentationForeground = 0;
+        presentationCompleted = false; presentationFailure = "";
+        return presentation = new(Guid.NewGuid(), value.Sequence, value.ForegroundWindow,
+            personal, deliveryEpoch, Environment.TickCount64 + 2_000);
+    }
+
+    internal bool CompleteNudgePresentation(NudgePresentation value, nint window)
+    {
+        NudgeAuthorizationFailure = "PresentationUnknownOrConsumed";
+        if (presentation != value || presentationCompleted || window == 0) return false;
+        // No retry, even if a native query fails. Keep the transaction while draining
+        // so external transitions during a query are still recorded and rejected.
+        presentationCompleted = true;
+        presentationWindow = window;
+        var allowed = false;
+        try
+        {
+            Drain(); RefreshHealth();
+            if (!PresentationValid(value)) return false;
+            if (observedPresentationForeground != 0 && observedPresentationForeground != window)
+            { NudgeAuthorizationFailure = "ExternalForegroundSignal"; return false; }
+            Latest = source.Read(); // Read-only safety capture; no estimator reset/credit.
+            Drain(); RefreshHealth();
+            if (!PresentationValid(value)) return false;
+            if (!CanKeepNudgeOpen) { NudgeAuthorizationFailure = "FreshPersonalContextUnavailable"; return false; }
+            if (Latest.Desktop.ShellProcess != presentationShell)
+            { NudgeAuthorizationFailure = "ShellChanged"; return false; }
+            if (Latest.Window != value.OriginalForeground && Latest.Window != window)
+            { NudgeAuthorizationFailure = "ExternalForeground"; return false; }
+            var membership = source.CheckNudgePresentation(window, Latest.Window, personal, false);
+            if (membership != NudgeDesktopCheck.Allowed)
+            { NudgeAuthorizationFailure = "Desktop check: " + membership + "."; return false; }
+            Drain(); RefreshHealth();
+            if (!PresentationValid(value)) return false;
+            if (!CanKeepNudgeOpen) { NudgeAuthorizationFailure = "PersonalContextChangedAfterDesktopCheck"; return false; }
+            authorizedWindow = window;
+            allowed = true;
+            return true;
+        }
+        finally { if (!allowed) presentation = null; }
+    }
+
+    private bool PresentationValid(NudgePresentation value)
+    {
+        var reason = presentationFailure.Length != 0 ? presentationFailure :
+            Environment.TickCount64 > value.ExpiresTick || elapsed() - presentationStartedAt is < 0 or > 2_000 ? "PresentationExpired" :
+            clock.Now.Epoch != presentationClock ? "ClockEpochChanged" :
+            !Health.Healthy || Health.Generation != presentationHealth ? "PresentationHealthChanged" : "Allowed";
+        if (reason == "Allowed") return true;
+        NudgeAuthorizationFailure = reason;
+        return false;
+    }
+
+    private bool ValidEvent(ReminderEvent value)
+    {
+        var reason = value != offeredEvent || value.Sequence != offeredSequence ? "EventReplaced" :
+            value.Epoch != deliveryEpoch ? "RuntimeEpochChanged" :
+            value.Sequence == authorizedSequence ? "AlreadyAuthorized" :
+            offeredHealthGeneration != Health.Generation ? "HealthGenerationChanged" :
+            value.Generation != reminderGeneration ? "ObservationGenerationChanged:" + lastReminderInvalidation :
+            value.Style != ReminderStyle.InteractiveWindow || value.PersonalDesktop != personal ? "StyleOrDesktopChanged" :
+            Environment.TickCount64 > value.ExpiresTick ? "EventExpired" :
+            !CanKeepNudgeOpen ? "PersonalContextUnavailable" :
+            !EligiblePersonal() ? "AccountingEvidenceNotReady:" + Reason :
+            Latest!.Window != value.ForegroundWindow ? "ObservedForegroundChanged" : "Allowed";
+        if (reason == "Allowed") return true;
+        NudgeAuthorizationFailure = reason;
+        return false;
+    }
+
+    internal bool CanDefer(nint window)
+    {
+        if (window == 0 || window != authorizedWindow) return false;
+        Drain(); RefreshHealth();
+        var before = reminderGeneration;
+        // Commands precede Step on the owner thread. Capture now so queued context
+        // changes cannot grant extra time against an earlier Personal snapshot.
+        Latest = null;
+        var point = CaptureCurrent();
+        return before == reminderGeneration && HealthyPersonal() &&
+            ApplicationClassifier.Classify(new(point.Time, point.Time, DesktopScope.Personal, point.Session,
+                point.Application, InputState.Active, MonitoringAvailability.Available, EvidenceConfidence.Estimated), configuration) == ActivityKind.CountedPersonal;
+    }
 
     private void InvalidateReminder() { Reminders?.Invalidate(); reminderApplication = null; reminderEnd = null; }
 
@@ -100,6 +238,16 @@ public sealed class MonitoringRuntime : IDisposable
         Latest = null; Health = new(false, ++generation);
     }
 
+    internal void RefreshInterventionConfiguration()
+    {
+        InvalidateReminder();
+        configuration = session.Configuration;
+        // Estimator uses accounting fields only; a cadence edit must preserve its continuity.
+    }
+
+    internal void RevokePresentation()
+    { presentation = null; presentationWindow = observedPresentationForeground = 0; offeredSequence = 0; reminderGeneration++; InvalidateReminder(); }
+
     public bool RetryProviders()
     {
         InvalidateReminder();
@@ -124,7 +272,7 @@ public sealed class MonitoringRuntime : IDisposable
         return Latest;
     }
 
-    public void Step(bool accounting = true, bool breakReminders = false)
+    public void Step(bool accounting = true, bool breakReminders = false, bool interactive = false)
     {
         Drain();
         if (elapsed() >= next || elapsed() >= eventSampleAt && elapsed() - lastSampleAt >= 100)
@@ -176,7 +324,11 @@ public sealed class MonitoringRuntime : IDisposable
                 var deliveryGeneration = reminderGeneration;
                 var healthGeneration = Health.Generation;
                 var before = session.State;
-                var result = session.Observe(observation);
+                // Both enabled styles share immediate exhaustion and the same
+                // Personal-only cadence. Off still accounts without delivering.
+                var result = session.Observe(observation, true);
+                if (result.Effects.Any(x => x.Kind == EffectKind.Nudge))
+                    ReminderStatus = "Nudge committed; delivery eligibility checked next.";
                 if (!before.BreakCompleted) maximumIncompleteBreakMs = Math.Max(maximumIncompleteBreakMs, before.BreakProgressMs);
                 if (!result.State.BreakCompleted) maximumIncompleteBreakMs = Math.Max(maximumIncompleteBreakMs, result.State.BreakProgressMs);
                 if (!before.BreakCompleted && !result.State.BreakCompleted && result.State.BreakProgressMs < before.BreakProgressMs)
@@ -215,7 +367,15 @@ public sealed class MonitoringRuntime : IDisposable
                     {
                         reminderApplication = observation.Application;
                         reminderEnd = observation.End;
-                        Reminders?.Offer(effect.Sequence, Environment.TickCount64);
+                        offeredSequence = effect.Sequence;
+                        offeredHealthGeneration = Health.Generation;
+                        var nowTick = Environment.TickCount64;
+                        var remainingAge = Math.Min(EstimationPolicy.MaximumAgeMs, configuration.MaximumEvidenceAgeMs) -
+                            (clock.Now.Milliseconds - observation.End.Milliseconds);
+                        offeredEvent = new(effect.Sequence, reminderGeneration, Latest!.Window, personal,
+                            nowTick + Math.Min(2_000, remainingAge), interactive ? ReminderStyle.InteractiveWindow : ReminderStyle.WindowsNotification, deliveryEpoch);
+                        Reminders?.Offer(effect.Sequence, nowTick, offeredEvent);
+                        ReminderStatus = "Committed nudge offered to the transient mailbox.";
                     }
                 }
                 UpdateReminderEligibility(accounting, breakReminders);
@@ -235,12 +395,34 @@ public sealed class MonitoringRuntime : IDisposable
 
     private void Drain()
     {
+        if (presentation is { } expired && (Environment.TickCount64 > expired.ExpiresTick || elapsed() - presentationStartedAt > 2_000))
+        { presentation = null; presentationWindow = observedPresentationForeground = 0; }
         QueueHigh = Math.Max(QueueHigh, source.QueueDepth);
         while (source.TryTake(out var signal))
         {
             if (signal is null) continue;
+            if (presentation is { } attempt)
+            {
+                // Accounting still sees EVERY signal below. Only this short-lived
+                // presentation permits its own/original foreground transitions.
+                if (signal.Sequence != reminderSignalSequence + 1) presentationFailure = "SignalSequenceDiscontinuity";
+                else if (signal.Kind == SignalKind.Foreground && signal.Window != attempt.OriginalForeground)
+                {
+                    // One provisional HWND only, for at most two seconds. It is
+                    // not trusted until bound to the exact owned UI candidate at
+                    // completion and independently verified by the desktop worker.
+                    if (signal.Window == 0 || presentationWindow != 0 && signal.Window != presentationWindow ||
+                        observedPresentationForeground != 0 && signal.Window != observedPresentationForeground)
+                        presentationFailure = "ExternalForegroundSignal";
+                    else observedPresentationForeground = signal.Window;
+                }
+                else if (signal.Kind == SignalKind.Destroyed && (signal.Window == presentationWindow && presentationWindow != 0 || signal.Window == attempt.OriginalForeground))
+                    presentationFailure = "PresentationWindowDestroyed";
+                else if (signal.Kind is not (SignalKind.Tick or SignalKind.Foreground or SignalKind.Destroyed))
+                    presentationFailure = "ContextSignal:" + signal.Kind;
+            }
             if (signal.Kind != SignalKind.Tick || signal.Sequence != reminderSignalSequence + 1)
-            { reminderGeneration++; InvalidateReminder(); }
+            { lastReminderInvalidation = signal.Kind.ToString(); reminderGeneration++; InvalidateReminder(); }
             reminderSignalSequence = Math.Max(reminderSignalSequence, signal.Sequence);
             estimator.Signal(signal);
             if (signal.Kind == SignalKind.Foreground) foregroundSignals++;
@@ -304,5 +486,5 @@ public sealed class MonitoringRuntime : IDisposable
         foregroundDiagnostics = new { failures = foregroundFailures, lastFailure = lastForegroundFailure, lastForegroundIdentityQueryCode },
         providers = source.Diagnostics
     };
-    public void Dispose() { InvalidateReminder(); estimator.Reset(); source.Dispose(); }
+    public void Dispose() { RevokePresentation(); estimator.Reset(); source.Dispose(); }
 }
