@@ -160,9 +160,16 @@ See [PR 9 behavior, boundaries and owner checklist](../validation/pr9-interactiv
 Real-host nonactivating placement/confirmation passed on the owner's portrait
 2160-pixel-wide secondary monitor at 150%, build 26200.9711/x64. Actual focus and
 extension acceptance were subsequently **owner-reported PASS on `729ea52`** with
-3440×1440/100% primary and 4K portrait/150% secondary. X/Escape dismissal acceptance
-remains pending the narrow retest; any presentation-caused desktop switch blocks
-acceptance. Existing NO-GO gates, read-only build restrictions and recovery remain.
+3440×1440/100% primary and 4K portrait/150% secondary. On `d0b3fdb`, the owner
+confirmed both-monitor presentation, visibility/focus, Add 1 minute and removal
+of the X-dismissal error, accepting PR 9 for continued owner evaluation. Separate
+live Escape/Alt+F4 acceptance is unrecorded; automated coverage is not live proof.
+The owner also observed approximately two minutes between nudges despite a
+one-minute extension while usage appeared to advance. Its cause is unresolved
+and accepted for now, not a proven Core regression or verified live cadence.
+See the validation closeout for the #9 follow-up recommendation. No accounting
+or timer policy changes are inferred. Any presentation-caused desktop switch
+remains a blocker; existing NO-GO gates, read-only build restrictions and recovery remain.
 
 ## Break reminders and manual usage reset (PR 8 baseline)
 

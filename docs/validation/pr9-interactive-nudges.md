@@ -1,18 +1,78 @@
 # PR 9 — interactive nudges
 
-Owner evaluation only. Initial owner smoke **FAIL**: Interactive window never
-appeared; legacy notifications still worked, including their expected grace.
-At `56f23ce`, the owner's primary monitor **PASSED** and secondary portrait/150%
-monitor **FAILED**. The third correction below reproduces and addresses the
-production lifecycle rejection; real-host nonactivating secondary presentation
-and strict confirmation now pass. The owner subsequently tested `729ea52`:
-secondary portrait/150% presentation, foreground activation and Add 1 minute
-**PASS**; no unexpected virtual-desktop switching reported. Primary is
-3440×1440 landscape/100%; secondary is 4K portrait/150%.
-The remaining owner-reported failure is dismissal via X, addressed below.
-Fullscreen and Narrator acceptance remain **NOT RUN** by the agent.
-Automated tests use synthetic evidence, disposable SQLite, owned hidden HWNDs
-and fake placement/focus adapters. They do not establish live shell reliability.
+## Final closeout decision — October 18, 2026
+
+The owner accepts **PR 9 for continued owner evaluation** and elects to proceed
+to separate PR 10 planning. Latest owner-tested implementation: **`d0b3fdb`**
+(`d0b3fdbe68d09c78c32b704fd4d2dda78f44c232`). Subsequent closeout changes are
+documentation only. Recommendation: **GO to merge PR #18 for that bounded scope**,
+subject to the owner's separate explicit merge approval. No merge, deployment,
+release, certified accounting or unattended reliability is authorized here.
+
+This closeout supersedes the pending acceptance statements in the historical
+correction records below; those records preserve what was known at each stage.
+
+| Evidence category | Final result and qualification |
+|---|---|
+| Automated PASS | All seven repository-prescribed commands passed on `d0b3fdb`, SDK 10.0.401, warnings as errors: 82 Core, 83 Persistence, 111 host and 64 WPF groups. All four [CI jobs passed on that implementation commit](https://github.com/NDePetris/offramp-shift/actions/runs/38970542219). Documentation-only closeout head CI is recorded on [PR #18](https://github.com/NDePetris/offramp-shift/pull/18). |
+| Owner-confirmed PASS | Nudges appear on both monitors, remain visible and take focus. Primary: 3440×1440 landscape/100%; secondary: 4K portrait/150%. Add 1 minute worked. Clicking X no longer produces the previously reported error after the final correction. |
+| Owner-confirmed observation | No unintended virtual-desktop switching was reported. This is bounded owner experience, not proof of absence of Windows shell races. Both enabled reminder styles now use immediate exhaustion and a shared configurable repeat interval. |
+| Owner-accepted limitation | Approximately two minutes between nudges was observed despite a one-minute extension while the Personal usage timer appeared to advance. Cause unresolved; subsequent experience acceptable to owner. Exact live one-minute cadence is **not a confirmed PASS**. See the timing qualification below. |
+| NOT RUN / unverified live cases | Separate live Escape and Alt+F4 acceptance is not recorded; both have automated coverage. Separate live Add 5 minutes, Narrator, fullscreen, broad suppression/restart/monitor matrices and exact extension/repeat timing are not established by this closeout. Existing PR 5 Tests 8–12 remain deferred / NOT RUN. |
+| NO-GO / separate gates | Automatic virtual-desktop switching, unauthorized cross-desktop window movement, production browser attribution, certified accounting, unattended reliability and wider Windows build support remain unapproved. Explorer recovery #8 and sustained reliability #9 remain unresolved. |
+
+The final owner report identifies the commit and monitor configuration but does
+not restate the exact Windows build. Earlier bounded live presentation exercises
+record **26200.9711/x64**; do not treat that as a newly verified OS/build claim for
+the final owner run. Read-only observation remains restricted to exact builds
+26200.9457/x64 and 26200.9711/x64. Automated evidence uses synthetic observations,
+disposable SQLite, owned hidden HWNDs and fake presentation adapters; it does not
+establish sustained native shell reliability or independent accounting accuracy.
+
+### Unresolved timing observation — accepted for now
+
+The owner reported approximately two minutes between nudges after selecting a
+one-minute extension. The Personal usage timer appeared to advance throughout.
+No conclusive cause or independently correlated accepted-usage/presentation trace
+was established. Do not describe this as fixed, a confirmed timing PASS, a proven
+two-minute Core accounting regression, or evidence that one minute of Personal
+use is intentionally followed by another full repeat interval. The implemented
+contract remains one minute of counted Personal usage for a one-minute extension.
+
+The owner explicitly accepts this uncertainty for continued evaluation and does
+not make it a PR 9 merge blocker. No speculative timing changes or broad validation
+campaign are part of closeout.
+
+Follow-up is warranted under existing open [#9 — monitoring reliability and unknown
+coverage](https://github.com/NDePetris/offramp-shift/issues/9), whose scope already
+includes scheduling, worker/IPC, persistence latency, delivery rejection and
+independently timed Personal use. Repository issue review found no separate
+nudge-timing issue. Recommend referencing this observation under #9 rather than
+creating a duplicate now; no issue is created or claimed updated by this document.
+If a later bounded reproduction isolates a distinct presentation defect, consider
+a linked focused issue then. Any later investigation should compare accepted
+Personal usage, Core remainder and existing identity-free reminder stages before
+assigning causation; it must not weaken freshness, accounting or desktop gates.
+
+### Scope and outstanding work
+
+Closeout reviewed the PR against `main` at `27143b37ec94f146ca916599adf66f74ce23f84f`:
+changes concern reminder styles/migrations, Personal-only deferrals/shared cadence,
+durable delivery, WPF presentation/lifecycle, read-only desktop membership and
+focused tests/documentation. No unrelated implementation was identified. The
+compatibility-probe edit adds linked-branch guard tests only; no live probe behavior,
+approved build allowlist, workflow, runtime dependency or switching ABI is expanded.
+The Home timer-first file captures a deferred brief, not a Home redesign.
+
+PR #18 had no conversation/review comments at closeout review and was open and
+mergeable; this is not an assertion of a separate formal reviewer approval.
+Existing [#8 Explorer recovery](https://github.com/NDePetris/offramp-shift/issues/8),
+[#9 sustained monitoring](https://github.com/NDePetris/offramp-shift/issues/9) and
+[#17 native notification appearance](https://github.com/NDePetris/offramp-shift/issues/17)
+stay open/separate. Distribution/licensing remains undecided. PR 10 requires its
+own switching feasibility/safety review in a separate conversation; no PR 10
+implementation or gate change is included. The timer-first Home redesign remains
+separate from both PRs.
 
 ## Timing and persistence
 
@@ -52,8 +112,9 @@ effects are never replayed. Older applications reject v3; downgrade is unsupport
 The Dispatcher owns at most one unowned modeless nudge, created without activation,
 using native Fluent/system colors and supplied family artwork. Neither button is
 a default Enter action. Failed deferrals remain explicit in the open window,
-Home/Settings and retained tray feedback. X/Escape still dismiss during submission.
-Programmatic closure grants no time.
+Home/Settings and retained tray feedback. X/Escape/Alt+F4 wait for the shared
+durable command before closing; dismissal during an existing submission cannot
+submit again or destroy the window early. Automatic closure grants no time.
 
 The existing transient mailbox carries an effect sequence, runtime epoch,
 observation generation and original expiry. Consumption never renews it. New
@@ -104,7 +165,7 @@ but cannot certify the absence of shell races. **Any observed desktop switch
 caused by presenting the nudge is a blocking failure.** Never bypass it with
 switching, virtual-desktop window movement or a broader compatibility allowlist.
 
-## Automated checks
+## Automated checks (initial implementation record)
 
 Run all seven repository-prescribed test/format commands and record final results
 in the PR. Focused tests cover both clocks, migrations, exact retry, fresh committed
@@ -134,7 +195,7 @@ owner app was stopped and no live monitoring, focus or desktop exercise was run.
 The compatibility guard's forbidden-native test stubs were extended only to compile
 and reject the new linked read-only membership branch; live probe behavior is unchanged.
 
-## Short owner smoke checklist
+## Original owner smoke checklist (not evidence of completion)
 
 Record commit, exact supported Windows build/x64, monitor layout and scaling.
 Record PASS/FAIL/NOT RUN; note original durations before temporarily changing them.
@@ -450,10 +511,11 @@ are automated lifecycle/synthetic-host checks, not a live dismissal acceptance.
 Application regression results for this correction: **82 Core, 83 Persistence,
 111 host and 64 WPF groups PASS**, SDK 10.0.401 with warnings as errors. The
 original delayed-dismissal test failed before the correction. All seven prescribed
-repository checks pass; final pushed-head CI is recorded on PR #18. Live X/Escape
-dismissal and the following counted-Personal repeat remain owner retest pending.
+repository checks pass; final pushed-head CI is recorded on PR #18. At this
+correction's completion, live dismissal/repeat acceptance was pending. The final
+closeout above records the subsequent X result and unresolved timing qualification.
 
-### Short owner dismissal retest (pending)
+### Requested dismissal retest (historical; final decision above supersedes)
 
 Exit the currently running app through the tray and launch the updated build;
 record tested commit/build, then:
