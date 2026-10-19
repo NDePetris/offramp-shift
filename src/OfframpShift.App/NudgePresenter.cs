@@ -86,7 +86,7 @@ internal sealed class NudgePresenter(Func<HostCommand, Task<HostCommandResult>> 
             if (rejection is not null)
             { Status = "Presentation rejected before focus: " + rejection + "."; Close(); return; }
             Status = platform.Activate(target) ? "Window shown; foreground request accepted." :
-                "Window shown; Windows denied focus. Use its taskbar button or wait for the next eligible reminder.";
+                "Window shown; Windows denied focus. Click an action, or use its taskbar button and keyboard navigation.";
         }
         catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception or System.Runtime.InteropServices.ExternalException)
         { Status = "Presentation failed: window or native operation unavailable."; Close(); reportFailure(Status + " Wait for the next eligible reminder."); }

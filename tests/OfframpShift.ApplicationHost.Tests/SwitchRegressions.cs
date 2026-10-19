@@ -8,7 +8,7 @@ using static Program;
 
 internal static class SwitchRegressions
 {
-    internal static MonitoringApplication Active(Fixture f, string build = "26200.9457")
+    internal static MonitoringApplication Active(Fixture f, string build = "26200.9457", bool foregroundObserved = true)
     {
         f.Enable(build: build);
         f.Settings.Save(f.Settings.Load() with
@@ -25,7 +25,8 @@ internal static class SwitchRegressions
         var begin = app.Execute(new(HostCommandKind.BeginNudgePresentation) { Reminder = reminder });
         Check(begin.Succeeded);
         Check(app.Execute(new(HostCommandKind.CompleteNudgePresentation) { Presentation = begin.Presentation, NudgeWindow = 2 }).Succeeded);
-        f.Source!.Window = 2; f.Source.UseRealUptime = true; f.Advance(app, 4_000);
+        f.Source!.UseRealUptime = true;
+        if (foregroundObserved) { f.Source.Window = 2; f.Advance(app, 4_000); }
         return app;
     }
     private static HostCommand Authorize(nint window = 2) => new(HostCommandKind.AuthorizeSwitch) { NudgeWindow = window };
@@ -40,6 +41,39 @@ internal static class SwitchRegressions
     }
     internal static void Run()
     {
+        Test("first click authorizes after nudge activation before the next monitoring sample", () =>
+        {
+            using var f = new Fixture(); using var app = Active(f, foregroundObserved: false);
+            var before = app.Snapshot(); var reads = f.Source!.Reads;
+            f.Source.Window = 2; f.Source.Emit(SignalKind.Foreground, window: 2);
+            var result = app.Execute(Authorize());
+            Check(result.Succeeded && result.Switching is not null && f.Source.Reads == reads + 1);
+            var after = app.Snapshot();
+            Check(after.State == before.State && after.Configuration == before.Configuration && after.Settings == before.Settings);
+            var grant = result.Switching!;
+            Check(grant.Consume(Environment.TickCount64)?.Request.Expected.ForegroundWindow == 2);
+            Check(grant.Consume(Environment.TickCount64) is null);
+        });
+        foreach (var change in new[] { "activation-denied", "external-return", "session", "destroyed", "work", "shell", "health", "read-race" })
+            Test("first-click capture rejects unsafe activation: " + change, () =>
+            {
+                using var f = new Fixture(); using var app = Active(f, foregroundObserved: false);
+                f.Source!.Window = 2;
+                switch (change)
+                {
+                    case "activation-denied": f.Source.Window = 1; break;
+                    case "external-return": f.Source.Emit(SignalKind.Foreground, window: 99); f.Source.Emit(SignalKind.Foreground, window: 2); break;
+                    case "session": f.Source.Emit(SignalKind.Session); break;
+                    case "destroyed": f.Source.Emit(SignalKind.Destroyed, window: 2); break;
+                    case "work": f.Source.Current = f.Work; break;
+                    case "shell": f.Source.ShellGeneration++; break;
+                    case "health": f.Source.Dropped++; break;
+                    case "read-race": f.Source.OnRead = () => f.Source.Emit(SignalKind.Foreground, window: 99); break;
+                }
+                var before = app.Snapshot(); var result = app.Execute(Authorize());
+                Check(!result.Succeeded && result.Switching is null);
+                Check(app.Snapshot().State == before.State && app.Snapshot().Configuration == before.Configuration);
+            });
         Test("v3 migration preserves PR9 preferences and accounting bytes with default-off switching", () =>
         {
             using var f = new Fixture(); f.Enable();

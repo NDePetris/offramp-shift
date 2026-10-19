@@ -1,5 +1,9 @@
 # PR 10 — controlled 26300-family integrated owner testing
 
+Follow-up: the owner reports integrated switching works but the first click can
+appear to activate only. See the [focused correction and owner acceptance](pr10-first-click.md)
+for the current patch, pinned-window limitation and explicitly deferred accounting decision.
+
 ## Owner evidence and decision — October 19, 2026
 
 Preparation revision: `de869b5ed23578293e586fa2c19346305d223879`, branch

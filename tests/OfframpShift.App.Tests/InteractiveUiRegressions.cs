@@ -62,6 +62,34 @@ internal static class InteractiveUiRegressions
             }
             return HostCommandResult.Success() with { Presentation = command.Presentation };
         }
+        test("inactive owned WPF HWND permits client mouse activation without eating the click", () =>
+        {
+            var window = new NudgeWindow(_ => Task.FromResult(HostCommandResult.Success()));
+            var hwnd = new System.Windows.Interop.WindowInteropHelper(window).EnsureHandle();
+            Check(!window.IsActive && !window.ShowActivated && !window.Topmost);
+            // Query the activation disposition only; no button input, Show or focus request.
+            var disposition = SendMessageW(hwnd, 0x0021, hwnd, (nint)((0x0201 << 16) | 1));
+            Check(disposition == 1); // MA_ACTIVATE: keep the original WM_LBUTTONDOWN.
+            Check(!window.IsActive); window.CloseAutomatically();
+        });
+        test("one routed click on inactive nudge submits once even when initial focus was denied", () =>
+        {
+            using var ui = new UiContinuations(); var value = Eligible(); var calls = 0;
+            var platform = new Platform { Activation = false };
+            var completion = new TaskCompletionSource<DesktopFeasibility.SwitchCompletion>();
+            var presenter = new NudgePresenter(command => Task.FromResult(Accept(command, ref value)), () => value,
+                _ => { }, platform, (_, _) => { calls++; return completion.Task; });
+            presenter.PresentAsync(Event(value)).GetAwaiter().GetResult(); var window = presenter.Window!;
+            Check(!window.IsActive && platform.Activations == 1);
+            var button = (Button)window.FindName("SwitchWork");
+            Check(button.Focusable && System.Windows.Input.KeyboardNavigation.GetIsTabStop(button));
+            button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Check(calls == 1 && !button.IsEnabled && window.Result.Text.Contains("Checking"));
+            button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Check(calls == 1 && platform.Activations == 1);
+            presenter.Close(); completion.SetResult(DesktopFeasibility.SwitchCompletion.Reject("Synthetic rejection.")); ui.Drain();
+            Check(presenter.Window is null && platform.Activations == 1 && calls == 1);
+        });
         foreach (var outcome in Enum.GetValues<DesktopFeasibility.SwitchOutcome>())
             foreach (var automaticClosure in new[] { false, true })
                 test($"explicit switch {outcome} retains typed feedback and closure behavior: automatic closure={automaticClosure}", () =>

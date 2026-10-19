@@ -62,8 +62,17 @@ consent, roles and capability. Runtime authorization drains pending events and
 requires the strictly confirmed nudge HWND to remain foreground in fresh healthy
 Personal evidence, with its original shell/health generation. Destruction,
 external foreground (including leave-and-return), desktop/session/power changes,
-sequence loss, commands and reassignment revoke eligibility. It does not read
-COM, reset the estimator or invoke a durable Core command. Runtime invalidation
+sequence loss, commands and reassignment revoke eligibility. If the confirmed
+nudge has just acquired foreground but the published observation still names the
+previous application, authorization takes one fresh read-only capture through the
+existing bounded observation worker. Pending events are drained before and after;
+the original shell/health generation and all context checks still apply. It does
+not reset or advance the estimator, renew a grant or invoke a durable Core command.
+The COM reply wait has a two-second deadline and worker cleanup has a one-second
+exit wait; collection over 500 ms is rejected. Synchronous local OS queries and
+pipe writes are outside that reply timeout, so the full capture has no absolute
+wall-clock deadline. This existing provider limitation can delay the monitoring
+owner; the Dispatcher remains asynchronous. Runtime invalidation
 also revokes any issued, unconsumed grant, including foreground leave-and-return,
 provider failure/health loss, session changes and topology/shell changes. Host
 commands, presentation closure and shutdown revoke outstanding grants too.

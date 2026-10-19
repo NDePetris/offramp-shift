@@ -193,10 +193,18 @@ public sealed class MonitoringRuntime : IDisposable
 
     internal EvidencePoint? AuthorizeSwitch(nint window)
     {
-        // Read already-published evidence only: authorization must not wait for a
-        // native switch or reset estimator continuity. The child independently
-        // captures native state twice immediately before its single shell call.
         Drain(); RefreshHealth();
+        if (window == 0 || window != switchWindow || !CanKeepNudgeOpen ||
+            Health.Generation != switchHealth || Latest!.Desktop.ShellProcess != switchShell) return null;
+        // A delivered click can activate this HWND before the next monitoring
+        // sample. Refresh that foreground evidence once, using the existing bounded
+        // read-only provider. Do not reset/advance the estimator or retry a command.
+        // Drain on both sides so a genuine leave-and-return still revokes eligibility.
+        if (Latest.Window != window)
+        {
+            Latest = source.Read();
+            Drain(); RefreshHealth();
+        }
         return window != 0 && window == switchWindow && CanKeepNudgeOpen &&
             Health.Generation == switchHealth && Latest!.Desktop.ShellProcess == switchShell &&
             Latest!.Window == window ? Latest : null;
