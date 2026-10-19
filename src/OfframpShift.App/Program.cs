@@ -14,6 +14,8 @@ public static class Program
         if (args is ["--switch-qualification-worker"]) return DesktopFeasibility.SwitchWorkerEntry.Run(qualification: true);
         if (args is ["--qualify-switch-26200.9711", "--confirm-experimental", var personal, var work])
             return DesktopFeasibility.SwitchWorkerEntry.Qualify(personal, work);
+        if (args is ["--qualify-switch-26300.9711", "--confirm-experimental", var personal26300, var work26300])
+            return DesktopFeasibility.SwitchWorkerEntry.Qualify(personal26300, work26300, "26300.9711");
         if (args is ["--worker-malformed"])
         { Console.ReadLine(); Console.WriteLine("{broken}"); return 0; }
         if (args is ["--worker-hang"])

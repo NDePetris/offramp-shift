@@ -71,13 +71,17 @@ public static class SwitchWorkerEntry
     }
 
     [SupportedOSPlatform("windows")]
-    public static int Qualify(string personalText, string workText)
+    public static int Qualify(string personalText, string workText, string targetBuild = "26200.9711")
     {
         // Separate console diagnostic; never opens the app, settings or checkpoints.
         if (!Guid.TryParse(personalText, out var personal) || !Guid.TryParse(workText, out var work) ||
             personal == Guid.Empty || work == Guid.Empty || personal == work) return 2;
         try
         {
+            // The build named by the explicit command must match this host. An old
+            // qualification command cannot authorize a newly prepared build.
+            var configuration = NativeSession.ReadConfiguration();
+            if (configuration.Build != targetBuild || !SwitchCompatibility.Allowed(configuration, true)) return 2;
             var (reply, exit) = SwitchWorkerProcess.CallAsync(new("capture"), "--switch-qualification-worker").GetAwaiter().GetResult();
             if (exit != 0 || reply.Snapshot is not { } snapshot || reply.Result is not null || reply.Error is not null) return 2;
             Safety.ValidateSnapshot(snapshot, true);

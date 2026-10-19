@@ -49,11 +49,24 @@ internal static class Program
         {
             foreach (var arguments in new[] {
                 new[] { "--qualify-switch-26200.9711" },
+                ["--qualify-switch-26300.9711"],
+                ["--qualify-switch-26300.9711", "not-confirmed", "personal", "work"],
+                ["--qualify-switch-26300.9711", "--confirm-experimental", "invalid", "invalid"],
+                ["--qualify-switch-26300.9712", "--confirm-experimental", "personal", "work"],
                 ["--qualify-switch-26200.9711", "not-confirmed", "personal", "work"],
                 ["--switch-worker", "--confirm-experimental"],
                 ["--switch-qualification-worker", "--confirm-experimental"],
                 ["--qualify-switch-26200.9711", "--confirm-experimental", "invalid", "invalid"] })
                 Check(OfframpShift.App.Program.Main(arguments) == 2);
+            foreach (var flag in new[] { "--qualify-switch-26200.9711", "--qualify-switch-26300.9711" })
+            {
+                var role = Guid.NewGuid().ToString();
+                Check(OfframpShift.App.Program.Main([flag, "--confirm-experimental", role, role]) == 2);
+                Check(OfframpShift.App.Program.Main([flag, "--confirm-experimental", Guid.Empty.ToString(), role]) == 2);
+            }
+            // An unsupported named target rejects before any qualification worker,
+            // even with syntactically valid and distinct GUIDs.
+            Check(DesktopFeasibility.SwitchWorkerEntry.Qualify(Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), "26300.9712") == 2);
         });
         Test("tray projects saved allowance and qualifying break in every observed context", () =>
         {

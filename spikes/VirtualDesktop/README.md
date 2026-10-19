@@ -62,7 +62,7 @@ PR 10 extracts `Model.cs` and `NativeSession.cs` into
 references that shared library; the probe's commands and diagnostic tests remain
 operational. There is one switching COM declaration set. The normal probe gate
 is still exactly 26200.9457/x64. The separate application diagnostic for
-26200.9711 does not expand this probe or application allowlist; see
+26200.9711 or 26300.9711 does not expand this probe or application allowlist; see
 [PR 10 qualification](../../docs/validation/pr10-explicit-switching.md).
 
 - The parent starts a hidden, disposable child using redirected stdio. Undocumented COM stays in that child on one STA thread.

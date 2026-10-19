@@ -20,12 +20,12 @@ internal static class SwitchWorkerGuardRegressions
             Check(SwitchProtocol.Decode<SwitchWorkerReply>(output.ToString()).Result?.Attempted != true);
         }
         foreach (var qualification in new[] { false, true })
-            foreach (var architecture in new[] { "X64", "X86", "Arm64" })
-                foreach (var build in new[] { "26200.9457", "26200.9711", "26200.9712" })
+            foreach (var architecture in new[] { "X64", "X86", "Arm64", "x64", "" })
+                foreach (var build in new[] { "26200.9457", "26200.9711", "26200.9712", "26300.9711", "26300.9710", "26300.9712", "26300", "26400.9711", "" })
                     Test($"worker pre-activation exact-build guard: qualification={qualification} {build}/{architecture}", () =>
                     {
                         var configuration = new Configuration(build, architecture, 1, 2);
-                        var allowed = architecture == "X64" && build == (qualification ? "26200.9711" : "26200.9457");
+                        var allowed = architecture == "X64" && (qualification ? build is "26200.9711" or "26300.9711" : build == "26200.9457");
                         Entry(new("switch", Grant(configuration)), configuration, qualification, true, allowed);
                         Entry(new("capture"), configuration, qualification, true, qualification && allowed);
                     });

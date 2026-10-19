@@ -70,6 +70,12 @@ approval are recorded in [the compatibility record](../../docs/validation/window
 See [owner smoke commands](../../docs/validation/windows-26200-9711-smoke.md) for
 the updated production observation path and separate WPF integration check.
 
+26H2 preparation adds **26300.9711/x64/26H2 only** to the standalone compatibility
+diagnostic, with an explicit `-TargetBuild 26300.9711` opt-in. Production observation
+remains blocked on every 26300 build. Follow the separate, minimal
+[PR 10 qualification procedure](../../docs/validation/pr10-explicit-switching.md)
+instead of the historical 26200 matrix; no 26300 live evidence is claimed.
+
 For a diagnostic Personal/Work mapping, supply distinct GUIDs deliberately obtained
 on the corresponding desktops by the operator, without printing or using their names:
 

@@ -6,9 +6,12 @@ and sustained accuracy/reliability [#9](https://github.com/NDePetris/offramp-shi
 remain unresolved. Automatic switching and production browser attribution remain
 NO-GO; no window movement is implemented. PR 10 adds an explicitly clicked, separately
 consented Switch to Work action on 26200.9457/x64 only. Normal application switching
-on 26200.9711/x64 remains disabled pending owner qualification and a separate
+on 26200.9711/x64 and all 26300 builds remains disabled pending owner qualification and a separate
 capability decision. See [explicit switching](explicit-switching.md) and
 [the owner procedure](../validation/pr10-explicit-switching.md).
+The 26H2 preparation permits standalone diagnostic qualification on exactly
+26300.9711/x64. Its separate read-only diagnostic gate does not enable production
+observation on 26300. The proposed switching build-family policy remains inactive.
 The shared read-only COM gate accepts exactly **26200.9457/x64** and
 **26200.9711/x64**, as approved in merged PR #13. Both worker entry guards and
 the read-only ABI remain unchanged. The separate switching gate is unchanged.

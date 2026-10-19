@@ -21,7 +21,7 @@ internal static class Program
             WindowDesktopMembership.CheckCandidate(true, 0, Guid.NewGuid(), personal, true, false) != NudgeDesktopCheck.CandidateWrongDesktop ||
             WindowDesktopMembership.CheckCandidate(true, 0, personal, personal, false, true) != NudgeDesktopCheck.Allowed || Native.Calls != 0) return 1;
         Console.WriteLine("PASS: hidden candidate preparation never grants strict activation; wrong/unknown desktop and other HRESULTs fail closed (pure decisions).");
-        foreach (var build in new[] { "26200.9456", "26200.9458", "26200.9710", "26200.9712", "26100.9711", "26200" })
+        foreach (var build in new[] { "26200.9456", "26200.9458", "26200.9710", "26200.9712", "26100.9711", "26200", "26300.9711", "26300.9712", "26300", "26400.9711" })
         {
             Registry.Build = build;
             using var worker = new DesktopWorker();

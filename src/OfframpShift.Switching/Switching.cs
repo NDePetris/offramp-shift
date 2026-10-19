@@ -25,7 +25,7 @@ public static class SwitchCompatibility
 {
     public static bool Application(string build, string architecture) => build == "26200.9457" && architecture == "X64";
     // This deliberately does NOT extend Capabilities.MayProbe or application support.
-    public static bool Qualification(string build, string architecture) => build == "26200.9711" && architecture == "X64";
+    public static bool Qualification(string build, string architecture) => build is "26200.9711" or "26300.9711" && architecture == "X64";
     public static bool Allowed(Configuration configuration, bool qualification) => qualification
         ? Qualification(configuration.Build, configuration.Architecture)
         : Application(configuration.Build, configuration.Architecture);

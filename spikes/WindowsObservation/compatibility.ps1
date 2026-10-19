@@ -3,7 +3,10 @@ param(
     [string]$Command = 'dry-run',
     [switch]$ConfirmExperimentalReadOnly,
     [switch]$OutsideToolSandbox,
-    [string]$MonitorLayoutAndDpi
+    [string]$MonitorLayoutAndDpi,
+    [ValidateSet('26200.9711', '26300.9711')]
+    [string]$TargetBuild = '26200.9711',
+    [string]$ExpectedCurrent
 )
 $ErrorActionPreference = 'Stop'
 $taskRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
@@ -14,6 +17,11 @@ $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 $env:DOTNET_SKIP_FIRST_TIME_EXPERIENCE = '1'
 if (Test-Path -LiteralPath $localDotnet) { $env:DOTNET_ROOT = Split-Path $localDotnet -Parent }
 $live = $Command -in @('once', 'repeat', 'manual')
+$expectedGuid = [guid]::Empty
+if ($PSBoundParameters.ContainsKey('ExpectedCurrent') -and
+    ($Command -ne 'once' -or ![guid]::TryParse($ExpectedCurrent, [ref]$expectedGuid) -or $expectedGuid -eq [guid]::Empty)) {
+    throw '-ExpectedCurrent requires once and a nonempty desktop GUID. No diagnostic was started.'
+}
 if ($live -and (!$ConfirmExperimentalReadOnly -or !$OutsideToolSandbox -or [string]::IsNullOrWhiteSpace($MonitorLayoutAndDpi))) {
     throw 'Live reads require -ConfirmExperimentalReadOnly -OutsideToolSandbox -MonitorLayoutAndDpi <anonymous layout/scaling description>. Run test and dry-run first.'
 }
@@ -45,7 +53,7 @@ $dirty = [bool](& git -C $taskRoot status --porcelain)
 $sdk = & $dotnet --version
 if ($LASTEXITCODE -ne 0) { throw 'Cannot determine SDK' }
 [ordered]@{ stage = 'Provenance'; revision = $revision; dirtyWorkingTree = $dirty; compiledSourceSha256 = $sourceDigest;
-    sdk = $sdk; outsideToolSandboxOperatorAttested = [bool]$OutsideToolSandbox;
+    sdk = $sdk; targetBuild = $TargetBuild; outsideToolSandboxOperatorAttested = [bool]$OutsideToolSandbox;
     monitorLayoutAndDpiOperatorReported = $MonitorLayoutAndDpi } | ConvertTo-Json -Compress
 $dll = Join-Path $PSScriptRoot 'Compatibility/bin/Release/net10.0/DesktopCompatibility.dll'
 if ($Command -eq 'test') {
@@ -58,7 +66,9 @@ if ($Command -eq 'test') {
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 if ($live) {
-    & $dotnet $dll $Command '--confirm-experimental-read-only-26200.9711' '--outside-tool-sandbox'
+    $liveArguments = @($Command, "--confirm-experimental-read-only-$TargetBuild", '--outside-tool-sandbox')
+    if ($PSBoundParameters.ContainsKey('ExpectedCurrent')) { $liveArguments += @('--expected-current', $expectedGuid.ToString()) }
+    & $dotnet $dll @liveArguments
 } else {
     & $dotnet $dll $Command
 }

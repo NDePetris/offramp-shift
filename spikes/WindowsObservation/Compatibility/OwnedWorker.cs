@@ -28,7 +28,7 @@ internal sealed class OwnedWorker : IDisposable
         if (Path.GetFileNameWithoutExtension(executable).Equals("dotnet", StringComparison.OrdinalIgnoreCase))
             start.ArgumentList.Add(Assembly.GetExecutingAssembly().Location);
         start.ArgumentList.Add(mode);
-        start.ArgumentList.Add(Policy.OptIn);
+        start.ArgumentList.Add(DesktopWorker.Build == "26300.9711" ? Policy.OptIn26300 : Policy.OptIn);
         start.ArgumentList.Add(Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture));
         process = Process.Start(start) ?? throw new DiagnosticFailure("WorkerStartFailed");
     }

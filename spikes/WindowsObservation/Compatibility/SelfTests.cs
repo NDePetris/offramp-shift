@@ -43,8 +43,30 @@ internal static class SelfTests
                 foreach (var architecture in new[] { "Arm64", "X86", "x64", "" })
                     Check(!DesktopObservationPolicy.IsSupported(build, architecture));
             }
-            foreach (var build in new[] { "26200.9456", "26200.9458", "26200.9710", "26200.9712", "26200", "" })
+            foreach (var build in new[] { "26200.9456", "26200.9458", "26200.9710", "26200.9712", "26200", "26300.9711", "26300.9712", "26300", "26400.9711", "" })
                 Check(!DesktopObservationPolicy.IsSupported(build, "X64"));
+        });
+        Test("26300 diagnostic preparation requires exact build, release, architectures and explicit target", () =>
+        {
+            Check(Policy.Allows("26300.9711", "X64", "X64", "26H2", false, true, true));
+            Check(Policy.MatchesTarget(Policy.OptIn26300, "26300.9711"));
+            Check(Policy.MatchesTarget(Policy.OptIn, "26200.9711"));
+            Check(!Policy.MatchesTarget(Policy.OptIn, "26300.9711"));
+            Check(!Policy.MatchesTarget(Policy.OptIn26300, "26200.9711"));
+            foreach (var build in new[] { "26300.9710", "26300.9712", "26300", "26400.9711", "26200.9711", "" })
+            {
+                Check(!Policy.Allows(build, "X64", "X64", "26H2", false, true, true));
+                Check(!Policy.MatchesTarget(Policy.OptIn26300, build));
+            }
+            foreach (var architecture in new[] { "Arm64", "X86", "x64", "" })
+            {
+                Check(!Policy.Allows("26300.9711", architecture, "X64", "26H2", false, true, true));
+                Check(!Policy.Allows("26300.9711", "X64", architecture, "26H2", false, true, true));
+            }
+            Check(!Policy.Allows("26300.9711", "X64", "X64", "25H2", false, true, true));
+            Check(!Policy.Allows("26300.9711", "X64", "X64", "26H2", true, true, true));
+            Check(!Policy.Allows("26300.9711", "X64", "X64", "26H2", false, false, true));
+            Check(!Policy.Allows("26300.9711", "X64", "X64", "26H2", false, true, false));
         });
         var a = Guid.NewGuid(); var b = Guid.NewGuid();
         DesktopReading Good() => new(Capability.Available, a, [a, b], 1);
@@ -64,6 +86,18 @@ internal static class SelfTests
             check.Accept(Good() with { Current = b, Desktops = [b, a] });
             Expect("ShellGenerationChanged", () => check.Accept(Good() with { ShellProcess = 2 }));
             Expect("TopologyChanged", () => check.Accept(Good() with { Desktops = [a] }));
+        });
+        Test("one-shot expected role identity rejects a different extant desktop without substitution", () =>
+        {
+            var check = new EndpointCheck();
+            check.Accept(Good(), a);
+            Expect("ExpectedCurrentDesktopMismatch", () => check.Accept(Good() with { Current = b }, a));
+            Expect("ExpectedCurrentDesktopMismatch", () => check.Accept(Good(), b));
+            Expect("ExpectedCurrentDesktopMismatch", () => check.Accept(Good(), Guid.NewGuid()));
+            Expect("ExpectedCurrentDesktopMismatch", () => check.Accept(Good(), Guid.Empty));
+            Expect("InvalidReading", () => check.Accept(Good() with { Health = Capability.Unavailable }, a));
+            Expect("ShellGenerationChanged", () => check.Accept(Good() with { ShellProcess = 2 }, a));
+            Expect("TopologyChanged", () => check.Accept(Good() with { Desktops = [a] }, a));
         });
         Test("21 alternating endpoint confirmations yield 20 transitions", () =>
         {

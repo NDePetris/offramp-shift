@@ -11,19 +11,33 @@ internal static class SwitchPolicyRegressions
         var request = new AuthorizedSwitch(new(Guid.NewGuid(), baseline, work, true), personal, work);
         Test("application and diagnostic compatibility remain distinct exact-build x64 gates", () =>
         {
-            foreach (var architecture in new[] { "X64", "X86", "Arm64", "" })
-                foreach (var build in new[] { "26200.9457", "26200.9711", "26200.9712", "26200", "26100.1", "" })
+            foreach (var architecture in new[] { "X64", "X86", "Arm64", "x64", "" })
+                foreach (var build in new[] { "26200.9457", "26200.9711", "26200.9712", "26200", "26100.1", "26300.9711", "26300.9710", "26300.9712", "26300", "26400.9711", "" })
                 {
                     Check(SwitchCompatibility.Application(build, architecture) == (build == "26200.9457" && architecture == "X64"));
-                    Check(SwitchCompatibility.Qualification(build, architecture) == (build == "26200.9711" && architecture == "X64"));
+                    Check(SwitchCompatibility.Qualification(build, architecture) == (build is "26200.9711" or "26300.9711" && architecture == "X64"));
                     Check(Capabilities.MayProbe(new(build, architecture, 1, 2)) == SwitchCompatibility.Application(build, architecture));
                 }
         });
         Test("normal executor rejects newer build even with a valid single-use grant", () =>
         {
-            var newer = request with { Request = request.Request with { Expected = baseline with { Configuration = baseline.Configuration with { Build = "26200.9711" } } } };
-            var result = new IsolatedSwitchExecutor().ExecuteAsync(new(newer, Environment.TickCount64 + 2_000)).GetAwaiter().GetResult();
-            Check(result.Outcome == SwitchOutcome.Rejected);
+            foreach (var build in new[] { "26200.9711", "26300.9711", "26300.9712" })
+            {
+                var newer = request with { Request = request.Request with { Expected = baseline with { Configuration = baseline.Configuration with { Build = build } } } };
+                var result = new IsolatedSwitchExecutor().ExecuteAsync(new(newer, Environment.TickCount64 + 2_000)).GetAwaiter().GetResult();
+                Check(result.Outcome == SwitchOutcome.Rejected);
+            }
+        });
+        Test("26300 qualification uses the existing single-call policy with a fake session", () =>
+        {
+            var snapshot = baseline with { Configuration = baseline.Configuration with { Build = "26300.9711" } };
+            var diagnostic = request with { Request = request.Request with { Expected = snapshot } };
+            var fake = new Session(snapshot, work);
+            long time = 0;
+            var result = SwitchExperiment.Run(diagnostic.Request, fake, () => snapshot.ObservedUtc.AddMilliseconds(time),
+                () => snapshot.ObservedUptimeMs + time, () => time, n => time += n, qualification: true);
+            Check(fake.Switches == 1 && result.Attempted);
+            Check(SwitchProtocol.Classify(diagnostic, new(result), 0).Outcome == SwitchOutcome.ConfirmedSuccess);
         });
         Test("typed protocol rejects inconsistent and forged completion claims", () =>
         {

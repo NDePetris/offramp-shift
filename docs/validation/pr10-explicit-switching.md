@@ -1,10 +1,10 @@
 # PR 10 — explicit Switch to Work
 
 Prepared October 18, 2026. PR #18 was independently verified merged into main;
-checkout base is `63c3f075148a69fd36e95553b86f5985e7859cfa`. No remote PR,
+original checkout base was `63c3f075148a69fd36e95553b86f5985e7859cfa`; the original implementation is committed as `45c0d73`. No remote PR,
 merge, release or live qualification is part of this implementation.
 
-**Normal application switching on 26200.9711/x64 remains DISABLED.** Read-only
+**Normal application switching on 26200.9711/x64 and all 26300 builds remains DISABLED.** Read-only
 approval from PR #13 is insufficient. Saving separate switching consent cannot
 bypass the capability gate. The historical 26200.9457/x64 limited explicit
 experiment gate remains exact, separately consented, and is not certification
@@ -32,7 +32,7 @@ All seven prescribed commands must pass on the final implementation:
 ./spikes/WindowsObservation/run.ps1 format
 ```
 
-Final local automated results (SDK 10.0.401, warnings as errors):
+Historical PR 10 automated results at implementation commit `45c0d73` (SDK 10.0.401, warnings as errors; current preparation results follow below):
 
 | Check | Result and evidence boundary |
 |---|---|
@@ -51,7 +51,7 @@ exits that owned STA child with code 124. This is a non-COM lifetime check, not
 evidence about shell behavior or an unkillable native process.
 
 An ignored `artifacts/pr10-build`
-output is used locally via `UseArtifactsOutput=true` and absolute `ArtifactsPath`
+output was used for historical PR 10 validation via `UseArtifactsOutput=true` and absolute `ArtifactsPath`
 for root app checks because the owner's running app locks the ordinary output.
 No owner process is stopped or restarted. Initial restricted restores could not
 access NuGet audit metadata; permitted network-enabled restore retained pinned
@@ -85,8 +85,7 @@ availability cases, unexpected-destination UI lockout and command-line entry gua
 Existing outcome/closure tests additionally check closure cancellation. Worker guard
 positive controls reach only an injected throwing factory, never native COM.
 
-Exact files changed for these corrections (the broader pre-existing PR 10 diff
-remains uncommitted):
+Historical files changed for these corrections (committed in `45c0d73`):
 
 | Purpose | Files |
 |---|---|
@@ -104,75 +103,326 @@ switching on 26200.9711/x64 remains blocked pending its own capability decision.
 Automatic switching remains NO-GO. Native TOCTOU races and delayed shell effects
 remain inherent uncertainties; synthetic tests do not establish live compatibility.
 
-## Owner qualification: diagnostic authorization first
+## 26H2 preparation — October 19, 2026
 
-Do not run this procedure until the owner separately authorizes actual-Windows
-switching qualification. The diagnostic command is deliberately isolated from
-normal startup, WPF, singleton, user settings writes and accounting. It accepts
-only exact 26200.9711/x64. It cannot enable application capability, alter any
-allowlist, retry, switch back, move windows or send keyboard input.
+Preparation base: `45c0d73` on `codex/pr10-explicit-switch-to-work`. The owner
+reports Windows 11 26H2, **26300.9711/x64**. No live compatibility result is
+claimed. This patch adds exact-build diagnostic eligibility only; it neither
+approves the ABI nor activates the proposed [build-family policy](../architecture/explicit-switching.md#proposed-26300-build-family-policy-inactive).
 
-1. Save work and use an ordinary unelevated Windows PowerShell session. Record
-   tested commit (and dirty diff if applicable), SDK, actual Windows build/UBR,
-   OS/process architecture, privileges/session, display count/resolutions/layout/
-   scaling and shell configuration. Independently confirm 26200.9711/x64; do not
-   copy a historical host description. Exit Shift yourself through its tray.
-2. Run all automated checks above. Preserve local settings/checkpoints while
-   stopped. Read the existing distinct Personal/Work GUID assignments locally;
-   independently check each role in Task View using the already approved
-   read-only setup. Do not use names/indices to select a replacement GUID.
-   Missing/deleted assignments require deliberate reconfiguration, not substitution.
-3. With Personal selected manually and PowerShell foreground, run exactly ONE
-   diagnostic invocation, substituting the locally checked GUIDs:
-
-   ```powershell
-   $env:DOTNET_ROOT = (Resolve-Path .tools/dotnet).Path
-   # Default output after ./run.ps1 test, with the app stopped during the build:
-   $appDll = (Resolve-Path src/OfframpShift.App/bin/Release/net10.0-windows/OfframpShift.App.dll).Path
-   .tools/dotnet/dotnet.exe $appDll --qualify-switch-26200.9711 --confirm-experimental '<Personal GUID>' '<Work GUID>'
-   ```
-
-   If using the isolated artifacts output described above, instead resolve
-   `artifacts/pr10-build/bin/OfframpShift.App/release/OfframpShift.App.dll`.
-   Never invoke either private worker mode directly. The command first takes a
-   fresh isolated snapshot, then supervises a second single-request switching
-   worker. It prints a typed category and manual fallback; it does not print
-   GUIDs, names, titles, content or browsing history.
-4. Independently inspect Win+Tab after every result. Record the outcome, elapsed
-   time, whether Work was actually reached, any transient wrong destination,
-   focus/minimization/window effects and whether the helper exited. Verified API
-   identity alone is insufficient visual corroboration. An uncertain result may
-   include a delayed transition: stop, inspect manually, and do not retry to
-   compensate. Return to Personal manually if needed; there is no return leg.
-5. Stop on an unexpected destination, shell instability, an uncertain result,
-   a worker remaining alive beyond its bounded cleanup, or any window movement.
-   Retain only a sanitized local result summary with precise environment/provenance;
-   do not commit GUIDs or user content. Do not restart Explorer as a recovery test.
-
-## Bounded qualification matrix and separate capability decision
-
-Mark each row PASS, FAIL, BLOCKED or NOT RUN, with actual build/hardware and tested
-revision. Each additional native attempt requires a fresh deliberate operator
-decision after the prior result and manual context check; no loops or scripts.
-
-| Owner case | Expected evidence |
+| Capability | Effective gate after this preparation |
 |---|---|
-| One explicit Personal to Work attempt | At most one call; correct API identity plus independent Task View corroboration; no unrelated window movement |
-| Source is already Work or another desktop | Rejected with zero attempted switches; no compensating transition |
-| Missing/deleted destination GUID or equal roles | Rejected; no index/name replacement |
-| Changed foreground/source during startup | Rejected if seen before call; after-call race reported without retry and manually inspected |
-| Primary landscape / secondary portrait at actual scaling | Correct destination and stable windows; record each display separately |
-| Pinned foreground window/app, shell foreground | Independent current GUID remains authoritative; ambiguity must reject safely |
-| Session/input unavailable | No attempt unless freshly interactive; do not automate lock/sleep or expand this into the deferred accounting campaign |
-| Unknown build/architecture and ordinary app on 9711 | Normal application capability remains blocked even with saved consent |
+| Normal application switching | Exactly 26200.9457/X64, existing separate consent and runtime authorization |
+| Standalone switching qualification | Exactly 26200.9711/X64 or 26300.9711/X64; command must name the actual build |
+| Production read-only observation | Exactly 26200.9457/X64 or 26200.9711/X64 |
+| Standalone read-only compatibility diagnostic | Exactly 26200.9711/X64/25H2 or 26300.9711/X64/26H2, x64 OS and process, ordinary interactive session and explicit matching target |
+| Automatic switching | NO-GO |
 
-Potentially disruptive deletion, pinned-window and session stimuli are owner-run
-only if separately authorized. Do not treat their NOT RUN status as a pass.
-No 200-transition automatic-switch certification campaign is included here.
+The standalone read-only harness privately compiles the existing ABI and gates
+parent/child separately. Its 26300 preparation does **not** modify
+`DesktopObservationPolicy.IsSupported`, normal snapshot/watch, monitoring or setup.
+The switching diagnostic starts before WPF, singleton, settings and checkpoints.
+Every invocation captures fresh evidence and supervises one single-request switch
+worker; both worker/native entry gates remain exact. GUID checks, lease, one call,
+STA isolation, watchdog, bounded cleanup and no retry remain in place. No ABI slot
+changes were made. Existing 26200 capability and command gates are preserved.
 
-After reviewing actual evidence, the owner must make a **separate documented
-application-capability decision** for exactly 26200.9711/x64. A diagnostic PASS
-alone does not change code or settings support. Any later application gate change
-needs a focused reviewed patch and explicit owner authorization. Application nudge
-focus/keyboard/Narrator/high-contrast/mixed-DPI acceptance then remains a separate
-check on that enabled revision. Automatic switching stays NO-GO regardless.
+## Owner qualification: separately authorized, minimal 26300 procedure
+
+**Live compatibility: NOT RUN.** Save work and exit Shift yourself through its tray.
+Keep it stopped while rebuilding and qualifying. Use ordinary unelevated **x64
+Windows PowerShell**, outside the tool sandbox. Do not use private worker modes,
+`run.ps1 app`, the original spike's switch/capture commands, Explorer restart,
+topology changes, pinning tests or the historical large manual matrix.
+
+Each command block below has one authorization label. **SAFE NOW — no live
+switching** means no undocumented desktop COM is activated; it does not authorize
+the later read-only or switching blocks. Do not use a transcript, output redirection
+or literal GUID command arguments during role checks/switching. Role values stay
+in local variables and private worker IPC; do not paste settings or process command
+lines into evidence. No GUID belongs in committed documentation or logs.
+
+### 1. SAFE NOW — no live switching: environment and reviewed revision
+
+```powershell
+Set-Location G:\Projects\offramp-shift
+git branch --show-current
+git rev-parse HEAD
+git show -s --format='%h %s' HEAD
+git merge-base --is-ancestor 45c0d73 HEAD
+if ($LASTEXITCODE -ne 0) { throw 'Stop: original PR 10 implementation is missing' }
+if (@(git status --porcelain).Count -ne 0) { throw 'Stop: working tree must be clean' }
+$reviewedCommit = (git rev-parse HEAD).Trim()
+$windows = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
+$windows | Select-Object DisplayVersion, CurrentBuild, UBR
+[Environment]::Is64BitProcess
+$env:PROCESSOR_ARCHITECTURE
+$env:DOTNET_ROOT = (Resolve-Path .tools/dotnet).Path
+.tools/dotnet/dotnet.exe --version
+Get-Content global.json
+```
+
+Require branch `codex/pr10-explicit-switch-to-work`, the **exact preparation commit
+SHA in the final review report**, the requested preparation commit subject and a
+clean tree. Compare `$reviewedCommit` locally with that report before proceeding;
+`45c0d73` alone does not include the preparation. Require 26H2, CurrentBuild 26300,
+UBR 9711, Is64BitProcess true and PROCESSOR_ARCHITECTURE AMD64. Independently
+corroborate Windows Settings and Display Settings count/layout/resolutions/scaling.
+The no-COM report below independently checks the diagnostic's OS/process architecture,
+privileges and interactive state; registry ProductName alone is insufficient.
+
+### 2. SAFE NOW — no live switching: rebuild and no-COM checks
+
+All seven automated commands were run during final review. Rebuild the diagnostic
+from the clean reviewed checkout instead of using an older binary. `build` compiles
+the app through its test project references; it does not start WPF or monitoring.
+Require exit 0 after each command:
+
+```powershell
+./run.ps1 build
+if ($LASTEXITCODE -ne 0) { throw 'Stop: reviewed app build failed' }
+./spikes/WindowsObservation/compatibility.ps1 dry-run -TargetBuild 26300.9711
+if ($LASTEXITCODE -ne 0) { throw 'Stop: no-COM environment report failed' }
+$appDll = (Resolve-Path src/OfframpShift.App/bin/Release/net10.0-windows/OfframpShift.App.dll).Path
+Get-FileHash -LiteralPath @($appDll, (Join-Path (Split-Path $appDll) 'OfframpShift.Switching.dll')) -Algorithm SHA256
+if ((git rev-parse HEAD).Trim() -ne $reviewedCommit -or @(git status --porcelain).Count -ne 0) { throw 'Stop: reviewed source changed' }
+```
+
+Require pinned SDK 10.0.401/latest patch; dry-run registry **26300.9711/26H2**,
+x64 OS **and process**, `elevated: false`, `interactive: true`,
+`eligibleForOptIn: true`, **`productionSupported: false`**,
+`productionEntryGuardsRejectedWithoutWorker: true`, `comActivated: false`.
+`-TargetBuild` selects the live opt-in token; dry-run reports host eligibility and
+never activates COM. Preserve revision, source digest and app/library hashes.
+Stop if any required environment fact differs or is unavailable.
+
+If repeating the final automated review, these are also **SAFE NOW — no live
+switching**, individually requiring exit 0:
+
+```powershell
+./run.ps1 test
+./run.ps1 format
+./spikes/VirtualDesktop/run.ps1 test
+./spikes/BrowserAttribution/run.ps1 test
+./spikes/WindowsObservation/run.ps1 test
+./spikes/WindowsObservation/compatibility.ps1 test
+./spikes/WindowsObservation/run.ps1 format
+git diff --check
+```
+
+These use synthetic providers, disposable SQLite and owned non-COM workers. They
+do not qualify actual Windows shell behavior. Never reuse an old binary after
+changing source or checking out a different commit.
+
+### 3. SAFE NOW — no live switching: load existing local role identities
+
+Read only the existing settings at the actual configured path (default below).
+Do not edit consent, build or GUIDs to bypass a gate:
+
+```powershell
+$settingsPath = Join-Path $env:LOCALAPPDATA 'Offramp\Shift\windows-settings.json'
+$roles = Get-Content -LiteralPath $settingsPath -Raw | ConvertFrom-Json
+$personal = [guid]$roles.Personal
+$work = [guid]$roles.Work
+if ($personal -eq [guid]::Empty -or $work -eq [guid]::Empty -or $personal -eq $work) { throw 'Stop: missing or invalid role assignments' }
+$layout = Read-Host 'Actual anonymous display count, layout, resolutions and scaling/DPI'
+```
+
+Loading settings does **not** verify human role mapping. Independently identify
+Personal and Work in Task View by their intended context, without creating,
+renaming or reordering desktops. The next two reads compare the actual current
+GUID against each saved assignment. If a role is missing, deleted/recreated,
+misassigned or uncertain, stop and report BLOCKED; do not substitute names/indices,
+reconfigure production setup on 26300 or proceed to a switch.
+
+### 4. READ-ONLY OS DIAGNOSTIC — requires owner review: verify both role endpoints
+
+Only after separately reviewing/authorizing read-only diagnostic use, independently
+select **Personal** in Task View. Keep PowerShell there and run one read:
+
+```powershell
+./spikes/WindowsObservation/compatibility.ps1 once -TargetBuild 26300.9711 -ConfirmExperimentalReadOnly -OutsideToolSandbox -MonitorLayoutAndDpi $layout -ExpectedCurrent $personal.ToString()
+$LASTEXITCODE
+```
+
+This is the first command that activates undocumented read-only COM. Require
+PASS, exit 0, `expectedCurrentMatched: true`, one successful read, no errors/timeouts,
+`ownedWorkerExitConfirmed: true`, and **`productionSupported: false`**. Retain only
+the sanitized summary; the expected/observed GUIDs are never printed by the harness.
+
+After success, independently select **Work** in Task View and open an ordinary
+unelevated x64 PowerShell console **there**. Leave the original console on Personal;
+do not move or pin it. Variables do not transfer between consoles. In the Work
+console first run this **SAFE NOW — no live switching** preparation:
+
+```powershell
+Set-Location G:\Projects\offramp-shift
+$reviewedCommit = Read-Host 'Exact reviewed preparation commit SHA from the final report'
+if ((git rev-parse HEAD).Trim() -ne $reviewedCommit -or @(git status --porcelain).Count -ne 0) { throw 'Stop: reviewed source differs' }
+$roles = Get-Content -LiteralPath (Join-Path $env:LOCALAPPDATA 'Offramp\Shift\windows-settings.json') -Raw | ConvertFrom-Json
+$work = [guid]$roles.Work
+if ($work -eq [guid]::Empty) { throw 'Stop: missing Work assignment' }
+$layout = Read-Host 'Actual anonymous display count, layout, resolutions and scaling/DPI'
+```
+
+Use the actual configured settings path if different, as in step 3. Then, still on
+independently selected Work, run this **READ-ONLY OS DIAGNOSTIC — requires owner
+review** as a separate operator action:
+
+```powershell
+./spikes/WindowsObservation/compatibility.ps1 once -TargetBuild 26300.9711 -ConfirmExperimentalReadOnly -OutsideToolSandbox -MonitorLayoutAndDpi $layout -ExpectedCurrent $work.ToString()
+$LASTEXITCODE
+```
+
+After successful visual/identity/cleanup checks, return to Personal **manually**
+and resume in the **original Personal console**, which retains `$personal`,
+`$work`, `$appDll` and `$reviewedCommit`. No diagnostic moves a console window.
+
+Require the same PASS, identity, cleanup and production-disabled results, and stable
+desktop count. Any mismatch fails as `ExpectedCurrentDesktopMismatch`; stop rather
+than relabeling a GUID. These are endpoint checks corroborated by the owner; they
+do not certify continuous observation, accounting, future shell generations or
+production compatibility. Do not change topology or restart Explorer between checks.
+
+### 5. SAFE NOW — no live switching: final source and manual context check
+
+After both read-only checks passed, independently select **Personal** in Task View
+and return focus to PowerShell. Recheck the unchanged reviewed source:
+
+```powershell
+if ((git rev-parse HEAD).Trim() -ne $reviewedCommit -or @(git status --porcelain).Count -ne 0) { throw 'Stop: reviewed source changed' }
+```
+
+Avoid other desktop/focus changes during the following command. Read-only approval
+does not authorize switching. Obtain a **separate owner authorization** for exactly
+one native Personal → Work attempt before proceeding.
+
+### 6. LIVE SWITCH — do not execute without separate authorization
+
+Run exactly once after that separate authorization, using the variables above:
+
+```powershell
+.tools/dotnet/dotnet.exe $appDll --qualify-switch-26300.9711 --confirm-experimental $personal.ToString() $work.ToString()
+$LASTEXITCODE
+```
+
+This isolated command accepts only exact 26300.9711/X64, takes a fresh isolated
+snapshot, validates Personal/Work GUIDs and an unexpired request, then supervises
+one single-request worker with at most one native switch attempt. It opens no
+WPF application, singleton, settings or checkpoint store. It does not switch back,
+move windows, inject input, retry or grant normal application capability.
+
+### 7. SAFE NOW — no live switching: independent inspection and manual return
+
+There is no automatic verification or return command. The Personal console may
+be hidden after a successful transition. First inspect Win+Tab while on the
+destination, then return to Personal manually to read its console result/exit code.
+Do not bring the console back by moving or pinning it. Require `ConfirmedSuccess`, exit 0 **and
+actual Work in Task View**, with no transient wrong destination, unexpected window
+movement/minimization or Explorer instability. API success describes only the
+bounded verification point; a delayed shell effect is still possible.
+
+Check Task Manager Details locally: no owned qualification capture/switch worker
+should remain (`OfframpShift.App`, or `dotnet` whose command line names the reviewed
+DLL and qualification mode). Only the console host should remain. Do not copy
+command lines, which may contain GUIDs, into evidence. Return to **Personal manually**
+using Task View when safe. Do not use a switch command as a return leg.
+
+Only if **all** success, destination and cleanup checks passed, the owner may
+individually approve up to **two additional attempts**. Before each one: manually
+return to Personal, verify it in Task View, restore PowerShell foreground and
+recheck unchanged source using step 5. Then explicitly approve and run the single
+**LIVE SWITCH** command in step 6 once. Repeat step 7 afterward. Maximum three
+Personal → Work diagnostic invocations; no loops, batches, retry or automatic return.
+Optional attempts may be NOT RUN; omissions are not PASS.
+
+Stop the entire procedure on any rejected/nonzero/missing/indeterminate result,
+incorrect/transient wrong destination, Explorer instability, unexpected movement
+or minimization, role mismatch, or unconfirmed worker cleanup. An uncertain result
+may include a delayed transition: inspect manually; do not compensate with another
+command, restart qualification silently, restart Explorer or alter desktop topology.
+The normal nudge's indeterminate lockout is unchanged; the standalone diagnostic
+exits and relies on the operator to stop. Report any owned leftover process and
+use manual recovery only; never terminate unrelated processes.
+
+Retain sanitized PASS/FAIL/BLOCKED/NOT RUN summaries with exact OS/build/hardware,
+reviewed commit, source/binary hashes, command category/exit/outcome, Task View
+corroboration, display/window effects and confirmed worker exits. Do not retain
+raw GUIDs, settings, process lists, titles or content. Preserve failed attempts.
+Diagnostics do not write normal settings/checkpoints.
+
+Successful smoke evidence still requires a **separate owner decision and focused
+patch** before normal switching can support the 26300 family. Production observation
+requires its own approval. No live result is recorded here. PR 5 Tests 8–12 remain
+deferred, issues #8/#9 remain unresolved, and automatic switching and production
+website attribution remain NO-GO.
+
+## Current preparation automated results
+
+All seven prescribed commands passed with SDK **10.0.401**, warnings as errors.
+Final review reran all seven commands, including the complete regression matrix and the new expected-role comparison test.
+`git diff --check` also passes. Final-review logs are local and ignored under `artifacts/pr10-review`; earlier preparation logs remain under `artifacts/pr10-26300`.
+
+| Command | Final automated result |
+|---|---|
+| `./run.ps1 test` | PASS, exit 0: Core 82 tests / 38,755 assertions; Persistence 83 / 772; Host 264 / 2,141; WPF 78 / 242; zero failures. Log: `root-test.log`. |
+| `./run.ps1 format` | PASS, exit 0, verify-no-changes. Log: `root-format.log`. |
+| `./spikes/VirtualDesktop/run.ps1 test` | PASS, exit 0: 58 fake-policy cases including 1,000 topology permutations; three owned non-COM isolation checks. Log: `virtual-desktop.log`. |
+| `./spikes/BrowserAttribution/run.ps1 test` | PASS, exit 0: 2,053 policy/protocol assertions, five extension/manifest tests and synthetic process/stdio/pipe tests. Log: `browser-attribution.log`. |
+| `./spikes/WindowsObservation/run.ps1 test` | PASS, exit 0: 41 tests / 10,254 assertions, zero failures. Log: `windows-observation.log`. |
+| `./spikes/WindowsObservation/compatibility.ps1 test` | PASS, exit 0: 16 unsupported production worker-entry configurations, presentation decisions, 16 diagnostic groups including owned non-COM faults; zero failures. Log: `compatibility.log`. |
+| `./spikes/WindowsObservation/run.ps1 format` | PASS, exit 0, verify-no-changes. Log: `observation-format.log`. |
+
+The switching worker-entry matrix covers 90 mode/build/architecture combinations;
+positive controls use a throwing fake activation factory, never COM. Normal
+application 26300 rejection is exercised even with a valid grant; diagnostic
+single-attempt success uses a fake native session. Authorization, classification,
+worker isolation, WPF and accounting regressions remain covered. Core/host/native
+providers are synthetic; SQLite and owned non-COM processes are real. These passes
+do not establish ABI compatibility, live desktop behavior or accounting accuracy.
+Initial restricted build/helper runs failed; permitted reruns passed. No owner
+process was stopped by the agent. No live read, switching qualification, Explorer
+restart or topology change was performed. Final review authorizes one local preparation commit only; no push, PR, merge or release is authorized.
+
+## Final preparation review
+
+**PASS WITH CONDITIONS for diagnostic preparation.** Reviewed the complete patch
+against `45c0d73`: 18 changed tracked files and no untracked non-ignored files.
+All seven prescribed checks and `git diff --check` passed. No production 26300
+observation/switching predicate, ABI declaration, normal grant consumption,
+worker isolation, native-attempt limit, timeout/cleanup or accounting behavior
+was changed. Existing 26200 gates remain intact. No live diagnostic was run.
+
+Corrected two practical runbook gaps: anonymous reads alone could not verify the
+saved role GUIDs, and the earlier provenance instructions still allowed a dirty
+base-plus-patch instead of requiring the exact reviewed commit. The existing
+one-shot read now optionally compares `-ExpectedCurrent` with the actual GUID;
+synthetic regressions cover a different extant/unknown/empty identity, invalid
+health and shell/topology changes. No identities are printed or persisted.
+The runbook uses a separate owner-opened console on Work, since the Personal console may be hidden there; it requires manual Task View corroboration for each role, a clean reviewed
+commit, fresh build, explicit command categories and separate read/switch approvals.
+Historical PR 10 implementation references identify its committed revision.
+
+Conditions: live native compatibility and accessibility remain unverified; owner
+read-only review and a separate one-attempt switching authorization are still
+required. Wrong roles, any failed/uncertain result, instability or unconfirmed
+cleanup stop qualification. Diagnostic success never enables normal capability.
+The 26300 family policy is inactive, exact-build consent is unchanged and future
+family consent must start off with an explicit new decision. Automatic switching
+remains NO-GO. Local commit subject: `test: prepare Windows 26H2 switching qualification`.
+Use its SHA from the final review report for owner-run provenance; no remote action
+is authorized.
+
+## Preparation file inventory
+
+All paths are repository-relative. No settings schema, production observation
+predicate, normal switching predicate, COM declaration or accounting file changed.
+
+| Purpose | Changed files |
+|---|---|
+| Exact diagnostic switching predicate and command/host-build check | `src/OfframpShift.Switching/Switching.cs`, `src/OfframpShift.Switching/SwitchWorkerEntry.cs`, `src/OfframpShift.App/Program.cs` |
+| Separate read-only diagnostic target, parent/child opt-in guards and optional expected-current comparison | `spikes/WindowsObservation/compatibility.ps1`, `spikes/WindowsObservation/Compatibility/Policy.cs`, `spikes/WindowsObservation/Compatibility/Program.cs`, `spikes/WindowsObservation/Compatibility/OwnedWorker.cs` |
+| Deterministic switching and command-entry regressions | `tests/OfframpShift.ApplicationHost.Tests/SwitchPolicyRegressions.cs`, `tests/OfframpShift.ApplicationHost.Tests/SwitchWorkerGuardRegressions.cs`, `tests/OfframpShift.App.Tests/Program.cs` |
+| Read-only diagnostic eligibility and production rejection regressions | `spikes/WindowsObservation/Compatibility/SelfTests.cs`, `spikes/WindowsObservation/CompatibilityGuardTests/Program.cs` |
+| Policy design and minimal owner commands | `docs/architecture/explicit-switching.md`, `docs/architecture/windows-app.md`, `docs/validation/pr10-explicit-switching.md` |
+| Probe boundaries and procedure links | `spikes/VirtualDesktop/README.md`, `spikes/WindowsObservation/README.md`, `spikes/WindowsObservation/Compatibility/README.md` |
