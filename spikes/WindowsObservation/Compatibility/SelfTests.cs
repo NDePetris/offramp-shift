@@ -35,15 +35,15 @@ internal static class SelfTests
             Check(!Policy.Allows("26200.9711", "X64", "X64", "25H2", false, false, true));
             Check(!Policy.Allows("26200.9711", "X64", "X64", "25H2", false, true, false));
         });
-        Test("shared read-only policy accepts exactly the owner-approved builds", () =>
+        Test("shared read-only policy accepts approved exact builds and the 26300 family", () =>
         {
-            foreach (var build in new[] { "26200.9457", "26200.9711" })
+            foreach (var build in new[] { "26200.9457", "26200.9711", "26300.0", "26300.9711", "26300.9712", "26300.10000" })
             {
                 Check(DesktopObservationPolicy.IsSupported(build, "X64"));
                 foreach (var architecture in new[] { "Arm64", "X86", "x64", "" })
                     Check(!DesktopObservationPolicy.IsSupported(build, architecture));
             }
-            foreach (var build in new[] { "26200.9456", "26200.9458", "26200.9710", "26200.9712", "26200", "26300.9711", "26300.9712", "26300", "26400.9711", "" })
+            foreach (var build in new[] { "26200.9456", "26200.9458", "26200.9710", "26200.9712", "26200", "26300.-1", "26300.9711.0", "26300", "26400.9711", "" })
                 Check(!DesktopObservationPolicy.IsSupported(build, "X64"));
         });
         Test("26300 diagnostic preparation requires exact build, release, architectures and explicit target", () =>

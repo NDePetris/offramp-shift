@@ -14,7 +14,8 @@ internal sealed class DesktopWorker : IDisposable
     private Process? process;
     private bool failed;
     public Process? OwnedProcess => process;
-    public static bool IsSupported(string build, Architecture architecture) => DesktopObservationPolicy.IsSupported(build, architecture.ToString());
+    public static bool IsSupported(string build, Architecture architecture) => RuntimeInformation.OSArchitecture == Architecture.X64 &&
+        DesktopObservationPolicy.IsSupported(build, architecture.ToString());
     public static string Build
     {
         get

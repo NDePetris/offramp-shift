@@ -27,13 +27,13 @@ internal static class Pr8Regressions
 
     internal static void Run()
     {
-        Test("strict v1 migration preserves every preference and writes v4 only on explicit save", () =>
+        Test("strict v1 migration preserves every preference and writes v5 only on explicit save", () =>
         {
             using var f = new Fixture(); f.Enable();
             var expected = f.Settings.Load() with { Theme = AppTheme.Dark, CloseToTray = true };
             var legacy = JsonSerializer.SerializeToNode(expected)!;
             legacy["Version"] = 1; legacy.AsObject().Remove("ReminderStyle");
-            legacy.AsObject().Remove("SwitchingConsent"); legacy.AsObject().Remove("SwitchingConsentBuild");
+            legacy.AsObject().Remove("SwitchingConsent"); legacy.AsObject().Remove("SwitchingConsentBuild"); legacy.AsObject().Remove("SwitchingConsentFamily");
             var path = Path.Combine(f.PathName, "windows-settings.json");
             File.WriteAllText(path, legacy.ToJsonString()); var bytes = File.ReadAllBytes(path);
             Check(f.Settings.Load() == expected && f.Settings.Status == SettingsStatus.Ready);
@@ -45,15 +45,16 @@ internal static class Pr8Regressions
             f.Settings.BeforeReplace = null;
             Check(app.Execute(new(HostCommandKind.ChangeBreakReminders) { ReminderStyle = ReminderStyle.WindowsNotification }).Succeeded);
             Check(f.Settings.Load() == expected with { ReminderStyle = ReminderStyle.WindowsNotification });
-            Check(JsonNode.Parse(File.ReadAllText(path))!["Version"]!.GetValue<int>() == 4);
+            Check(JsonNode.Parse(File.ReadAllText(path))!["Version"]!.GetValue<int>() == 5);
         });
         Test("both settings versions reject missing duplicate unknown and invalid fields; future versions stay protected", () =>
         {
             using var f = new Fixture(); var path = Path.Combine(f.PathName, "windows-settings.json");
-            foreach (var version in new[] { 1, 2, 3, 4 })
+            foreach (var version in new[] { 1, 2, 3, 4, 5 })
             {
                 var node = JsonSerializer.SerializeToNode(new WindowsSettings())!.AsObject(); node["Version"] = version;
-                if (version < 4) { node.Remove("SwitchingConsent"); node.Remove("SwitchingConsentBuild"); }
+                if (version < 5) node.Remove("SwitchingConsentFamily");
+                if (version < 4) { node.Remove("SwitchingConsent"); node.Remove("SwitchingConsentBuild"); node.Remove("SwitchingConsentFamily"); }
                 if (version < 3) node.Remove("ReminderStyle");
                 if (version == 2) node["BreakRemindersEnabled"] = false;
                 var valid = node.ToJsonString();
@@ -69,9 +70,9 @@ internal static class Pr8Regressions
                     File.WriteAllText(path, bad); f.Settings.Load(); Check(f.Settings.Status == SettingsStatus.Invalid);
                 }
             }
-            File.WriteAllText(path, "{\"Version\":5}"); f.Settings.Load(); Check(f.Settings.Status == SettingsStatus.Incompatible);
+            File.WriteAllText(path, "{\"Version\":6}"); f.Settings.Load(); Check(f.Settings.Status == SettingsStatus.Incompatible);
             try { f.Settings.Save(new()); Check(false); } catch (InvalidOperationException) { }
-            Check(File.ReadAllText(path) == "{\"Version\":5}");
+            Check(File.ReadAllText(path) == "{\"Version\":6}");
         });
         Test("reminders default off and toggling never changes accounting or unfinished break", () =>
         {

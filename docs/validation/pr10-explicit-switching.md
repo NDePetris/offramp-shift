@@ -1,10 +1,12 @@
 # PR 10 — explicit Switch to Work
 
+> Current owner decision: limited 26300.9711/x64 standalone qualification was owner-reported PASS and accepted for controlled integrated testing. The 26300 family policy is now implemented in the current patch. No further standalone repetitions are required. See [current evidence, scope and WPF test procedure](pr10-integrated-26300.md). The preparation gates/results/procedure below describe historical commit `de869b5`, not the current capability boundary.
+
 Prepared October 18, 2026. PR #18 was independently verified merged into main;
 original checkout base was `63c3f075148a69fd36e95553b86f5985e7859cfa`; the original implementation is committed as `45c0d73`. No remote PR,
 merge, release or live qualification is part of this implementation.
 
-**Normal application switching on 26200.9711/x64 and all 26300 builds remains DISABLED.** Read-only
+**Historical preparation gate:** normal application switching was disabled on 26200.9711/x64 and all 26300 builds. Current 26300-family owner testing is described above; 26200.9711 remains switching-disabled. Read-only
 approval from PR #13 is insufficient. Saving separate switching consent cannot
 bypass the capability gate. The historical 26200.9457/x64 limited explicit
 experiment gate remains exact, separately consented, and is not certification
@@ -57,7 +59,7 @@ No owner process is stopped or restarted. Initial restricted restores could not
 access NuGet audit metadata; permitted network-enabled restore retained pinned
 package versions and warnings as errors. Probe checks use their ordinary output.
 
-**Manual Windows switching PASS: none for PR 10.** No live switch, observation
+**Agent-performed manual Windows switching PASS: none.** The subsequent owner-reported limited qualification is recorded in the current integrated procedure. No live switch, observation
 diagnostic, Explorer restart, desktop manipulation or OS experiment was performed.
 Off-screen WPF render inspection is layout evidence only. Actual transitions,
 Narrator, full keyboard interaction, high contrast, mixed DPI, fullscreen and
@@ -108,7 +110,7 @@ remain inherent uncertainties; synthetic tests do not establish live compatibili
 Preparation base: `45c0d73` on `codex/pr10-explicit-switch-to-work`. The owner
 reports Windows 11 26H2, **26300.9711/x64**. No live compatibility result is
 claimed. This patch adds exact-build diagnostic eligibility only; it neither
-approves the ABI nor activates the proposed [build-family policy](../architecture/explicit-switching.md#proposed-26300-build-family-policy-inactive).
+approves the ABI nor activates the proposed [build-family policy](../architecture/explicit-switching.md#active-26300-family-policy--controlled-owner-evaluation).
 
 | Capability | Effective gate after this preparation |
 |---|---|
@@ -129,7 +131,9 @@ changes were made. Existing 26200 capability and command gates are preserved.
 
 ## Owner qualification: separately authorized, minimal 26300 procedure
 
-**Live compatibility: NOT RUN.** Save work and exit Shift yourself through its tray.
+**Historical standalone procedure at `de869b5`:** the owner has now completed the limited Personal/Work reads and one switch and approved proceeding to the integrated WPF test. Do not require another standalone attempt or the optional repetitions below; use the current integrated procedure linked at the top.
+
+**Historical preparation status: live compatibility was NOT RUN by the agent.** Save work and exit Shift yourself through its tray.
 Keep it stopped while rebuilding and qualifying. Use ordinary unelevated **x64
 Windows PowerShell**, outside the tool sandbox. Do not use private worker modes,
 `run.ps1 app`, the original spike's switch/capture commands, Explorer restart,

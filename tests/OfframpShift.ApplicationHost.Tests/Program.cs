@@ -320,6 +320,7 @@ internal static class Program
         SwitchRegressions.Run();
         SwitchPolicyRegressions.Run();
         SwitchWorkerGuardRegressions.Run();
+        FamilyCompatibilityRegressions.Run();
         Console.WriteLine($"Host: {passed} passed, {failed} failed, {assertions} assertions (synthetic providers, real local SQLite).");
         return failed == 0 ? 0 : 1;
     }

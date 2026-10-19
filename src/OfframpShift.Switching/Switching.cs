@@ -23,7 +23,12 @@ public sealed record SwitchCompletion(SwitchOutcome Outcome, string Detail)
 
 public static class SwitchCompatibility
 {
-    public static bool Application(string build, string architecture) => build == "26200.9457" && architecture == "X64";
+    internal static string RuntimeArchitecture(string processArchitecture, string osArchitecture) =>
+        osArchitecture == "X64" ? processArchitecture : osArchitecture;
+    public static bool Is26300Family(string build) => build?.Split('.') is ["26300", var revision] &&
+        uint.TryParse(revision, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out _);
+    public static bool Application(string build, string architecture) =>
+        (build == "26200.9457" || Is26300Family(build)) && architecture == "X64";
     // This deliberately does NOT extend Capabilities.MayProbe or application support.
     public static bool Qualification(string build, string architecture) => build is "26200.9711" or "26300.9711" && architecture == "X64";
     public static bool Allowed(Configuration configuration, bool qualification) => qualification

@@ -21,7 +21,7 @@ internal static class Program
             WindowDesktopMembership.CheckCandidate(true, 0, Guid.NewGuid(), personal, true, false) != NudgeDesktopCheck.CandidateWrongDesktop ||
             WindowDesktopMembership.CheckCandidate(true, 0, personal, personal, false, true) != NudgeDesktopCheck.Allowed || Native.Calls != 0) return 1;
         Console.WriteLine("PASS: hidden candidate preparation never grants strict activation; wrong/unknown desktop and other HRESULTs fail closed (pure decisions).");
-        foreach (var build in new[] { "26200.9456", "26200.9458", "26200.9710", "26200.9712", "26100.9711", "26200", "26300.9711", "26300.9712", "26300", "26400.9711" })
+        foreach (var build in new[] { "26200.9456", "26200.9458", "26200.9710", "26200.9712", "26100.9711", "26200", "26300.-1", "26300.+1", "26300", "26400.9711" })
         {
             Registry.Build = build;
             using var worker = new DesktopWorker();
@@ -29,7 +29,7 @@ internal static class Program
                 DesktopWorker.Run() != 2 || worker.CheckNudge(1, 2, Guid.NewGuid()) || Native.Calls != 0) return 1;
             cases++;
         }
-        foreach (var build in new[] { "26200.9457", "26200.9711" })
+        foreach (var build in new[] { "26200.9457", "26200.9711", "26300.9711", "26300.9712" })
         {
             if (!DesktopWorker.IsSupported(build, Architecture.X64)) return 1;
             foreach (var architecture in new[] { Architecture.X86, Architecture.Arm64, Architecture.Arm })
@@ -43,7 +43,17 @@ internal static class Program
                 cases++;
             }
         }
-        Console.WriteLine($"PASS: {cases} unsupported-build/architecture constructor/worker-entry cases rejected without child or native activation; both exact build/architecture matrices passed (test-only registry/runtime/native stubs).");
+        RuntimeInformation.ProcessArchitecture = Architecture.X64;
+        foreach (var os in new[] { Architecture.Arm64, Architecture.X86 })
+        {
+            RuntimeInformation.OSArchitecture = os;
+            Registry.Build = "26300.9711";
+            using var worker = new DesktopWorker();
+            if (DesktopWorker.IsSupported(Registry.Build, Architecture.X64) || worker.OwnedProcess is not null ||
+                DesktopWorker.Run() != 2 || Native.Calls != 0) return 1;
+            cases++;
+        }
+        Console.WriteLine($"PASS: {cases} unsupported-build/process/OS-architecture constructor/worker-entry cases rejected without child or native activation; exact/family matrices passed (test-only registry/runtime/native stubs).");
         return 0;
     }
 }
@@ -75,4 +85,5 @@ internal static class Native
 internal static class RuntimeInformation
 {
     internal static Architecture ProcessArchitecture { get; set; } = Architecture.X64;
+    internal static Architecture OSArchitecture { get; set; } = Architecture.X64;
 }

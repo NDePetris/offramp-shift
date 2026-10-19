@@ -25,7 +25,8 @@ internal static class SwitchWorkerGuardRegressions
                     Test($"worker pre-activation exact-build guard: qualification={qualification} {build}/{architecture}", () =>
                     {
                         var configuration = new Configuration(build, architecture, 1, 2);
-                        var allowed = architecture == "X64" && (qualification ? build is "26200.9711" or "26300.9711" : build == "26200.9457");
+                        var allowed = architecture == "X64" && (qualification ? build is "26200.9711" or "26300.9711" :
+                            build is "26200.9457" or "26300.9711" or "26300.9710" or "26300.9712");
                         Entry(new("switch", Grant(configuration)), configuration, qualification, true, allowed);
                         Entry(new("capture"), configuration, qualification, true, qualification && allowed);
                     });

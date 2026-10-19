@@ -9,19 +9,19 @@ internal static class SwitchPolicyRegressions
         var baseline = new Snapshot(new("26200.9457", "X64", 1, 2), Capabilities.Provider,
             DateTimeOffset.UtcNow, Environment.TickCount64, personal, [new(personal, ""), new(work, ""), new(other, "")], 10, 20, true, null, null);
         var request = new AuthorizedSwitch(new(Guid.NewGuid(), baseline, work, true), personal, work);
-        Test("application and diagnostic compatibility remain distinct exact-build x64 gates", () =>
+        Test("application family and exact diagnostic/probe compatibility remain independent x64 gates", () =>
         {
             foreach (var architecture in new[] { "X64", "X86", "Arm64", "x64", "" })
                 foreach (var build in new[] { "26200.9457", "26200.9711", "26200.9712", "26200", "26100.1", "26300.9711", "26300.9710", "26300.9712", "26300", "26400.9711", "" })
                 {
-                    Check(SwitchCompatibility.Application(build, architecture) == (build == "26200.9457" && architecture == "X64"));
+                    Check(SwitchCompatibility.Application(build, architecture) == (build is "26200.9457" or "26300.9711" or "26300.9710" or "26300.9712" && architecture == "X64"));
                     Check(SwitchCompatibility.Qualification(build, architecture) == (build is "26200.9711" or "26300.9711" && architecture == "X64"));
-                    Check(Capabilities.MayProbe(new(build, architecture, 1, 2)) == SwitchCompatibility.Application(build, architecture));
+                    Check(Capabilities.MayProbe(new(build, architecture, 1, 2)) == (build == "26200.9457" && architecture == "X64"));
                 }
         });
         Test("normal executor rejects newer build even with a valid single-use grant", () =>
         {
-            foreach (var build in new[] { "26200.9711", "26300.9711", "26300.9712" })
+            foreach (var build in new[] { "26200.9711", "26200.9712", "26400.9711", "26300", "26300.-1" })
             {
                 var newer = request with { Request = request.Request with { Expected = baseline with { Configuration = baseline.Configuration with { Build = build } } } };
                 var result = new IsolatedSwitchExecutor().ExecuteAsync(new(newer, Environment.TickCount64 + 2_000)).GetAwaiter().GetResult();
@@ -38,6 +38,22 @@ internal static class SwitchPolicyRegressions
                 () => snapshot.ObservedUptimeMs + time, () => time, n => time += n, qualification: true);
             Check(fake.Switches == 1 && result.Attempted);
             Check(SwitchProtocol.Classify(diagnostic, new(result), 0).Outcome == SwitchOutcome.ConfirmedSuccess);
+        });
+        Test("26300 application switching makes one fake native attempt and unexpected destination stays indeterminate", () =>
+        {
+            var snapshot = baseline with { Configuration = baseline.Configuration with { Build = "26300.10000" } };
+            var application = request with { Request = request.Request with { Expected = snapshot } };
+            foreach (var unexpected in new[] { false, true })
+            {
+                var fake = new Session(snapshot, work)
+                { Phase = "after", Change = value => unexpected ? value with { Current = other } : value };
+                long time = 0;
+                var result = SwitchExperiment.Run(application.Request, fake, () => snapshot.ObservedUtc.AddMilliseconds(time),
+                    () => snapshot.ObservedUptimeMs + time, () => time, n => time += n);
+                Check(fake.Switches == 1 && result.Attempted);
+                Check(SwitchProtocol.Classify(application, new(result), 0).Outcome ==
+                    (unexpected ? SwitchOutcome.Indeterminate : SwitchOutcome.ConfirmedSuccess));
+            }
         });
         Test("typed protocol rejects inconsistent and forged completion claims", () =>
         {

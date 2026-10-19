@@ -8,14 +8,15 @@ using static Program;
 
 internal static class SwitchRegressions
 {
-    private static MonitoringApplication Active(Fixture f, string build = "26200.9457")
+    internal static MonitoringApplication Active(Fixture f, string build = "26200.9457")
     {
         f.Enable(build: build);
         f.Settings.Save(f.Settings.Load() with
         {
             ReminderStyle = ReminderStyle.InteractiveWindow,
             SwitchingConsent = true,
-            SwitchingConsentBuild = build
+            SwitchingConsentBuild = SwitchCompatibility.Is26300Family(build) ? "" : build,
+            SwitchingConsentFamily = SwitchCompatibility.Is26300Family(build) ? "26300" : ""
         });
         using (var session = f.Session()) session.ChangeConfiguration(session.Configuration with { AllowanceMs = 2_000 });
         var app = f.App(build: build, switchConfiguration: () => new(build, "X64", 1, 2));
@@ -44,7 +45,7 @@ internal static class SwitchRegressions
             using var f = new Fixture(); f.Enable();
             var original = f.Settings.Load() with { ReminderStyle = ReminderStyle.InteractiveWindow, Theme = AppTheme.Dark, CloseToTray = true };
             var node = JsonSerializer.SerializeToNode(original)!.AsObject();
-            node["Version"] = 3; node.Remove("SwitchingConsent"); node.Remove("SwitchingConsentBuild");
+            node["Version"] = 3; node.Remove("SwitchingConsent"); node.Remove("SwitchingConsentBuild"); node.Remove("SwitchingConsentFamily");
             var path = Path.Combine(f.PathName, "windows-settings.json"); File.WriteAllText(path, node.ToJsonString());
             var bytes = File.ReadAllBytes(path);
             var accounting = Directory.GetFiles(f.PathName).Where(p => p != path).ToDictionary(p => p, File.ReadAllBytes);

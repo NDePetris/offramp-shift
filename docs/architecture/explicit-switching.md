@@ -16,7 +16,7 @@ Base verified October 18, 2026: PR #18 merged into main at
   read-only runtime capture checks the authorized nudge HWND, active Personal,
   health and strict membership. Capture does not reset estimation or call Core.
   The independently supervised native operation runs off both owner and Dispatcher.
-- WindowsSettings v4 adds separate exact-build consent, default off. Strict v1–v3
+- Original WindowsSettings v4 added exact-build consent. Current v5 adds explicit family consent, default off. Strict v1–v4
   migration preserves reminder/appearance/assignment preferences; SQLite is untouched.
 - NudgeWindow/Presenter add a primary explicit action, shared submission exclusion,
   progress and typed feedback, retaining extension/dismissal behavior. MainWindow
@@ -27,10 +27,11 @@ Base verified October 18, 2026: PR #18 merged into main at
 ## Safety and validation plan
 
 No automatic switching, ordinal fallback, retries, rollback, input injection or
-window movement. Exact-build runtime checks run before native activation. Normal
-application eligibility retains 26200.9457/x64 only, with separate explicit
-consent. 26200.9711/x64 and 26300.9711/x64 are diagnostic-only until a subsequent owner-reviewed
-application capability decision; observation approval never enables switching.
+window movement. Capability and exact runtime-configuration checks run before
+native activation. Normal application eligibility accepts 26200.9457/x64 and the
+numeric 26300.UBR family on x64 for controlled owner evaluation, with separate
+explicit consent. 26200.9711/x64 remains observation/diagnostic-only. Switching and
+observation have independent owner decisions; neither consent grants the other.
 
 One request has a two-second authorization lease and one bounded child lifetime.
 The worker independently observes configuration/session/shell/foreground/topology,
@@ -129,8 +130,9 @@ revoke. `SwitchWorkerRequest` / `SwitchWorkerReply` and `SwitchProtocol` validat
 stdio. `IsolatedSwitchExecutor` owns normal execution; its raw diagnostic helper
 and the native qualification constructor are internal to the shared assembly.
 `SwitchCompatibility` keeps application and diagnostic predicates separate.
-Core, Persistence, ActivityMonitoring, browser behavior and read-only observation
-implementation files are unchanged.
+Core, Persistence, ActivityMonitoring and browser implementation files remain
+unchanged. The 26H2 patch changes read-only compatibility/consent scope and OS
+architecture entry guards; its COM declarations and observation validation are unchanged.
 
 The qualification command is structurally one-shot: it constructs a fresh request,
 dispatches it once to a single-request worker and exits. Normal application grants
@@ -139,57 +141,68 @@ reuse a normal application grant. The standalone read-only harness can compare
 one reading to an explicitly supplied existing GUID, without printing identities
 or assigning roles. Owner corroboration in Task View remains required.
 
-## Proposed 26300 build-family policy (inactive)
+## Active 26300-family policy — controlled owner evaluation
 
-This is a design for a subsequent owner-approved patch, not an active predicate.
-Preparation accepts exactly **26300.9711/X64** in standalone qualification, while
-normal application switching remains exactly **26200.9457/X64**. Existing
-26200.9711 diagnostic and read-only approvals remain unchanged. Production
-read-only observation remains limited to the two approved 26200 exact builds.
-See the [current minimal qualification procedure](../validation/pr10-explicit-switching.md#owner-qualification-separately-authorized-minimal-26300-procedure).
+The owner reported two expected-GUID read-only checks and one visually correct
+Personal → Work native switch on **26300.9711/x64**, then expressly accepted this
+limited evidence for integrated, opt-in testing. No additional standalone switch
+repetitions are required before the integrated test. See the
+[evidence and integrated procedure](../validation/pr10-integrated-26300.md).
+This decision does not certify sustained monitoring, recovery, accessibility,
+accounting accuracy, every UBR or unattended use. Automatic switching remains NO-GO.
 
-After the owner separately reviews and approves the completed smoke evidence,
-explicit user-initiated switching may support the **26300 build family on x64**.
-Parse a valid numeric build/UBR and require exact family 26300, not a string prefix;
-263000, malformed versions, unknown architecture and other major build families
-remain unsupported before COM. Routine UBR/cumulative updates within that approved
-family should not need another approval. A different family requires separate
-review and new consent. A known regression may disable support with a focused
-fail-closed change; family approval cannot promise undocumented ABI stability.
+Production read-only observation accepts exact 26200.9457/X64 and 26200.9711/X64,
+plus family 26300/X64. Application switching accepts exact 26200.9457/X64 plus
+family 26300/X64. Both parse a two-component `26300.<unsigned numeric UBR>`;
+malformed revisions, bare/prefix families and different families reject. No new
+approval is needed for routine UBR changes within 26300. Native entry guards also
+require an x64 OS and process, excluding x64 emulation on ARM64. Independent worker
+and native checks still precede undocumented COM activation. Actual build/UBR
+remains in every runtime snapshot and must remain equal throughout one attempt.
 
-Switching consent stays explicit, separate from observation consent and default
-off. Propose a versioned settings migration with an explicit consent scope kind
-and family (e.g. switching/family/26300/X64), rather than changing the meaning of
-existing v4 `SwitchingConsentBuild`. Do not reinterpret old exact-build consent as
-family consent. Migrate to family switching consent off; require a deliberate
-new opt-in after capability approval. No downgrade fallback or parse failure may
-grant consent. Observation approval/consent and GUID assignments need their own
-scope and runtime checks; they must not be implicitly widened by this migration.
+Standalone switching qualification remains exact 26200.9711/X64 or
+26300.9711/X64; the read-only diagnostic retains its own exact opt-in/release gate.
+The original VirtualDesktop spike's parameterless native session still requires
+`Capabilities.MayProbe` (26200.9457/X64). Expanding application support does not
+expand that historical spike gate or the standalone qualification predicates.
 
-On future cumulative updates in approved 26300, retain that explicitly granted
-family switching consent; fresh runtime validation and strict extant GUID bindings
-still apply on every attempt. Currently the host's observation/settings build
-review is exact-build and revokes switching consent. A later implementation must
-review those comparisons together: preserve family switching consent through a
-routine UBR review only if the observation path is separately approved and roles
-remain valid, or keep the action unavailable. Never remove the observation gate
-just to make switching available. Role reassignment, consent revocation and
-uncertainty must continue to invalidate grants. On a different major build family,
-invalidate consent and require fresh review/assignment validation and explicit
-opt-in; returning to an older family must not silently resurrect a prior grant.
-Keep actual build/UBR in runtime snapshots even when consent is family-scoped.
+WindowsSettings **v5** adds required `SwitchingConsentFamily`. It is blank by
+default. When the owner explicitly checks the existing switching checkbox and
+saves on 26300, `SwitchingConsent=true`, `SwitchingConsentFamily="26300"` and
+`SwitchingConsentBuild=""`. Exact-build consent uses the existing build field and
+an empty family field; the two scopes cannot coexist. Disabled consent requires
+both fields empty. Exact consent cannot masquerade as family consent on 26300.
+Both roles and monitoring consent must already be present; every attempt still
+requires current healthy GUID membership and authorization.
 
-Family eligibility is only one condition. Every click still requires fresh,
-single-use authorization, an unexpired lease and independent runtime/worker
-validation of configuration, session, Personal source, Work GUID, foreground,
-shell and topology. Keep isolation, at most one native call, bounded verification,
-no retries, automatic rollback, window movement or unattended switching.
-Indeterminate results retain nudge lockout and Task View/manual recovery. Source
-checks and the shell call remain non-atomic; killing a worker cannot undo an
-accepted transition. Automatic switching remains **NO-GO**.
+Valid v1–v4 settings migrate in memory to v5 with switching **off**, preserving
+other preferences, assignments, monitoring intent and reminder style. Old exact
+switching consent never transfers, including old exact consent for 26300.9711.
+Malformed v4 consent rejects before migration; migration does not launder invalid
+values. Loading alone does not rewrite settings. The next explicit save writes
+v5 atomically. Older applications treat v5 as incompatible; do not hand-edit or
+use an old binary to downgrade it. Core/checkpoint schemas are unchanged.
 
-Keep three independent policies: production read-only observation, standalone
-diagnostic switching and normal application switching. The read-only diagnostic
-also retains its own exact-build opt-in. Neither diagnostic PASS nor switching
-family approval enables production observation or certifies sustained monitoring,
-accounting, Explorer recovery, accessibility or the deferred PR 5 cases.
+Monitoring/observation consent stays independent. The host accepts saved/current
+26300 build pairs in the same observation consent scope, so routine cumulative
+updates require neither another setup approval nor another switching opt-in.
+The saved Build remains the full build at consent, rather than losing UBR evidence.
+Different families and the old distinct 26200 approvals still require explicit
+observation setup review. Fresh source, topology, session and GUID validation
+always applies; saved role names or indices never substitute for missing GUIDs.
+
+On startup in a different switching consent scope, the host atomically clears the
+switching grant before opening the accounting session. Failure to save revocation
+aborts startup; returning to the old family cannot silently resurrect a grant
+that was cleared. Explicit observation review and any role reassignment also clear
+both switching scope fields. Unchecking **Allow an explicit Switch to Work attempt
+from a nudge** and clicking **Save switching consent** clears them and revokes an
+outstanding unconsumed grant. Tray **Pause** and **Exit** are additional immediate
+controls; none can undo a request Explorer already accepted.
+
+Every switch still passes fresh Personal/nudge foreground checks, GUID bindings,
+a short single-use authorization, exact runtime configuration equality, bounded
+STA isolation, one native call and postcondition verification. No retries, rollback,
+window relocation, input injection or automatic/unattended switching were added.
+Indeterminate completion retains its nudge lockout and Task View/manual recovery.
+Consent/context changes cannot retract an already consumed shell request.

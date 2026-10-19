@@ -61,7 +61,7 @@
     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12">
      <StackPanel>
       <TextBlock x:Name="SetupHeading" Text="Desktop setup" Style="{StaticResource SectionTitle}" />
-      <TextBlock Text="Monitoring uses bounded estimates and can miss activity. Explorer recovery and sustained reliability remain unresolved. Consent enables read-only desktop observation on the allowlisted Windows build; Start monitoring enables accounting." />
+      <TextBlock Text="Monitoring uses bounded estimates and can miss activity. Explorer recovery and sustained reliability remain unresolved. Consent enables read-only desktop observation on an approved Windows build or build family; Start monitoring enables accounting." />
       <TextBlock Text="{Binding NextSetupAction}" Margin="0,12,0,12" />
       <TextBlock Text="{Binding ConsentStatus}" />
       <Button x:Name="ConsentButton" Content="I _agree — enable experimental observation" Click="Consent" HorizontalAlignment="Left" IsEnabled="{Binding CanConsent}" />
@@ -99,7 +99,7 @@
       <CheckBox x:Name="SwitchingInput" IsEnabled="{Binding CanEditReminders}" AutomationProperties.Name="Allow an explicit Switch to Work attempt from a nudge">
        <TextBlock Text="Allow an explicit Switch to Work attempt from a nudge" />
       </CheckBox>
-      <TextBlock Text="Separate, default-off consent for this exact Windows build. An uncertain result may include a delayed transition; check manually with Win+Tab. No automatic switching or retries." Margin="0,8,0,8" />
+      <TextBlock Text="Separate, default-off consent: Windows 26300 family on x64, or an approved exact build. Uncheck and save to disable switching. An uncertain result may include a delayed transition; check with Win+Tab. No automatic switching or retries." Margin="0,8,0,8" />
       <TextBlock x:Name="SwitchingCapability" Margin="0,0,0,8" />
       <Button Content="Save switching consent" Click="SaveSwitching" IsEnabled="{Binding CanEditReminders}" HorizontalAlignment="Left" />
       <TextBlock Text="Appearance and closing" Style="{StaticResource SectionTitle}" />

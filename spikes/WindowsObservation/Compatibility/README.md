@@ -1,5 +1,14 @@
 # Windows 26200.9711 read-only compatibility investigation
 
+**Current owner decision:** limited 26300.9711/x64 Personal/Work read checks and
+one explicit switch were owner-reported PASS and accepted for controlled WPF
+testing. Production observation now supports the 26300/x64 family; standalone
+diagnostic opt-ins remain exact. On 26300 dry-run now expects
+`productionSupported: true`, `productionEntryGuardsRejectedWithoutWorker: false`
+(unsupported-build checks skipped) and `comActivated: false`. Do not run additional
+standalone repetitions as a prerequisite. See [current evidence and integrated test](../../../docs/validation/pr10-integrated-26300.md).
+The preparation and 26200 investigation below are historical snapshots.
+
 **26H2 preparation (October 19, 2026):** the standalone diagnostic also accepts
 exactly **26300.9711/x64 OS and process/26H2**, ordinary interactive execution,
 using `-TargetBuild 26300.9711`. This is diagnostic eligibility only: the shared

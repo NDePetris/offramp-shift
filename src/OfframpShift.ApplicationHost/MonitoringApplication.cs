@@ -35,12 +35,18 @@ internal sealed class MonitoringApplication : IDisposable
         this.providers = providers; this.openSession = openSession; this.settingsStore = settingsStore;
         this.supported = supported; this.build = build;
         this.switchConfiguration = switchConfiguration ?? (() => new(build, "Unsupported", -1, 0));
-        settings = settingsStore.Load(); session = openSession();
+        settings = settingsStore.Load();
+        // Persist revocation before opening accounting on a different consent scope.
+        // A save failure aborts startup rather than resurrecting a dormant grant.
+        if (settingsStore.Status == SettingsStatus.Ready && settings.SwitchingConsent && !settings.HasSwitchingConsent(build))
+            SaveSettings(settings with { SwitchingConsent = false, SwitchingConsentBuild = "", SwitchingConsentFamily = "" });
+        session = openSession();
         EnsureRuntime();
     }
 
     private bool Ready => session.Status == PersistenceStatus.Ready;
-    private bool CanObserve => supported && settings.Consent && settings.Build == build &&
+    private bool ObservationConsentMatches => DesktopObservationPolicy.SameConsentScope(settings.Build, build);
+    private bool CanObserve => supported && settings.Consent && ObservationConsentMatches &&
         settingsStore.Status == SettingsStatus.Ready && Ready;
     private bool CanAccount => CanObserve && settings.Complete && settings.MonitoringEnabled &&
         session.Configuration.Accounting == AccountingMode.BestEffort;
@@ -89,7 +95,7 @@ internal sealed class MonitoringApplication : IDisposable
             {
                 case HostCommandKind.Consent:
                     Require(command.Confirmed && supported && Ready, "Experimental observation requires explicit consent and available storage.");
-                    SaveSettings(settings with { Consent = true, Build = build, SwitchingConsent = false, SwitchingConsentBuild = "" });
+                    SaveSettings(settings with { Consent = true, Build = build, SwitchingConsent = false, SwitchingConsentBuild = "", SwitchingConsentFamily = "" });
                     EnsureRuntime(); break;
                 case HostCommandKind.Start:
                     Require(CanObserve && !providerFault && settings.Complete && BindingsValid(), "Review consent and assign two distinct, currently observed desktops before starting.");
@@ -138,7 +144,7 @@ internal sealed class MonitoringApplication : IDisposable
                     var replacement = command.Kind == HostCommandKind.AssignPersonal
                         ? settings with { Personal = point!.Desktop.Current, MonitoringEnabled = false }
                         : settings with { Work = point!.Desktop.Current, MonitoringEnabled = false };
-                    replacement = replacement with { SwitchingConsent = false, SwitchingConsentBuild = "" };
+                    replacement = replacement with { SwitchingConsent = false, SwitchingConsentBuild = "", SwitchingConsentFamily = "" };
                     Require(replacement.Personal != replacement.Work,
                         "Personal and Work must use different desktops. Choose the other desktop in Task View, then assign it through the tray menu.");
                     replacement.Validate();
@@ -163,17 +169,22 @@ internal sealed class MonitoringApplication : IDisposable
                 case HostCommandKind.ChangeBreakReminders:
                     SaveSettings(settings with { ReminderStyle = command.ReminderStyle }); break;
                 case HostCommandKind.ChangeSwitchingConsent:
-                    Require(!command.Confirmed || CanObserve && settings.Complete && settings.Build == build,
+                    Require(!command.Confirmed || CanObserve && settings.Complete,
                         "Review desktop observation consent and both assignments first.");
-                    SaveSettings(settings with { SwitchingConsent = command.Confirmed, SwitchingConsentBuild = command.Confirmed ? build : "" });
-                    message = "Switching preference saved. Exact-build capability approval is still required."; break;
+                    SaveSettings(settings with
+                    {
+                        SwitchingConsent = command.Confirmed,
+                        SwitchingConsentBuild = command.Confirmed && !SwitchCompatibility.Is26300Family(build) ? build : "",
+                        SwitchingConsentFamily = command.Confirmed && SwitchCompatibility.Is26300Family(build) ? "26300" : ""
+                    });
+                    message = "Switching preference saved. Each attempt still requires approved capability and fresh authorization."; break;
                 case HostCommandKind.AuthorizeSwitch:
                     Require(CanAccount && !providerFault && settings.ReminderStyle == ReminderStyle.InteractiveWindow &&
-                        settings.SwitchingConsent && settings.SwitchingConsentBuild == build && BindingsValid(),
+                        settings.HasSwitchingConsent(build) && BindingsValid(),
                         "Enable separate experimental switching consent for this build in Settings and review assignments.");
                     var nativeConfiguration = switchConfiguration();
                     Require(nativeConfiguration.Build == build && SwitchCompatibility.Allowed(nativeConfiguration, false),
-                        "Application switching is disabled on this exact build/architecture pending owner qualification.");
+                        "Application switching is disabled on this Windows build/architecture.");
                     var evidence = runtime?.AuthorizeSwitch(command.NudgeWindow);
                     Require(evidence is not null, "The active eligible Personal nudge and fresh foreground evidence are required.");
                     var age = Environment.TickCount64 - evidence!.UptimeMs;
@@ -285,8 +296,8 @@ internal sealed class MonitoringApplication : IDisposable
             runtime?.Reason != "BoundedEstimate" ? "Waiting for evidence" :
             state.Intervention == InterventionState.Nudging ? "Nudging" : state.Exhausted ? "Allowance exhausted" : "Monitoring";
         var detail = !Ready ? StorageDetail(session.Status, session.Failure) : !supported ?
-            "Desktop observation requires an explicitly approved exact Windows build on x64. This build or architecture is unsupported; no accounting is available." :
-            settings.Build != build && settings.Consent ? "The saved desktop provider build differs. Explicitly review setup again." :
+            "Desktop observation requires an approved Windows build or build family on x64. This build or architecture is unsupported; no accounting is available." :
+            !ObservationConsentMatches && settings.Consent ? "The saved desktop provider build differs. Explicitly review setup again." :
             providerFault ? "Observation provider failed. Retry monitoring explicitly after Windows settles." :
             !settings.Consent ? "Opt in to experimental Estimated monitoring to observe and assign desktops." :
             !bindings ? "Both assigned desktops must be present in a fresh observation. Use Task View and the tray menu to assign distinct desktops; deleted desktops are never substituted." :
@@ -300,8 +311,8 @@ internal sealed class MonitoringApplication : IDisposable
             state, config, context, status, message.Length > 0 ? message + " " + detail : detail,
             available, bindings, Math.Max(runtime?.RetryInMs ?? 0, Math.Max(0, 10_000 - (elapsed() - lastProviderAttempt))), CanObserve,
             supported && Ready && settingsStore.Status is SettingsStatus.Ready or SettingsStatus.Missing &&
-                (!settings.Consent || settings.Build != build), DesktopObserved,
-            Assignment(settings.Personal), Assignment(settings.Work), settings.Consent && settings.Build != build,
+                (!settings.Consent || !ObservationConsentMatches), DesktopObserved,
+            Assignment(settings.Personal), Assignment(settings.Work), settings.Consent && !ObservationConsentMatches,
             CanAccount && !providerFault && settings.ReminderStyle == ReminderStyle.InteractiveWindow && runtime?.CanKeepNudgeOpen == true,
             runtime?.ReminderGeneration ?? 0, runtime?.ReminderEpoch ?? Guid.Empty,
             runtime?.ReminderStatus ?? "Observation unavailable; no reminder delivery.", runtime?.PresentationId ?? Guid.Empty)
@@ -311,8 +322,8 @@ internal sealed class MonitoringApplication : IDisposable
     private string SwitchingUnavailableReason =>
         !supported || !SwitchCompatibility.Application(build, System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString())
             ? "Switching is not approved for this Windows build or architecture." :
-        !settings.SwitchingConsent || settings.SwitchingConsentBuild != build
-            ? "Enable experimental switching consent for this build in Settings." :
+        !settings.HasSwitchingConsent(build)
+            ? "Enable experimental switching consent for this build or build family in Settings." :
         !CanAccount || providerFault || settings.ReminderStyle != ReminderStyle.InteractiveWindow || runtime?.CanKeepNudgeOpen != true
             ? "Switching requires an active Personal nudge and healthy monitoring." : "";
 

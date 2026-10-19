@@ -81,8 +81,8 @@ internal static class Program
     private static bool Allowed(bool consent) => OperatingSystem.IsWindows() &&
         Policy.Allows(DesktopWorker.Build, RuntimeInformation.ProcessArchitecture.ToString(),
             RuntimeInformation.OSArchitecture.ToString(), Release, Elevated(), Environment.UserInteractive, consent);
-    private static bool ProductionSupported() => DesktopObservationPolicy.IsSupported(
-        DesktopWorker.Build, RuntimeInformation.ProcessArchitecture.ToString());
+    private static bool ProductionSupported() => DesktopWorker.IsSupported(
+        DesktopWorker.Build, RuntimeInformation.ProcessArchitecture);
     private static object EnvironmentReport()
     {
         using var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion");

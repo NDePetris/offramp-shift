@@ -60,10 +60,12 @@ public partial class MainWindow : Window
             CloseInput.IsChecked = snapshot.Settings.CloseToTray ?? false;
             RemindersInput.SelectedIndex = (int)snapshot.Settings.ReminderStyle;
             SwitchingInput.IsChecked = snapshot.Settings.SwitchingConsent;
-            SwitchingCapability.Text = "Consent applies to build " + snapshot.Settings.Build + ". " +
+            SwitchingCapability.Text = (DesktopFeasibility.SwitchCompatibility.Is26300Family(snapshot.Settings.Build)
+                ? "Consent applies to Windows build family 26300 on x64. "
+                : "Consent applies to exact build " + snapshot.Settings.Build + ". ") +
                 (DesktopFeasibility.SwitchCompatibility.Application(snapshot.Settings.Build, System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString())
                 ? "Limited explicit experiments only; each click is independently validated."
-                : "Application switching remains disabled pending exact-build owner qualification and a separate capability decision.");
+                : "Application switching is unavailable on this build or architecture.");
         }
     }
 

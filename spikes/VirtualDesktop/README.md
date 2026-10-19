@@ -61,8 +61,10 @@ PR 10 extracts `Model.cs` and `NativeSession.cs` into
 `src/OfframpShift.Switching`, with the existing namespaces retained. Probe.Core
 references that shared library; the probe's commands and diagnostic tests remain
 operational. There is one switching COM declaration set. The normal probe gate
-is still exactly 26200.9457/x64. The separate application diagnostic for
-26200.9711 or 26300.9711 does not expand this probe or application allowlist; see
+is still exactly 26200.9457/x64, including the parameterless native constructor.
+Standalone qualification remains exact 26200.9711 or 26300.9711. Integrated
+application 26300-family support has a separate owner decision; it does not
+expand this spike's gate. See
 [PR 10 qualification](../../docs/validation/pr10-explicit-switching.md).
 
 - The parent starts a hidden, disposable child using redirected stdio. Undocumented COM stays in that child on one STA thread.

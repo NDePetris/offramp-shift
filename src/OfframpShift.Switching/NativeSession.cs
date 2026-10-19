@@ -18,13 +18,16 @@ public sealed class NativeSession : IDesktopSession, IDisposable
     private IVirtualDesktop? resolved;
     private readonly bool qualification;
 
-    public NativeSession() : this(false) { }
+    public NativeSession() : this(false, true) { }
 
-    internal NativeSession(bool qualification)
+    internal NativeSession(bool qualification) : this(qualification, false) { }
+
+    private NativeSession(bool qualification, bool probe)
     {
         this.qualification = qualification;
         configuration = ReadConfiguration();
-        if (!SwitchCompatibility.Allowed(configuration, qualification)) throw new InvalidOperationException("Undocumented ABI disabled for this exact Windows build/architecture.");
+        if (probe ? !Capabilities.MayProbe(configuration) : !SwitchCompatibility.Allowed(configuration, qualification))
+            throw new InvalidOperationException("Undocumented ABI disabled for this Windows build/architecture.");
         shell = (IServiceProvider)Activator.CreateInstance(Type.GetTypeFromCLSID(new("C2F03A33-21F5-47FA-B4BB-156362A2F239"), true)!)!;
         var service = new Guid("C5E0CDCA-7B6E-41B2-9FC4-D93975CC467B");
         var iid = typeof(IManager).GUID;
@@ -39,7 +42,8 @@ public sealed class NativeSession : IDesktopSession, IDisposable
         using var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion");
         var build = key?.GetValue("CurrentBuild")?.ToString() ?? "unknown";
         var revision = key?.GetValue("UBR")?.ToString() ?? "unknown";
-        return new(build + "." + revision, RuntimeInformation.ProcessArchitecture.ToString(),
+        return new(build + "." + revision, SwitchCompatibility.RuntimeArchitecture(
+            RuntimeInformation.ProcessArchitecture.ToString(), RuntimeInformation.OSArchitecture.ToString()),
             Process.GetCurrentProcess().SessionId, GetSystemMetrics(80));
     }
 

@@ -55,8 +55,9 @@ filesystem/process sandbox when its build/process restrictions prevent operation
 history. Ctrl+C stops it. It runs for at most 600 seconds. It writes no files.
 
 `--desktop` explicitly enables the experimental read-only COM helper, only on
-**26200.9457/x64** or **26200.9711/x64**, the two exact owner-approved read-only
-observation builds. All other builds reject before undocumented COM activation.
+**26200.9457/x64**, **26200.9711/x64**, or the **26300 family/x64** under the
+owner's separate controlled-testing decision. Other families, malformed revisions,
+and non-x64 OS/process configurations reject before undocumented COM activation.
 The newer build is approved for experimental owner-evaluation monitoring after
 the bounded owner-reported compatibility checks; this does not certify accounting
 accuracy, uninterrupted observation or unattended daily use.
@@ -71,8 +72,10 @@ See [owner smoke commands](../../docs/validation/windows-26200-9711-smoke.md) fo
 the updated production observation path and separate WPF integration check.
 
 26H2 preparation adds **26300.9711/x64/26H2 only** to the standalone compatibility
-diagnostic, with an explicit `-TargetBuild 26300.9711` opt-in. Production observation
-remains blocked on every 26300 build. Follow the separate, minimal
+diagnostic, with an explicit `-TargetBuild 26300.9711` opt-in. Following owner-reported
+Personal/Work read PASS and one confirmed switch, production observation now accepts
+the 26300 family for controlled integrated evaluation. Follow the current
+[integrated test](../../docs/validation/pr10-integrated-26300.md); the separate, minimal
 [PR 10 qualification procedure](../../docs/validation/pr10-explicit-switching.md)
 instead of the historical 26200 matrix; no 26300 live evidence is claimed.
 

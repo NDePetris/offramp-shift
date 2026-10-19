@@ -5,16 +5,15 @@ accounting or approval for unattended daily use. Explorer recovery [#8](https://
 and sustained accuracy/reliability [#9](https://github.com/NDePetris/offramp-shift/issues/9)
 remain unresolved. Automatic switching and production browser attribution remain
 NO-GO; no window movement is implemented. PR 10 adds an explicitly clicked, separately
-consented Switch to Work action on 26200.9457/x64 only. Normal application switching
-on 26200.9711/x64 and all 26300 builds remains disabled pending owner qualification and a separate
-capability decision. See [explicit switching](explicit-switching.md) and
+consented Switch to Work action on 26200.9457/x64 and the 26300/x64 family for
+controlled owner evaluation. Switching on 26200.9711/x64 remains disabled.
+See [explicit switching](explicit-switching.md) and
 [the owner procedure](../validation/pr10-explicit-switching.md).
-The 26H2 preparation permits standalone diagnostic qualification on exactly
-26300.9711/x64. Its separate read-only diagnostic gate does not enable production
-observation on 26300. The proposed switching build-family policy remains inactive.
-The shared read-only COM gate accepts exactly **26200.9457/x64** and
-**26200.9711/x64**, as approved in merged PR #13. Both worker entry guards and
-the read-only ABI remain unchanged. The separate switching gate is unchanged.
+The owner accepted limited 26300.9711/x64 standalone evidence and approved
+integrated testing without further standalone repetitions. The shared read-only
+gate now accepts exact **26200.9457/x64**, **26200.9711/x64**, and numeric
+**26300.UBR/x64**. OS and process must both be x64. The read-only ABI, isolation
+and validation remain intact. See [the decision and integrated procedure](../validation/pr10-integrated-26300.md).
 See [integration validation and owner checklist](../validation/pr5-app.md).
 PR #11 completed the accepted PR 5 owner-evaluation scope; the owner reported
 Tests 1–7 PASS and deferred Tests 8–12 / NOT RUN. PR #13 completed the bounded
@@ -112,7 +111,7 @@ Blocked permits explicit reopen after correcting clock/access/ownership.
 
 ## Interactive nudges (PR 9)
 
-Windows settings v4 preserves v3's Off, Windows notification and explicitly selected
+Windows settings v5 preserves v3's Off, Windows notification and explicitly selected
 Interactive window. v1 migrates to Off; enabled v2 reminders migrate to Windows
 notification, never interactive focus. Both enabled styles use zero initial grace
 and one shared durable repeat interval (1–60 minutes, default one minute), advanced
@@ -229,13 +228,17 @@ or replace the separate Recover accounting protocol. See the
 `%LOCALAPPDATA%\Offramp\Shift\windows-settings.json` is independent of
 `checkpoint.db`. It stores schema/provider/build, nullable role GUIDs, experimental
 consent, enabled-monitoring intent, theme, close behavior and default-off break
-reminder style. Version 4 retains ReminderStyle and adds separate default-off
-SwitchingConsent and SwitchingConsentBuild. Exact v1/v2/v3 shapes migrate strictly
-in memory: v1/disabled v2 becomes Off; enabled v2 becomes Windows notification;
-v3 retains its exact reminder style. Other preferences are preserved and switching
-is never enabled by migration. Load never rewrites the file; the next explicit
-atomic save writes v4. Build review and role reassignment revoke switching consent.
-Consent never grants capability approval for another Windows build. It contains no
+reminder style. Version 5 retains ReminderStyle, SwitchingConsent and the exact
+SwitchingConsentBuild field, and adds explicit SwitchingConsentFamily (blank or
+26300). Strict v1–v4 migrations leave switching off and preserve other preferences;
+v1/disabled v2 becomes Off and enabled v2 becomes Windows notification. Load never
+rewrites the file; the next explicit atomic save writes v5. Family consent granted
+through Settings survives routine 26300 UBR updates. Observation setup likewise
+retains consent within that family, while keeping the full saved build string.
+Build-family changes, explicit setup review and role reassignment revoke switching
+consent. On a scope change at startup, revocation is saved before opening accounting;
+save failure aborts startup. See the switching architecture for exact scope rules.
+Consent never grants capability outside the approved policy. It contains no
 Core totals/configuration, foreground identities or activity/content history.
 The codec rejects duplicate/unknown/missing fields, unsupported versions and
 invalid values. Saving flushes a unique same-directory temporary file and uses

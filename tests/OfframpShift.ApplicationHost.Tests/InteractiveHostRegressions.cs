@@ -217,7 +217,7 @@ internal static class InteractiveHostRegressions
             {
                 var original = f.Settings.Load(); var node = JsonSerializer.SerializeToNode(original)!;
                 node["Version"] = 2; node.AsObject().Remove("ReminderStyle"); node["BreakRemindersEnabled"] = enabled;
-                node.AsObject().Remove("SwitchingConsent"); node.AsObject().Remove("SwitchingConsentBuild");
+                node.AsObject().Remove("SwitchingConsent"); node.AsObject().Remove("SwitchingConsentBuild"); node.AsObject().Remove("SwitchingConsentFamily");
                 File.WriteAllText(path, node.ToJsonString()); var bytes = File.ReadAllBytes(path);
                 var migrated = f.Settings.Load();
                 Check(migrated == original with { ReminderStyle = enabled ? ReminderStyle.WindowsNotification : ReminderStyle.Off });
