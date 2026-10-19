@@ -11,6 +11,9 @@ public sealed class MonitoringController
     private BreakReminderMailbox? reminders;
     private volatile bool stopping;
     private bool commandInProgress;
+    private int switching;
+    private TaskCompletionSource? switchFinished;
+    private DesktopFeasibility.SwitchAuthorization? activeSwitchAuthorization;
     public HostSnapshot? Latest => Volatile.Read(ref latest);
     public Task Completion => stopped.Task;
     public bool TryTakeReminder() => TryTakeReminder(out _);
@@ -44,7 +47,60 @@ public sealed class MonitoringController
         return completion.Task;
     }
 
-    public Task StopAsync() { lock (submissionGate) { stopping = true; Volatile.Read(ref reminders)?.Invalidate(); } return stopped.Task; }
+    public async Task<DesktopFeasibility.SwitchCompletion> SwitchToWorkAsync(nint window,
+        DesktopFeasibility.ISwitchExecutor? executor = null, CancellationToken cancellationToken = default)
+    {
+        TaskCompletionSource finished;
+        lock (submissionGate)
+        {
+            if (stopping || stopped.Task.IsCompleted)
+                return DesktopFeasibility.SwitchCompletion.Reject("The application is stopping.");
+            if (switching != 0) return DesktopFeasibility.SwitchCompletion.Reject("A switch request is already in progress.");
+            switching = 1;
+            switchFinished = finished = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+        try
+        {
+            var result = await ExecuteAsync(new(HostCommandKind.AuthorizeSwitch) { NudgeWindow = window }).ConfigureAwait(false);
+            if (!result.Succeeded || result.Switching is null)
+                return DesktopFeasibility.SwitchCompletion.Reject(result.Message);
+            lock (submissionGate)
+            {
+                if (stopping || cancellationToken.IsCancellationRequested)
+                {
+                    result.Switching.Revoke();
+                    return DesktopFeasibility.SwitchCompletion.Reject("The application is stopping or the nudge closed.");
+                }
+                activeSwitchAuthorization = result.Switching;
+            }
+            // Revocation competes with consumption on the same atomic lease state.
+            // Cancellation after consumption cannot cancel or undo a shell request.
+            using var registration = cancellationToken.Register(result.Switching.Revoke);
+            return await (executor ?? new DesktopFeasibility.IsolatedSwitchExecutor()).ExecuteAsync(result.Switching).ConfigureAwait(false);
+        }
+        catch (Exception e) when (e is not OutOfMemoryException)
+        { return DesktopFeasibility.SwitchCompletion.Unknown("Switch operation could not complete."); }
+        finally
+        {
+            lock (submissionGate)
+            {
+                activeSwitchAuthorization?.Revoke(); activeSwitchAuthorization = null; switching = 0;
+            }
+            finished.TrySetResult();
+        }
+    }
+
+    public Task StopAsync()
+    {
+        lock (submissionGate)
+        {
+            stopping = true; Volatile.Read(ref reminders)?.Invalidate();
+            activeSwitchAuthorization?.Revoke();
+            // The owner can stop immediately, but graceful UI shutdown must keep
+            // the independent supervisor alive until its bounded cleanup finishes.
+            return switchFinished is null ? stopped.Task : Task.WhenAll(stopped.Task, switchFinished.Task);
+        }
+    }
 
     private void Run(Func<MonitoringApplication> create)
     {

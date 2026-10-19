@@ -25,7 +25,8 @@ public partial class ShiftApplication : Application
         window = new(Execute, ExitAsync, CloseAsync); MainWindow = window;
         nudges = new(command => command.Kind is HostCommandKind.BeginNudgePresentation or HostCommandKind.CompleteNudgePresentation ? controller.ExecuteAsync(command) : Execute(command),
             () => controller.Completion.IsCompleted || exiting ? null : controller.Latest,
-            detail => { window.ReportAction(detail); tray?.ReportNudgeFailure(detail); }, new NudgePlatform());
+            detail => { window.ReportAction(detail); tray?.ReportNudgeFailure(detail); }, new NudgePlatform(),
+            (handle, cancellation) => controller.SwitchToWorkAsync(handle, cancellationToken: cancellation));
         try { tray = new(() => Open(false), () => Open(true), Execute, ExitAsync); }
         catch { MessageBox.Show("The tray icon could not be created. Keep this window open; closing will exit.", "Offramp Shift"); }
         RefreshBrand();

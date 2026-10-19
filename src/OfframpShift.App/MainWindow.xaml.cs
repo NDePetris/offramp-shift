@@ -59,6 +59,11 @@ public partial class MainWindow : Window
             displayedSettings = snapshot.Settings; ThemeInput.SelectedItem = snapshot.Settings.Theme;
             CloseInput.IsChecked = snapshot.Settings.CloseToTray ?? false;
             RemindersInput.SelectedIndex = (int)snapshot.Settings.ReminderStyle;
+            SwitchingInput.IsChecked = snapshot.Settings.SwitchingConsent;
+            SwitchingCapability.Text = "Consent applies to build " + snapshot.Settings.Build + ". " +
+                (DesktopFeasibility.SwitchCompatibility.Application(snapshot.Settings.Build, System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString())
+                ? "Limited explicit experiments only; each click is independently validated."
+                : "Application switching remains disabled pending exact-build owner qualification and a separate capability decision.");
         }
     }
 
@@ -126,6 +131,8 @@ public partial class MainWindow : Window
     { Theme = ThemeInput.SelectedItem is AppTheme theme ? theme : AppTheme.System, CloseToTray = CloseInput.IsChecked == true });
     private async void SaveReminders(object sender, RoutedEventArgs e) => await Run(new(HostCommandKind.ChangeBreakReminders)
     { ReminderStyle = (ReminderStyle)RemindersInput.SelectedIndex });
+    private async void SaveSwitching(object sender, RoutedEventArgs e) => await Run(new(HostCommandKind.ChangeSwitchingConsent)
+    { Confirmed = SwitchingInput.IsChecked == true });
     private async void SaveRepeat(object sender, RoutedEventArgs e)
     {
         if (!int.TryParse(RepeatInput.Text, NumberStyles.Integer, CultureInfo.CurrentCulture, out var minutes) || minutes is < 1 or > 60)

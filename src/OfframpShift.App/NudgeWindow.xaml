@@ -11,6 +11,9 @@
    <local:FamilySymbolImage x:Name="FamilySymbol" Width="36" Height="36" HorizontalAlignment="Left" Margin="0,0,0,16" Focusable="False" />
    <TextBlock x:Name="NudgeHeading" Text="Time for a break" FontSize="24" FontWeight="SemiBold" Focusable="True" KeyboardNavigation.IsTabStop="False" />
    <TextBlock Text="You've used your Personal allowance. Take a moment, or give yourself a little more time." Margin="0,12,0,16" />
+   <Button x:Name="SwitchWork" Content="Switch to _Work" Click="SwitchToWork" IsEnabled="False" FontWeight="SemiBold" HorizontalAlignment="Left"
+           IsDefault="False" AutomationProperties.Name="Switch to Work" />
+   <TextBlock x:Name="SwitchAvailability" Text="Checking switching availability. Press Win+Tab and select Work manually." AutomationProperties.LiveSetting="Polite" Margin="0,8,0,12" />
    <WrapPanel>
     <Button x:Name="OneMinute" Content="Add _1 minute" Click="AddOne" AutomationProperties.Name="Add 1 minute" />
     <Button x:Name="FiveMinutes" Content="Add _5 minutes" Click="AddFive" AutomationProperties.Name="Add 5 minutes" />

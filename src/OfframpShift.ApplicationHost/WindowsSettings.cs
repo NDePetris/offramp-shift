@@ -10,7 +10,7 @@ public enum SettingsStatus { Ready, Missing, Invalid, Incompatible, Unavailable 
 
 public sealed record WindowsSettings
 {
-    [JsonRequired] public int Version { get; init; } = 3;
+    [JsonRequired] public int Version { get; init; } = 4;
     [JsonRequired] public Guid? Personal { get; init; }
     [JsonRequired] public Guid? Work { get; init; }
     [JsonRequired] public string Provider { get; init; } = "shell-com-53f5ca0b-readonly-v1";
@@ -20,11 +20,16 @@ public sealed record WindowsSettings
     [JsonRequired] public AppTheme Theme { get; init; }
     [JsonRequired] public bool? CloseToTray { get; init; }
     [JsonRequired] public ReminderStyle ReminderStyle { get; init; }
+    [JsonRequired] public bool SwitchingConsent { get; init; }
+    [JsonRequired] public string SwitchingConsentBuild { get; init; } = "";
     [JsonIgnore] public bool Complete => Personal is not null && Work is not null && Consent;
 
     public void Validate()
     {
-        if (Version != 3 || !Enum.IsDefined(ReminderStyle) || Provider != "shell-com-53f5ca0b-readonly-v1" || Build is null ||
+        if (Version != 4 || SwitchingConsentBuild is null || SwitchingConsentBuild.Length > 40 ||
+            SwitchingConsent && (SwitchingConsentBuild.Length == 0 || SwitchingConsentBuild != Build || !Complete) ||
+            !SwitchingConsent && SwitchingConsentBuild.Length != 0 ||
+            !Enum.IsDefined(ReminderStyle) || Provider != "shell-com-53f5ca0b-readonly-v1" || Build is null ||
             Build.Length > 40 || !Enum.IsDefined(Theme) || Personal == Guid.Empty || Work == Guid.Empty ||
             Personal is not null && Personal == Work || MonitoringEnabled && !Complete)
             throw new ArgumentException("Invalid Windows settings.");
@@ -51,21 +56,24 @@ public sealed class WindowsSettingsStore(string directory)
             foreach (var item in document.RootElement.EnumerateObject())
                 if (!names.Add(item.Name)) throw new JsonException();
             if (document.RootElement.TryGetProperty("Version", out var version) && version.ValueKind == JsonValueKind.Number &&
-                (!version.TryGetInt32(out var number) || number is not (1 or 2 or 3)))
+                (!version.TryGetInt32(out var number) || number is not (1 or 2 or 3 or 4)))
             { Status = SettingsStatus.Incompatible; return new(); }
             WindowsSettings settings;
-            if (version.ValueKind == JsonValueKind.Number && version.GetInt32() is 1 or 2)
+            if (version.ValueKind == JsonValueKind.Number && version.GetInt32() is 1 or 2 or 3)
             {
-                // Validate the exact v1 shape before adding the new required v2 field.
-                // Migration is in memory only; the next explicit atomic save writes v2.
+                // Validate each exact legacy shape; migration never opts into switching.
                 string[] legacyFields = ["Version", "Personal", "Work", "Provider", "Build", "Consent",
                     "MonitoringEnabled", "Theme", "CloseToTray"];
-                if (!names.SetEquals(version.GetInt32() == 1 ? legacyFields : [.. legacyFields, "BreakRemindersEnabled"])) throw new JsonException();
+                var oldVersion = version.GetInt32();
+                if (!names.SetEquals(oldVersion == 1 ? legacyFields : [.. legacyFields,
+                    oldVersion == 2 ? "BreakRemindersEnabled" : "ReminderStyle"])) throw new JsonException();
                 var migrated = JsonNode.Parse(document.RootElement.GetRawText())!;
-                var enabled = version.GetInt32() == 2 && document.RootElement.GetProperty("BreakRemindersEnabled").GetBoolean();
+                var enabled = oldVersion == 2 && document.RootElement.GetProperty("BreakRemindersEnabled").GetBoolean();
                 migrated.AsObject().Remove("BreakRemindersEnabled");
-                migrated["Version"] = 3;
-                migrated["ReminderStyle"] = (int)(enabled ? ReminderStyle.WindowsNotification : ReminderStyle.Off);
+                migrated["Version"] = 4;
+                if (oldVersion != 3) migrated["ReminderStyle"] = (int)(enabled ? ReminderStyle.WindowsNotification : ReminderStyle.Off);
+                migrated["SwitchingConsent"] = false;
+                migrated["SwitchingConsentBuild"] = "";
                 settings = migrated.Deserialize<WindowsSettings>(Options) ?? throw new JsonException();
             }
             else settings = document.RootElement.Deserialize<WindowsSettings>(Options) ?? throw new JsonException();

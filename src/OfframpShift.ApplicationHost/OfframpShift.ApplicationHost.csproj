@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><RestorePackagesWithLockFile>true</RestorePackagesWithLockFile></PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="../OfframpShift.Switching/OfframpShift.Switching.csproj" />
     <ProjectReference Include="../OfframpShift.ActivityMonitoring/OfframpShift.ActivityMonitoring.csproj" />
     <ProjectReference Include="../OfframpShift.Persistence/OfframpShift.Persistence.csproj" />
     <InternalsVisibleTo Include="ObservationProbe" />

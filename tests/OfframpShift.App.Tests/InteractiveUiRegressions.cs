@@ -44,7 +44,8 @@ internal static class InteractiveUiRegressions
             return value with
             {
                 CanKeepNudgeOpen = true,
-                Settings = value.Settings with { ReminderStyle = ReminderStyle.InteractiveWindow },
+                SwitchingUnavailableReason = "",
+                Settings = value.Settings with { ReminderStyle = ReminderStyle.InteractiveWindow, SwitchingConsent = true, SwitchingConsentBuild = value.Settings.Build },
                 State = value.State! with { Exhausted = true, Intervention = InterventionState.Nudging }
             };
         }
@@ -61,6 +62,101 @@ internal static class InteractiveUiRegressions
             }
             return HostCommandResult.Success() with { Presentation = command.Presentation };
         }
+        foreach (var outcome in Enum.GetValues<DesktopFeasibility.SwitchOutcome>())
+            foreach (var automaticClosure in new[] { false, true })
+                test($"explicit switch {outcome} retains typed feedback and closure behavior: automatic closure={automaticClosure}", () =>
+                {
+                    using var ui = new UiContinuations();
+                    var value = Eligible(); var reports = new List<string>(); var calls = 0; var deferrals = 0;
+                    var completion = new TaskCompletionSource<DesktopFeasibility.SwitchCompletion>();
+                    CancellationToken token = default;
+                    var presenter = new NudgePresenter(command =>
+                    {
+                        if (command.Kind == HostCommandKind.DeferInteractive) deferrals++;
+                        return Task.FromResult(Accept(command, ref value));
+                    }, () => value, reports.Add, new Platform(), (_, cancellation) => { calls++; token = cancellation; return completion.Task; });
+                    presenter.PresentAsync(Event(value)).GetAwaiter().GetResult();
+                    var window = presenter.Window!;
+                    var switchButton = (Button)window.FindName("SwitchWork");
+                    Check(!switchButton.IsDefault && AutomationProperties.GetName(switchButton) == "Switch to Work");
+                    var task = window.SubmitSwitch();
+                    Check(calls == 1 && !switchButton.IsEnabled && !((Button)window.FindName("OneMinute")).IsEnabled);
+                    window.SubmitSwitch().GetAwaiter().GetResult(); window.Submit(60_000).GetAwaiter().GetResult(); window.Close();
+                    Check(calls == 1 && deferrals == 0 && presenter.Window == window);
+                    if (automaticClosure) presenter.Close();
+                    Check(token.IsCancellationRequested == automaticClosure);
+                    completion.SetResult(new(outcome, "Synthetic result.")); ui.Drain(); task.GetAwaiter().GetResult();
+                    Check(presenter.Window is null == (automaticClosure || outcome == DesktopFeasibility.SwitchOutcome.ConfirmedSuccess));
+                    Check(reports.Count == (outcome == DesktopFeasibility.SwitchOutcome.ConfirmedSuccess ? 0 : 1));
+                    if (!automaticClosure && outcome != DesktopFeasibility.SwitchOutcome.ConfirmedSuccess)
+                    {
+                        var text = ((TextBlock)window.FindName("Result")).Text;
+                        Check(text.Contains("Win+Tab") && text.Contains("Work"));
+                        Check(switchButton.IsEnabled == (outcome != DesktopFeasibility.SwitchOutcome.Indeterminate));
+                        Check(((Button)window.FindName("OneMinute")).IsEnabled);
+                        if (outcome == DesktopFeasibility.SwitchOutcome.Indeterminate)
+                        { window.SubmitSwitch().GetAwaiter().GetResult(); Check(calls == 1); }
+                    }
+                    presenter.Close();
+                });
+        test("switch exceptions are indeterminate and disable repeat submissions", () =>
+        {
+            using var ui = new UiContinuations(); var calls = 0;
+            var window = new NudgeWindow(_ => Task.FromResult(HostCommandResult.Success()), () =>
+            { calls++; throw new InvalidOperationException("Synthetic failure."); });
+            window.SetSwitchAvailability("");
+            window.SubmitSwitch().GetAwaiter().GetResult();
+            Check(!((Button)window.FindName("SwitchWork")).IsEnabled);
+            window.SubmitSwitch().GetAwaiter().GetResult(); Check(calls == 1); window.CloseAutomatically();
+        });
+        foreach (var reason in new[] { "Enable experimental switching consent for this build in Settings.",
+            "Switching is not approved for this Windows build or architecture." })
+            test("known unavailable switch stays disabled without progress: " + reason, () =>
+            {
+                var value = Eligible() with { SwitchingUnavailableReason = reason }; var calls = 0;
+                value = value with
+                {
+                    Settings = reason.Contains("consent", StringComparison.Ordinal)
+                    ? value.Settings with { SwitchingConsent = false, SwitchingConsentBuild = "" }
+                    : value.Settings with { Build = "26200.9711", SwitchingConsentBuild = "26200.9711" }
+                };
+                var presenter = new NudgePresenter(command => Task.FromResult(Accept(command, ref value)),
+                    () => value, _ => { }, new Platform(), (_, _) =>
+                    { calls++; return Task.FromResult(DesktopFeasibility.SwitchCompletion.Unknown("Unexpected call.")); });
+                presenter.PresentAsync(Event(value)).GetAwaiter().GetResult();
+                var window = presenter.Window!;
+                Check(!((Button)window.FindName("SwitchWork")).IsEnabled);
+                var explanation = (TextBlock)window.FindName("SwitchAvailability");
+                Check(explanation.Text.Contains(reason) && explanation.Text.Contains("Win+Tab"));
+                Check(AutomationProperties.GetLiveSetting(explanation) == System.Windows.Automation.AutomationLiveSetting.Polite);
+                var before = ((TextBlock)window.FindName("Result")).Text;
+                window.SubmitSwitch().GetAwaiter().GetResult();
+                Check(calls == 0 && ((TextBlock)window.FindName("Result")).Text == before);
+                Check(((Button)window.FindName("OneMinute")).IsEnabled && ((Button)window.FindName("FiveMinutes")).IsEnabled);
+                value = value with { SwitchingUnavailableReason = "" }; presenter.Refresh();
+                Check(((Button)window.FindName("SwitchWork")).IsEnabled);
+                value = value with { SwitchingUnavailableReason = reason }; presenter.Refresh();
+                Check(!((Button)window.FindName("SwitchWork")).IsEnabled);
+                window.Submit(60_000).GetAwaiter().GetResult(); Check(presenter.Window is null);
+            });
+        test("unexpected destination protocol locks out the nudge and directs Task View inspection", () =>
+        {
+            var personal = Guid.NewGuid(); var work = Guid.NewGuid(); var other = Guid.NewGuid();
+            var baseline = new DesktopFeasibility.Snapshot(new("26200.9457", "X64", 1, 2), DesktopFeasibility.Capabilities.Provider,
+                DateTimeOffset.UtcNow, Environment.TickCount64, personal, [new(personal, ""), new(work, ""), new(other, "")], 10, 20, true, null, null);
+            var request = new DesktopFeasibility.AuthorizedSwitch(new(Guid.NewGuid(), baseline, work, true), personal, work);
+            var completion = DesktopFeasibility.SwitchProtocol.Classify(request,
+                new(new(request.Request.RequestId, "WrongDestinationOrUserRace", other, true, 30)), 0);
+            var calls = 0;
+            var window = new NudgeWindow(_ => Task.FromResult(HostCommandResult.Success()), () =>
+            { calls++; return Task.FromResult(completion); });
+            window.SetSwitchAvailability(""); window.SubmitSwitch().GetAwaiter().GetResult();
+            Check(completion.Outcome == DesktopFeasibility.SwitchOutcome.Indeterminate);
+            Check(!((Button)window.FindName("SwitchWork")).IsEnabled);
+            Check(((TextBlock)window.FindName("Result")).Text.Contains("Win+Tab"));
+            window.SetSwitchAvailability(""); window.SubmitSwitch().GetAwaiter().GetResult();
+            Check(calls == 1); window.CloseAutomatically();
+        });
         test("committed event is accepted before any nudge window is constructed", () =>
         {
             var value = Eligible(); var platform = new Platform(); NudgePresenter? presenter = null;

@@ -15,6 +15,7 @@ Offramp Shift is an early-stage, local-first Windows application concept for hel
 ./spikes/BrowserAttribution/run.ps1 test
 ./spikes/WindowsObservation/run.ps1 test
 ./spikes/WindowsObservation/compatibility.ps1 test
+./spikes/WindowsObservation/run.ps1 format
 ./run.ps1 test
 ./run.ps1 format
 ```
@@ -40,7 +41,12 @@ exhaustion prompts, durable one/five-minute Personal-only extensions, and a
 shared repeat interval. Both enabled styles now prompt immediately at accepted
 exhaustion and repeat after counted Personal usage (default one minute). Existing
 notification preferences never migrate to interactive focus. Focus is best effort
-and desktop switching remains absent.
+and PR 10 adds a separate experimental **Switch to Work** action to the nudge.
+It requires default-off, exact-build consent and independently checked one-shot
+authorization. Normal application switching remains disabled on 26200.9711/x64
+pending owner qualification and a separate capability decision. See
+[explicit switching architecture](docs/architecture/explicit-switching.md) and
+[the owner qualification procedure](docs/validation/pr10-explicit-switching.md).
 PR 9 is owner-accepted for continued evaluation; exact live reminder timing has
 an unresolved, accepted-for-now observation. See the
 [PR 9 closeout, evidence and safety boundaries](docs/validation/pr9-interactive-nudges.md).

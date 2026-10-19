@@ -1,0 +1,133 @@
+# PR 10 implementation boundary
+
+Base verified October 18, 2026: PR #18 merged into main at
+`63c3f075148a69fd36e95553b86f5985e7859cfa`; PR 9 implementation is present.
+
+## Intended file and interface changes (before implementation)
+
+- Extract `Probe.Core/Model.cs` and `Probe/NativeSession.cs` into
+  `src/OfframpShift.Switching`. Keep the DesktopFeasibility protocol/policy and
+  DesktopProbe native namespace for spike source compatibility. Probe.Core becomes
+  a reference facade. There remains one switching COM declaration set.
+- Add `ISwitchExecutor`, typed `SwitchOutcome`, single-use `SwitchAuthorization`,
+  and a bounded asynchronous stdio supervisor to that library. A new worker entry
+  in App/Program runs before WPF, singleton, settings or accounting initialization.
+- Add a quick host authorization command and controller orchestration. A fresh
+  read-only runtime capture checks the authorized nudge HWND, active Personal,
+  health and strict membership. Capture does not reset estimation or call Core.
+  The independently supervised native operation runs off both owner and Dispatcher.
+- WindowsSettings v4 adds separate exact-build consent, default off. Strict v1–v3
+  migration preserves reminder/appearance/assignment preferences; SQLite is untouched.
+- NudgeWindow/Presenter add a primary explicit action, shared submission exclusion,
+  progress and typed feedback, retaining extension/dismissal behavior. MainWindow
+  Settings exposes consent and current capability restrictions.
+- New host/WPF/policy regressions and a dedicated owner qualification checklist
+  cover failure boundaries and retain all seven established checks.
+
+## Safety and validation plan
+
+No automatic switching, ordinal fallback, retries, rollback, input injection or
+window movement. Exact-build runtime checks run before native activation. Normal
+application eligibility retains 26200.9457/x64 only, with separate explicit
+consent. 26200.9711/x64 is diagnostic-only until a subsequent owner-reviewed
+application capability decision; observation approval never enables switching.
+
+One request has a two-second authorization lease and one bounded child lifetime.
+The worker independently observes configuration/session/shell/foreground/topology,
+resolves Work with FindDesktop, verifies identity, checks source again and calls
+SwitchDesktop at most once. Post-call failure, crash, timeout or invalid protocol
+can leave a delayed shell side effect; no cancellation promises a no-op.
+Indeterminate completion disables this nudge's switching; Win+Tab is the fallback.
+Feedback must survive ordinary monitoring closure of the window.
+
+Native calls remain STA. Verification delays pump only the worker's Windows
+message queue; synchronous COM calls may still hang, so parent process supervision
+is the main bound. A separate three-second worker watchdog exits its own process
+even if the STA is blocked or the parent has died; the parent still confirms
+owned-process exit with a one-second cleanup deadline. Graceful shutdown waits
+for that independent supervisor, without keeping the monitoring owner running.
+No ABI slots changed.
+
+Tests use fake observations/native sessions and owned non-COM child faults, never
+actual switches. Preserve PR 5 deferrals and PR 9 timing uncertainty. Native ABI,
+real transitions, Narrator, mixed DPI and shell races require separately authorized
+owner validation; automated passes cannot approve those claims.
+
+## Implemented authorization and results
+
+`MonitoringController.SwitchToWorkAsync` excludes overlapping requests. A short
+`AuthorizeSwitch` command checks monitoring, interactive style, saved build-scoped
+consent, roles and capability. Runtime authorization drains pending events and
+requires the strictly confirmed nudge HWND to remain foreground in fresh healthy
+Personal evidence, with its original shell/health generation. Destruction,
+external foreground (including leave-and-return), desktop/session/power changes,
+sequence loss, commands and reassignment revoke eligibility. It does not read
+COM, reset the estimator or invoke a durable Core command. Runtime invalidation
+also revokes any issued, unconsumed grant, including foreground leave-and-return,
+provider failure/health loss, session changes and topology/shell changes. Host
+commands, presentation closure and shutdown revoke outstanding grants too.
+Revocation and single-use consumption compete through the same atomic exchange;
+once either wins, the grant cannot become usable again. Consumed requests cannot
+be retracted or reversed. One executor consumes a grant before its first await.
+The original evidence timestamp, UTC uncertainty check and two-second uptime
+lease remain binding across worker startup; no renewal occurs.
+
+The worker independently captures exact build/architecture/session, active input
+desktop, shell, foreground and ordered topology. Configuration, shell and foreground
+are bracketed around native enumeration. After GUID resolution it captures again.
+Post-call verification checks the same environment and topology, allowing the
+ordinary foreground change associated with a desktop transition.
+
+`ISwitchExecutor` returns ConfirmedSuccess, Rejected, VerifiedFailure or
+Indeterminate. VerifiedFailure remains a reserved typed outcome; the current
+worker classification does not emit it. `WrongDestinationOrUserRace` is
+Indeterminate: an unexpected GUID cannot establish whether a user race occurred.
+Its diagnostic category is retained and the native result still carries the
+observed GUID. The nudge disables further attempts and directs Task View inspection.
+Timeout, native exception after attempted invocation, uncertain environment,
+malformed/missing/oversized reply, abnormal exit and failed cleanup are
+Indeterminate. IPC rejects duplicate and unknown fields and missing required
+constructor fields. Both streams and input are bounded at 65,536 characters.
+
+The Dispatcher retains one shared submission reservation across switching,
+extensions and dismissal. Every unsuccessful switch result is retained through
+the existing local Home/Settings/tray feedback path even if monitoring has already
+closed the originating nudge. Indeterminate disables that window's switch action;
+extensions/dismissal remain available. No result opens or focuses a new window.
+
+The host snapshot projects a fail-closed switching availability reason. The
+primary action is disabled when consent is missing or normal application build
+compatibility is blocked, with a polite accessibility announcement and Win+Tab
+fallback. Known unavailable requests do not start progress feedback. Every actual
+request still independently passes host and worker authorization.
+
+An internal worker entry seam runs the production protocol, apartment and exact
+build guards with a fake session factory in tests. Production still supplies only
+the native factory and STA worker entry, under the existing process watchdog.
+
+Source checks and SwitchDesktop cannot be atomic with user/shell actions. A
+consent/context change after dispatch cannot cancel an accepted shell request.
+The watchdog/parent kill cannot undo it either. Process termination and the pinned
+ABI remain best-effort Windows mechanisms, not a shell-safety guarantee. Existing
+Explorer recovery, sustained monitoring and owner acceptance deferrals remain.
+
+## Changed files and interfaces
+
+| Component | Implementation files |
+|---|---|
+| Shared assembly | `src/OfframpShift.Switching/OfframpShift.Switching.csproj`, extracted `Model.cs` / `NativeSession.cs`, new `Switching.cs` / `SwitchWorkerEntry.cs` |
+| Spike extraction | Original Model/NativeSession source paths removed; `spikes/VirtualDesktop/Probe.Core/Probe.Core.csproj` references the shared assembly; probe README updated |
+| Host | `HostSnapshot.cs` (commands/result grant), `MonitoringApplication.cs` (consent/authorization), `MonitoringRuntime.cs` (nudge lifetime), `MonitoringController.cs` (asynchronous supervision/shutdown), `WindowsApplication.cs` (configuration boundary), `WindowsSettings.cs` (strict migration), host project reference |
+| WPF | `App.xaml.cs`, `Program.cs`, `MainWindow.xaml` / `.xaml.cs`, `NudgeWindow.xaml` / `.xaml.cs`, `NudgePresenter.cs` |
+| Regression coverage | New host `SwitchRegressions.cs` / `SwitchPolicyRegressions.cs`; existing host fixture, entry point and migration regressions; WPF `InteractiveUiRegressions.cs` and entry point/watchdog test |
+| Build/documentation | Root runner formatting list, ignored artifacts directory, transitive project-only lockfile updates in app/host/tests/observation probe, READMEs, architecture/qualification records and upstream notice link |
+
+The narrow executor contract is `ISwitchExecutor.ExecuteAsync(SwitchAuthorization)`
+returning `SwitchCompletion` / `SwitchOutcome`. `AuthorizedSwitch` carries the
+role/request envelope; `SwitchAuthorization` provides atomic consume/
+revoke. `SwitchWorkerRequest` / `SwitchWorkerReply` and `SwitchProtocol` validate
+stdio. `IsolatedSwitchExecutor` owns normal execution; its raw diagnostic helper
+and the native qualification constructor are internal to the shared assembly.
+`SwitchCompatibility` keeps application and diagnostic predicates separate.
+Core, Persistence, ActivityMonitoring, browser behavior and read-only observation
+implementation files are unchanged.

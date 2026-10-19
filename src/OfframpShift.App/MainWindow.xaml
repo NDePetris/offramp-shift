@@ -95,6 +95,13 @@
       <TextBox x:Name="RepeatInput" HorizontalAlignment="Left" AutomationProperties.Name="Reminder repeat interval in whole minutes" IsEnabled="{Binding CanEdit}" />
       <TextBlock Text="Applies to both reminder styles. Repeats and extra time advance only during counted Personal use. Time on Work or away from the computer doesn't count." Margin="0,0,0,8" />
       <Button x:Name="SaveRepeatButton" Content="Save reminder repeat interval" Click="SaveRepeat" IsEnabled="{Binding CanEdit}" HorizontalAlignment="Left" />
+      <TextBlock Text="Experimental desktop switching" Style="{StaticResource SectionTitle}" />
+      <CheckBox x:Name="SwitchingInput" IsEnabled="{Binding CanEditReminders}" AutomationProperties.Name="Allow an explicit Switch to Work attempt from a nudge">
+       <TextBlock Text="Allow an explicit Switch to Work attempt from a nudge" />
+      </CheckBox>
+      <TextBlock Text="Separate, default-off consent for this exact Windows build. An uncertain result may include a delayed transition; check manually with Win+Tab. No automatic switching or retries." Margin="0,8,0,8" />
+      <TextBlock x:Name="SwitchingCapability" Margin="0,0,0,8" />
+      <Button Content="Save switching consent" Click="SaveSwitching" IsEnabled="{Binding CanEditReminders}" HorizontalAlignment="Left" />
       <TextBlock Text="Appearance and closing" Style="{StaticResource SectionTitle}" />
       <Label Content="_Theme" Target="{Binding ElementName=ThemeInput}" />
       <ComboBox x:Name="ThemeInput" HorizontalAlignment="Left" MinWidth="160" AutomationProperties.Name="Theme" />

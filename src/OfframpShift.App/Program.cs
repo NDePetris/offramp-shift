@@ -10,6 +10,10 @@ public static class Program
     {
         // These modes never create WPF, settings, the singleton or accounting storage.
         if (args is ["--desktop-worker"]) return DesktopWorkerEntry.Run();
+        if (args is ["--switch-worker"]) return DesktopFeasibility.SwitchWorkerEntry.Run();
+        if (args is ["--switch-qualification-worker"]) return DesktopFeasibility.SwitchWorkerEntry.Run(qualification: true);
+        if (args is ["--qualify-switch-26200.9711", "--confirm-experimental", var personal, var work])
+            return DesktopFeasibility.SwitchWorkerEntry.Qualify(personal, work);
         if (args is ["--worker-malformed"])
         { Console.ReadLine(); Console.WriteLine("{broken}"); return 0; }
         if (args is ["--worker-hang"])

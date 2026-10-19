@@ -63,7 +63,8 @@
         "type": "Project",
         "dependencies": {
           "OfframpShift.ActivityMonitoring": "[1.0.0, )",
-          "OfframpShift.Persistence": "[1.0.0, )"
+          "OfframpShift.Persistence": "[1.0.0, )",
+          "OfframpShift.Switching": "[1.0.0, )"
         }
       },
       "offrampshift.core": {
@@ -75,6 +76,9 @@
           "Microsoft.Data.Sqlite": "[10.0.12, 10.0.12]",
           "OfframpShift.Core": "[1.0.0, )"
         }
+      },
+      "offrampshift.switching": {
+        "type": "Project"
       },
       "offrampshift.windowsobservation": {
         "type": "Project",

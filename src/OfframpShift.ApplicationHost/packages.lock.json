@@ -63,6 +63,9 @@
           "OfframpShift.Core": "[1.0.0, )"
         }
       },
+      "offrampshift.switching": {
+        "type": "Project"
+      },
       "offrampshift.windowsobservation": {
         "type": "Project",
         "dependencies": {

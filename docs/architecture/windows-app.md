@@ -3,8 +3,13 @@
 This is the first launchable WPF/tray app, not production readiness, certified
 accounting or approval for unattended daily use. Explorer recovery [#8](https://github.com/NDePetris/offramp-shift/issues/8)
 and sustained accuracy/reliability [#9](https://github.com/NDePetris/offramp-shift/issues/9)
-remain unresolved. Automatic switching, window movement and browser attribution
-are absent. The shared read-only COM gate accepts exactly **26200.9457/x64** and
+remain unresolved. Automatic switching and production browser attribution remain
+NO-GO; no window movement is implemented. PR 10 adds an explicitly clicked, separately
+consented Switch to Work action on 26200.9457/x64 only. Normal application switching
+on 26200.9711/x64 remains disabled pending owner qualification and a separate
+capability decision. See [explicit switching](explicit-switching.md) and
+[the owner procedure](../validation/pr10-explicit-switching.md).
+The shared read-only COM gate accepts exactly **26200.9457/x64** and
 **26200.9711/x64**, as approved in merged PR #13. Both worker entry guards and
 the read-only ABI remain unchanged. The separate switching gate is unchanged.
 See [integration validation and owner checklist](../validation/pr5-app.md).
@@ -104,7 +109,7 @@ Blocked permits explicit reopen after correcting clock/access/ownership.
 
 ## Interactive nudges (PR 9)
 
-Windows settings v3 offers Off, Windows notification and explicitly selected
+Windows settings v4 preserves v3's Off, Windows notification and explicitly selected
 Interactive window. v1 migrates to Off; enabled v2 reminders migrate to Windows
 notification, never interactive focus. Both enabled styles use zero initial grace
 and one shared durable repeat interval (1–60 minutes, default one minute), advanced
@@ -221,10 +226,13 @@ or replace the separate Recover accounting protocol. See the
 `%LOCALAPPDATA%\Offramp\Shift\windows-settings.json` is independent of
 `checkpoint.db`. It stores schema/provider/build, nullable role GUIDs, experimental
 consent, enabled-monitoring intent, theme, close behavior and default-off break
-reminder style. Version 3 requires ReminderStyle and rejects the old Boolean.
-Exact v1/v2 shapes migrate strictly in memory: v1/disabled v2 becomes Off;
-enabled v2 becomes Windows notification. Other fields are preserved. Load never
-rewrites the file; the next explicit atomic save writes v3. It contains no
+reminder style. Version 4 retains ReminderStyle and adds separate default-off
+SwitchingConsent and SwitchingConsentBuild. Exact v1/v2/v3 shapes migrate strictly
+in memory: v1/disabled v2 becomes Off; enabled v2 becomes Windows notification;
+v3 retains its exact reminder style. Other preferences are preserved and switching
+is never enabled by migration. Load never rewrites the file; the next explicit
+atomic save writes v4. Build review and role reassignment revoke switching consent.
+Consent never grants capability approval for another Windows build. It contains no
 Core totals/configuration, foreground identities or activity/content history.
 The codec rejects duplicate/unknown/missing fields, unsupported versions and
 invalid values. Saving flushes a unique same-directory temporary file and uses

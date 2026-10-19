@@ -1,4 +1,5 @@
 .tools/
+artifacts/
 **/bin/
 **/obj/
 spikes/VirtualDesktop/artifacts/

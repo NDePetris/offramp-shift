@@ -50,6 +50,11 @@ public sealed class MonitoringRuntime : IDisposable
     private ReminderEvent? offeredEvent;
     private long offeredHealthGeneration, authorizedSequence;
     private nint authorizedWindow;
+    private nint switchWindow;
+    private long switchHealth;
+    private uint switchShell;
+    private DesktopFeasibility.SwitchAuthorization? switchAuthorization;
+    private Guid[]? switchAuthorizationTopology;
     private string lastReminderInvalidation = "None";
     private NudgePresentation? presentation;
     private bool presentationCompleted;
@@ -136,6 +141,8 @@ public sealed class MonitoringRuntime : IDisposable
             if (!PresentationValid(value)) return false;
             if (!CanKeepNudgeOpen) { NudgeAuthorizationFailure = "PersonalContextChangedAfterDesktopCheck"; return false; }
             authorizedWindow = window;
+            switchWindow = window;
+            switchHealth = Health.Generation; switchShell = Latest.Desktop.ShellProcess;
             allowed = true;
             return true;
         }
@@ -184,6 +191,41 @@ public sealed class MonitoringRuntime : IDisposable
                 point.Application, InputState.Active, MonitoringAvailability.Available, EvidenceConfidence.Estimated), configuration) == ActivityKind.CountedPersonal;
     }
 
+    internal EvidencePoint? AuthorizeSwitch(nint window)
+    {
+        // Read already-published evidence only: authorization must not wait for a
+        // native switch or reset estimator continuity. The child independently
+        // captures native state twice immediately before its single shell call.
+        Drain(); RefreshHealth();
+        return window != 0 && window == switchWindow && CanKeepNudgeOpen &&
+            Health.Generation == switchHealth && Latest!.Desktop.ShellProcess == switchShell &&
+            Latest!.Window == window ? Latest : null;
+    }
+
+    internal void TrackSwitchAuthorization(DesktopFeasibility.SwitchAuthorization value)
+    {
+        switchAuthorization?.Revoke();
+        switchAuthorization = value;
+        switchAuthorizationTopology = Latest!.Desktop.Desktops.ToArray();
+        RevalidateSwitchAuthorization();
+    }
+
+    internal void InvalidateSwitch()
+    {
+        switchWindow = 0;
+        switchAuthorization?.Revoke();
+        switchAuthorization = null;
+        switchAuthorizationTopology = null;
+    }
+
+    internal void RevalidateSwitchAuthorization()
+    {
+        if (switchAuthorization is not null && (switchWindow == 0 || !CanKeepNudgeOpen ||
+            Health.Generation != switchHealth || Latest!.Desktop.ShellProcess != switchShell ||
+            Latest.Window != switchWindow || !Latest.Desktop.Desktops.SequenceEqual(switchAuthorizationTopology!)))
+            InvalidateSwitch();
+    }
+
     private void InvalidateReminder() { Reminders?.Invalidate(); reminderApplication = null; reminderEnd = null; }
 
     private bool EligiblePersonal()
@@ -229,6 +271,7 @@ public sealed class MonitoringRuntime : IDisposable
 
     public void ResetConfiguration()
     {
+        InvalidateSwitch();
         InvalidateReminder();
         // Retain the native stream sequence when providers have not changed.
         estimator.Reset();
@@ -246,12 +289,13 @@ public sealed class MonitoringRuntime : IDisposable
     }
 
     internal void RevokePresentation()
-    { presentation = null; presentationWindow = observedPresentationForeground = 0; offeredSequence = 0; reminderGeneration++; InvalidateReminder(); }
+    { InvalidateSwitch(); presentation = null; presentationWindow = observedPresentationForeground = 0; offeredSequence = 0; reminderGeneration++; InvalidateReminder(); }
 
     public bool RetryProviders()
     {
         InvalidateReminder();
         if (RetryInMs != 0) return false;
+        InvalidateSwitch();
         lastRecovery = elapsed(); Recoveries++;
         // Failed cleanup must not create a second provider bundle.
         source.Dispose();
@@ -391,6 +435,7 @@ public sealed class MonitoringRuntime : IDisposable
         Health = new(source.Hooks == Capability.Available && source.LoopHealth == Capability.Available &&
             source.SessionNotifications == Capability.Available && source.PowerNotifications == Capability.Available &&
             lastTick >= 0 && elapsed() - lastTick <= 2_000, generation);
+        RevalidateSwitchAuthorization();
     }
 
     private void Drain()
@@ -401,6 +446,11 @@ public sealed class MonitoringRuntime : IDisposable
         while (source.TryTake(out var signal))
         {
             if (signal is null) continue;
+            if (signal.Sequence != reminderSignalSequence + 1 ||
+                signal.Kind == SignalKind.Foreground && signal.Window != switchWindow ||
+                signal.Kind == SignalKind.Destroyed && signal.Window == switchWindow ||
+                signal.Kind is SignalKind.InputDesktopChanged or SignalKind.Session or SignalKind.Power or SignalKind.PumpStall or SignalKind.Stopped)
+                InvalidateSwitch();
             if (presentation is { } attempt)
             {
                 // Accounting still sees EVERY signal below. Only this short-lived

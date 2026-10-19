@@ -2,6 +2,7 @@ using System.Windows.Interop;
 using System.Diagnostics;
 using OfframpShift.ApplicationHost;
 using OfframpShift.Persistence;
+using DesktopFeasibility;
 
 namespace OfframpShift.App;
 
@@ -15,7 +16,8 @@ internal interface INudgePlatform
 
 // Dispatcher-owned. Only an accepted event may show/activate; Refresh only closes.
 internal sealed class NudgePresenter(Func<HostCommand, Task<HostCommandResult>> execute,
-    Func<HostSnapshot?> latest, Action<string> reportFailure, INudgePlatform platform)
+    Func<HostSnapshot?> latest, Action<string> reportFailure, INudgePlatform platform,
+    Func<nint, CancellationToken, Task<SwitchCompletion>>? switchToWork = null)
 {
     internal NudgeWindow? Window { get; private set; }
     internal string Status { get; private set; } = "No interactive reminder consumed yet.";
@@ -31,7 +33,11 @@ internal sealed class NudgePresenter(Func<HostCommand, Task<HostCommandResult>> 
             if (Window is not null) Status = "Window closed: monitoring, context, intervention or freshness no longer eligible.";
             Close();
         }
-        else Window?.ApplyBrand();
+        else if (Window is { } window)
+        {
+            window.SetSwitchAvailability(snapshot.SwitchingUnavailableReason);
+            window.ApplyBrand();
+        }
     }
     private static bool VisibleEligible(HostSnapshot value) => value.CanKeepNudgeOpen &&
         value.Settings.ReminderStyle == ReminderStyle.InteractiveWindow &&
@@ -62,11 +68,12 @@ internal sealed class NudgePresenter(Func<HostCommand, Task<HostCommandResult>> 
             if (Window is null)
             {
                 NudgeWindow? candidate = null;
-                candidate = new(duration => DeferAsync(candidate!, duration));
+                candidate = new(duration => DeferAsync(candidate!, duration), () => SwitchAsync(candidate!));
                 Window = candidate;
                 candidate.Closed += (_, _) => { if (Window == candidate) Window = null; };
             }
             var target = Window;
+            target.SetSwitchAvailability(latest()?.SwitchingUnavailableReason ?? "Switching availability is unknown.");
             var handle = new WindowInteropHelper(target).EnsureHandle();
             var shown = await platform.PresentAsync(target, value.ForegroundWindow);
             showMs = elapsed.ElapsedMilliseconds - beginMs;
@@ -129,5 +136,32 @@ internal sealed class NudgePresenter(Func<HostCommand, Task<HostCommandResult>> 
             return result;
         }
         finally { submitting = false; }
+    }
+    private async Task<SwitchCompletion> SwitchAsync(NudgeWindow target)
+    {
+        if (submitting || Window != target) return SwitchCompletion.Reject("This nudge is no longer active.");
+        if (latest() is not { SwitchingUnavailableReason.Length: 0 })
+            return SwitchCompletion.Reject("Switching is currently unavailable.");
+        submitting = true;
+        using var lifetime = new CancellationTokenSource();
+        EventHandler closed = (_, _) => lifetime.Cancel();
+        target.Closed += closed;
+        try
+        {
+            SwitchCompletion result;
+            try
+            {
+                result = switchToWork is null ? SwitchCompletion.Reject("Switching is unavailable.") :
+                    await switchToWork(new WindowInteropHelper(target).Handle, lifetime.Token);
+            }
+            catch (Exception) { result = SwitchCompletion.Unknown("Switch operation could not complete."); }
+            Status = result.Message;
+            // Context monitoring may close the originating HWND before completion.
+            // Preserve every unsuccessful result through the existing retained local
+            // feedback path, including uncertainty after a transition to Work.
+            if (result.Outcome != SwitchOutcome.ConfirmedSuccess) reportFailure(result.Message);
+            return result;
+        }
+        finally { target.Closed -= closed; submitting = false; }
     }
 }

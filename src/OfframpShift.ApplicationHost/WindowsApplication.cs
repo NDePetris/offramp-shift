@@ -14,6 +14,6 @@ public static class WindowsApplication
         var clock = new ObservationClock(); var timer = Stopwatch.StartNew();
         return new(clock, clock.NewEpoch, () => timer.ElapsedMilliseconds, () => new WindowsObservationSource(clock),
             () => DurableMonitoringSession.Open(clock, new(), path), new(path), WindowsObservationSource.Supported,
-            WindowsObservationSource.Build);
+            WindowsObservationSource.Build, DesktopProbe.NativeSession.ReadConfiguration);
     });
 }
