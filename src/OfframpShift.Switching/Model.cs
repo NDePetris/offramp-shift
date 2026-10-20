@@ -21,7 +21,9 @@ public static class Wire
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = true,
-        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
+        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
+        RespectRequiredConstructorParameters = true,
+        RespectNullableAnnotations = true
     };
     public static string Encode<T>(T value) => JsonSerializer.Serialize(value, Options);
     public static T Decode<T>(string value) => JsonSerializer.Deserialize<T>(value, Options)
@@ -37,9 +39,9 @@ public static class Capabilities
 
 public static class Safety
 {
-    public static void ValidateSnapshot(Snapshot s)
+    public static void ValidateSnapshot(Snapshot s, bool qualification = false)
     {
-        if (!Capabilities.MayProbe(s.Configuration)) throw new InvalidOperationException("Unsupported exact build/architecture.");
+        if (!SwitchCompatibility.Allowed(s.Configuration, qualification)) throw new InvalidOperationException("Unsupported exact build/architecture.");
         if (s.Provider != Capabilities.Provider) throw new InvalidOperationException("Unknown provider.");
         if (s.Desktops.Length is < 1 or > 64 || s.Desktops.Any(d => d.Id == Guid.Empty)
             || s.Desktops.Select(d => d.Id).Distinct().Count() != s.Desktops.Length
@@ -73,9 +75,9 @@ public static class Safety
         };
     }
 
-    public static string? Reject(SwitchRequest r, Snapshot actual, DateTimeOffset now, long uptimeMs)
+    public static string? Reject(SwitchRequest r, Snapshot actual, DateTimeOffset now, long uptimeMs, bool qualification = false)
     {
-        try { ValidateSnapshot(r.Expected); ValidateSnapshot(actual); }
+        try { ValidateSnapshot(r.Expected, qualification); ValidateSnapshot(actual, qualification); }
         catch (InvalidOperationException ex) { return ex.Message; }
         if (!r.Confirmed || r.RequestId == Guid.Empty) return "Explicit experimental confirmation required.";
         // Sleep-inclusive uptime is comparable across workers in the same OS session.
@@ -87,6 +89,7 @@ public static class Safety
         if (r.Expected.Configuration != actual.Configuration || r.Expected.Provider != actual.Provider)
             return "Configuration changed.";
         if (!r.Expected.Interactive || !actual.Interactive) return "Session is not confirmed interactive.";
+        if (r.Expected.ForegroundWindow == 0 || actual.ForegroundWindow == 0) return "Foreground is unavailable.";
         if (r.Expected.Current != actual.Current) return "User changed desktops.";
         if (r.Expected.ShellProcessId != actual.ShellProcessId) return "Explorer restarted.";
         if (r.Expected.ForegroundWindow != actual.ForegroundWindow) return "Foreground changed.";
@@ -109,26 +112,27 @@ public static class SwitchExperiment
 {
     // No retry and no corrective switch, even after a timeout or wrong result.
     public static SwitchResult Run(SwitchRequest request, IDesktopSession session,
-        Func<DateTimeOffset> utc, Func<long> uptimeMs, Func<long> elapsedMs, Action<int> delay)
+        Func<DateTimeOffset> utc, Func<long> uptimeMs, Func<long> elapsedMs, Action<int> delay, bool qualification = false)
     {
         var start = elapsedMs();
         var attempted = false;
         try
         {
-            var rejection = Safety.Reject(request, session.Observe(), utc(), uptimeMs());
+            var rejection = Safety.Reject(request, session.Observe(), utc(), uptimeMs(), qualification);
             if (rejection != null) return Result("Rejected: " + rejection, null);
             if (session.ResolveIdentity(request.Target) != request.Target)
                 return Result("Rejected: resolved identity mismatch", null);
-            rejection = Safety.Reject(request, session.Observe(), utc(), uptimeMs());
+            rejection = Safety.Reject(request, session.Observe(), utc(), uptimeMs(), qualification);
             if (rejection != null) return Result("Rejected: " + rejection, null);
             attempted = true;
             session.SwitchByIdentity(request.Target);
             while (elapsedMs() - start < 2000)
             {
                 var observed = session.Observe();
-                Safety.ValidateSnapshot(observed);
+                Safety.ValidateSnapshot(observed, qualification);
                 if (observed.Configuration != request.Expected.Configuration || observed.Provider != request.Expected.Provider
-                    || observed.ShellProcessId != request.Expected.ShellProcessId || !observed.Interactive)
+                    || observed.ShellProcessId != request.Expected.ShellProcessId || !observed.Interactive
+                    || !observed.Desktops.Select(d => d.Id).SequenceEqual(request.Expected.Desktops.Select(d => d.Id)))
                     return Result("Indeterminate: verification environment changed", observed.Current);
                 if (observed.Current == request.Target) return Result("Verified", observed.Current);
                 if (observed.Current != request.Expected.Current) return Result("WrongDestinationOrUserRace", observed.Current);

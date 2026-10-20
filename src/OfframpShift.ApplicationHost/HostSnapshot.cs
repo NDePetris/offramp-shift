@@ -11,13 +11,17 @@ public sealed record HostSnapshot(long Sequence, long PublishedTick, Persistence
     AssignmentStatus PersonalAssignment = AssignmentStatus.Unavailable,
     AssignmentStatus WorkAssignment = AssignmentStatus.Unavailable, bool ConsentNeedsReview = false,
     bool CanKeepNudgeOpen = false, long ReminderGeneration = 0, Guid ReminderEpoch = default,
-    string ReminderStatus = "No committed nudge event yet.", Guid PresentationId = default);
+    string ReminderStatus = "No committed nudge event yet.", Guid PresentationId = default)
+{
+    public string SwitchingUnavailableReason { get; init; } = "Switching availability is unknown.";
+}
 
 public enum AssignmentStatus { Unassigned, Valid, Unavailable, Missing, Invalid }
 
 public sealed record HostCommandResult(bool Succeeded, string Message = "")
 {
     public NudgePresentation? Presentation { get; init; }
+    public DesktopFeasibility.SwitchAuthorization? Switching { get; init; }
     public static HostCommandResult Success(string message = "") => new(true, message);
     public static HostCommandResult Failure(string message) => new(false, message);
 }
@@ -26,7 +30,8 @@ public enum HostCommandKind
 {
     Consent, Start, Pause, Resume, RetryMonitoring, RetrySave, ReopenStorage,
     AssignPersonal, AssignWork, ChangeDurations, ChangeAppearance, ChangeCloseBehavior, Recover, RepairSettings,
-    ChangeBreakReminders, ResetUsage, ChangeInteractiveRepeat, DeferInteractive, BeginNudgePresentation, CompleteNudgePresentation
+    ChangeBreakReminders, ResetUsage, ChangeInteractiveRepeat, DeferInteractive, BeginNudgePresentation, CompleteNudgePresentation,
+    ChangeSwitchingConsent, AuthorizeSwitch
 }
 
 public sealed record HostCommand(HostCommandKind Kind)

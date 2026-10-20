@@ -32,6 +32,7 @@ internal sealed class FakeSource(Fixture fixture) : IObservationSource
     public Capability Input { get; set; } = Capability.Available;
     public ApplicationIdentity Application { get; set; } = new("opaque-test", true);
     public nint Window { get; set; } = 1;
+    public bool UseRealUptime { get; set; }
     public bool NudgeDesktopValid { get; set; } = true;
     public NudgeDesktopCheck? NudgeCheckOverride { get; set; }
     public List<bool> NudgeCheckPhases { get; } = [];
@@ -52,7 +53,7 @@ internal sealed class FakeSource(Fixture fixture) : IObservationSource
         Reads++;
         if (FailRead) throw new InvalidOperationException("Injected provider failure");
         OnRead?.Invoke();
-        return new(fixture.Clock.Now, fixture.Ms, (ulong)fixture.Ms * 10_000, Window, 1, Application,
+        return new(fixture.Clock.Now, UseRealUptime ? Environment.TickCount64 : fixture.Ms, (ulong)fixture.Ms * 10_000, Window, 1, Application,
             IdleAgeMs, Session, new(Capability.Available, Current ?? fixture.Personal, Topology ?? [fixture.Personal, fixture.Work], ShellGeneration),
             Foreground, Input, Capability.Available);
     }
@@ -81,8 +82,8 @@ internal sealed class Fixture : IDisposable
         if (FailCreate) throw new InvalidOperationException("Injected provider construction failure");
         Source = new(this); return Source;
     }
-    public MonitoringApplication App(bool supported = true, string build = "26200.9457") => new(Clock, () => Clock.Now = new(Guid.NewGuid(), 0),
-        () => Ms, CreateSource, Session, Settings, supported, build);
+    public MonitoringApplication App(bool supported = true, string build = "26200.9457", Func<DesktopFeasibility.Configuration>? switchConfiguration = null) => new(Clock, () => Clock.Now = new(Guid.NewGuid(), 0),
+        () => Ms, CreateSource, Session, Settings, supported, build, switchConfiguration);
     public void Enable(bool monitoring = true, string build = "26200.9457")
     {
         Settings.Save(new() { Personal = Personal, Work = Work, Consent = true, MonitoringEnabled = monitoring, Build = build });

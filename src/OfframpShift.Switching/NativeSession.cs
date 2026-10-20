@@ -9,18 +9,25 @@ namespace DesktopProbe;
 // All undocumented COM calls live in the disposable worker process.
 // ABI reference: Ciantic/VirtualDesktopAccessor @ ceb648849dcc5760a7f4ed223308ffe3de0b51c6.
 [SupportedOSPlatform("windows")]
-internal sealed class NativeSession : IDesktopSession, IDisposable
+public sealed class NativeSession : IDesktopSession, IDisposable
 {
     private readonly Configuration configuration;
     private readonly IServiceProvider shell;
     private readonly IManager manager;
     private readonly IPublicManager publicManager;
     private IVirtualDesktop? resolved;
+    private readonly bool qualification;
 
-    public NativeSession()
+    public NativeSession() : this(false, true) { }
+
+    internal NativeSession(bool qualification) : this(qualification, false) { }
+
+    private NativeSession(bool qualification, bool probe)
     {
+        this.qualification = qualification;
         configuration = ReadConfiguration();
-        if (!Capabilities.MayProbe(configuration)) throw new InvalidOperationException("Undocumented ABI disabled for this exact Windows build/architecture.");
+        if (probe ? !Capabilities.MayProbe(configuration) : !SwitchCompatibility.Allowed(configuration, qualification))
+            throw new InvalidOperationException("Undocumented ABI disabled for this Windows build/architecture.");
         shell = (IServiceProvider)Activator.CreateInstance(Type.GetTypeFromCLSID(new("C2F03A33-21F5-47FA-B4BB-156362A2F239"), true)!)!;
         var service = new Guid("C5E0CDCA-7B6E-41B2-9FC4-D93975CC467B");
         var iid = typeof(IManager).GUID;
@@ -35,7 +42,8 @@ internal sealed class NativeSession : IDesktopSession, IDisposable
         using var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion");
         var build = key?.GetValue("CurrentBuild")?.ToString() ?? "unknown";
         var revision = key?.GetValue("UBR")?.ToString() ?? "unknown";
-        return new(build + "." + revision, RuntimeInformation.ProcessArchitecture.ToString(),
+        return new(build + "." + revision, SwitchCompatibility.RuntimeArchitecture(
+            RuntimeInformation.ProcessArchitecture.ToString(), RuntimeInformation.OSArchitecture.ToString()),
             Process.GetCurrentProcess().SessionId, GetSystemMetrics(80));
     }
 
@@ -87,9 +95,12 @@ internal sealed class NativeSession : IDesktopSession, IDisposable
         Check(manager.GetCurrentDesktop(out current));
         try { Check(current.GetId(out var after)); if (after != currentId) throw new InvalidOperationException("Desktop changed during observation."); }
         finally { Release(current); }
+        GetWindowThreadProcessId(GetShellWindow(), out var afterShell);
+        if (GetForegroundWindow() != hwnd || afterShell != shellPid || ReadConfiguration() != configuration)
+            throw new InvalidOperationException("Foreground, shell or configuration changed during observation.");
         var snapshot = new Snapshot(ReadConfiguration(), Capabilities.Provider, DateTimeOffset.UtcNow, Environment.TickCount64,
             currentId, desktops.ToArray(), hwnd.ToInt64(), checked((int)shellPid), IsInteractive(), foregroundId, onCurrent);
-        Safety.ValidateSnapshot(snapshot);
+        Safety.ValidateSnapshot(snapshot, qualification);
         return snapshot;
     }
 
@@ -143,7 +154,7 @@ internal sealed class NativeSession : IDesktopSession, IDisposable
     [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(nint hwnd, out uint pid);
     [DllImport("user32.dll")] private static extern int GetSystemMetrics(int index);
     [DllImport("user32.dll", SetLastError = true)] private static extern nint OpenInputDesktop(uint flags, [MarshalAs(UnmanagedType.Bool)] bool inherit, uint access);
-    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool CloseDesktop(nint desktop);
+    [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool CloseDesktop(nint desktop);
     [DllImport("user32.dll", EntryPoint = "GetUserObjectInformationW", CharSet = CharSet.Unicode)]
     [return: MarshalAs(UnmanagedType.Bool)] private static extern bool GetUserObjectInformation(nint handle, int index, [Out] char[] data, int size, out int needed);
     [DllImport("wtsapi32.dll", EntryPoint = "WTSQuerySessionInformationW")]

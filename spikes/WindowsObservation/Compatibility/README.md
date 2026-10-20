@@ -1,5 +1,37 @@
 # Windows 26200.9711 read-only compatibility investigation
 
+**Current owner decision:** limited 26300.9711/x64 Personal/Work read checks and
+one explicit switch were owner-reported PASS and accepted for controlled WPF
+testing. Production observation now supports the 26300/x64 family; standalone
+diagnostic opt-ins remain exact. On 26300 dry-run now expects
+`productionSupported: true`, `productionEntryGuardsRejectedWithoutWorker: false`
+(unsupported-build checks skipped) and `comActivated: false`. Do not run additional
+standalone repetitions as a prerequisite. See [current evidence and integrated test](../../../docs/validation/pr10-integrated-26300.md).
+The preparation and 26200 investigation below are historical snapshots.
+
+**26H2 preparation (October 19, 2026):** the standalone diagnostic also accepts
+exactly **26300.9711/x64 OS and process/26H2**, ordinary interactive execution,
+using `-TargetBuild 26300.9711`. This is diagnostic eligibility only: the shared
+production predicate still accepts only the two approved 26200 builds. Parent
+and child require a matching build-specific opt-in before COM. Existing 26200
+commands remain unchanged. No ABI, retry, cleanup or production gate changes.
+Use the [minimal PR 10 owner procedure](../../../docs/validation/pr10-explicit-switching.md)
+for 26300, not the historical multi-transition matrix below. On 26300 dry-run must
+show eligibleForOptIn true, productionSupported false, rejectedWithoutWorker true
+(`productionEntryGuardsRejectedWithoutWorker`), and comActivated false. A one-shot
+read must confirm cleanup; no live 26300 result is claimed. The remaining text is
+the historical 26200 investigation and approval record; its productionSupported
+true expectations and 25H2 requirements apply only to that exact build.
+
+For the minimal 26300 procedure, `once` also accepts `-ExpectedCurrent` with an
+existing locally held GUID. Independently select the intended role in Task View
+first. A different current GUID fails terminally as
+`ExpectedCurrentDesktopMismatch`; the final summary reports only
+`expectedCurrentMatched`, never either GUID. This option does not assign/relabel
+roles, change desktops, or enable production observation. It is rejected with
+other commands or empty/invalid GUIDs before the diagnostic starts. Keep GUID
+values in local variables and do not record process command lines or transcripts.
+
 Issue [#12](https://github.com/NDePetris/offramp-shift/issues/12), based on main
 `e73fe5763ca510eab19dc3d04abcd4408ec19234`, branch
 `spike/windows-26200-9711-compatibility`. That original investigation left PR #11

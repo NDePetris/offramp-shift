@@ -17,5 +17,6 @@ introduces only the packages above. No system SQLite installation or ORM is used
 Package restore and vulnerability audit use NuGet during development/CI;
 application runtime makes no network requests.
 
-The virtual-desktop spike has its own unchanged
+The shared `OfframpShift.Switching` integration was extracted from the
+virtual-desktop spike, with the same pinned ABI source and unchanged
 [third-party notices](spikes/VirtualDesktop/THIRD-PARTY-NOTICES.md).

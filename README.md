@@ -15,6 +15,7 @@ Offramp Shift is an early-stage, local-first Windows application concept for hel
 ./spikes/BrowserAttribution/run.ps1 test
 ./spikes/WindowsObservation/run.ps1 test
 ./spikes/WindowsObservation/compatibility.ps1 test
+./spikes/WindowsObservation/run.ps1 format
 ./run.ps1 test
 ./run.ps1 format
 ```
@@ -25,8 +26,8 @@ assignments and Start monitoring. Use the tray assignment menu on each manually
 selected desktop without opening the main window first. Previously enabled
 monitoring resumes on later app launches only with valid settings and fresh
 providers; Pause persists. No Windows-login startup is configured. The native
-desktop observer remains restricted to the two approved exact builds,
-26200.9457/x64 and 26200.9711/x64. The separate switching gate is unchanged.
+desktop observer accepts the two approved exact builds, 26200.9457/x64 and
+26200.9711/x64, and the owner-approved 26300 family on x64 for controlled testing.
 
 See [Windows app architecture](docs/architecture/windows-app.md) and
 [PR 5 validation](docs/validation/pr5-app.md) and the
@@ -40,7 +41,17 @@ exhaustion prompts, durable one/five-minute Personal-only extensions, and a
 shared repeat interval. Both enabled styles now prompt immediately at accepted
 exhaustion and repeat after counted Personal usage (default one minute). Existing
 notification preferences never migrate to interactive focus. Focus is best effort
-and desktop switching remains absent.
+and PR 10 adds a separate experimental **Switch to Work** action to the nudge.
+It requires default-off, separately scoped consent and independently checked one-shot
+authorization. Normal application switching remains disabled on 26200.9711/x64
+pending owner qualification and a separate capability decision. See
+[explicit switching architecture](docs/architecture/explicit-switching.md) and
+[the owner qualification procedure](docs/validation/pr10-explicit-switching.md).
+The owner accepted limited 26300.9711/x64 read-only and one-switch evidence for
+controlled integrated testing. The 26300 family now supports explicit switching
+after a new opt-in; old exact consent migrates off. Routine cumulative updates
+within 26300 retain that family consent. See the
+[integrated test and disable instructions](docs/validation/pr10-integrated-26300.md).
 PR 9 is owner-accepted for continued evaluation; exact live reminder timing has
 an unresolved, accepted-for-now observation. See the
 [PR 9 closeout, evidence and safety boundaries](docs/validation/pr9-interactive-nudges.md).

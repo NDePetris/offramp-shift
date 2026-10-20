@@ -18,8 +18,9 @@ internal static class Program
         try
         {
             if (args is ["test"]) return SelfTests.Run();
-            if (args is [var workerMode, Policy.OptIn, var owner] && workerMode.StartsWith("--worker-", StringComparison.Ordinal) &&
-                int.TryParse(owner, out var parent)) return Worker(workerMode, parent);
+            if (args is [var workerMode, var workerOptIn, var owner] && workerOptIn is Policy.OptIn or Policy.OptIn26300 &&
+                workerMode.StartsWith("--worker-", StringComparison.Ordinal) &&
+                int.TryParse(owner, out var parent)) return Worker(workerMode, parent, workerOptIn);
             if (!OperatingSystem.IsWindows()) return Reject("WindowsRequired");
             if (args is ["dry-run"])
             {
@@ -40,10 +41,19 @@ internal static class Program
                 });
                 return 0;
             }
-            if (args is not [var mode, Policy.OptIn, "--outside-tool-sandbox"] || mode is not ("once" or "repeat" or "manual"))
+            Guid? expectedCurrent = null;
+            if (args is ["once", var readOptIn, "--outside-tool-sandbox", "--expected-current", var expectedText])
+            {
+                if (!Guid.TryParse(expectedText, out var expected) || expected == Guid.Empty)
+                    return Reject("InvalidExpectedCurrentDesktop");
+                expectedCurrent = expected;
+                args = ["once", readOptIn, "--outside-tool-sandbox"];
+            }
+            if (args is not [var mode, var optIn, "--outside-tool-sandbox"] ||
+                !Policy.MatchesTarget(optIn, DesktopWorker.Build) || mode is not ("once" or "repeat" or "manual"))
                 return Reject("ExplicitOptInAndOutsideSandboxAttestationRequired");
             if (!Allowed(true)) return Reject("EnvironmentRejected");
-            return Exercise(mode);
+            return Exercise(mode, expectedCurrent);
         }
         catch { return Reject("DiagnosticInfrastructureFailure"); }
     }
@@ -71,8 +81,8 @@ internal static class Program
     private static bool Allowed(bool consent) => OperatingSystem.IsWindows() &&
         Policy.Allows(DesktopWorker.Build, RuntimeInformation.ProcessArchitecture.ToString(),
             RuntimeInformation.OSArchitecture.ToString(), Release, Elevated(), Environment.UserInteractive, consent);
-    private static bool ProductionSupported() => DesktopObservationPolicy.IsSupported(
-        DesktopWorker.Build, RuntimeInformation.ProcessArchitecture.ToString());
+    private static bool ProductionSupported() => DesktopWorker.IsSupported(
+        DesktopWorker.Build, RuntimeInformation.ProcessArchitecture);
     private static object EnvironmentReport()
     {
         using var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion");
@@ -90,7 +100,7 @@ internal static class Program
         };
     }
 
-    private static int Worker(string mode, int parentId)
+    private static int Worker(string mode, int parentId, string optIn)
     {
         // A watchdog owns only this child. Parent death/closed pipes or absolute lifetime ends it.
         using var parent = Process.GetProcessById(parentId);
@@ -103,7 +113,8 @@ internal static class Program
         { IsBackground = true };
         watchdog.Start();
         if (mode != "--worker-live") return SelfTests.FaultWorker(mode);
-        if (!Allowed(true) || Thread.CurrentThread.GetApartmentState() != ApartmentState.STA) return 2;
+        if (!Policy.MatchesTarget(optIn, DesktopWorker.Build) || !Allowed(true) ||
+            Thread.CurrentThread.GetApartmentState() != ApartmentState.STA) return 2;
         try
         {
             using var reader = new DesktopComReader();
@@ -120,7 +131,7 @@ internal static class Program
         catch { Write(new Reply(null, "ReaderInvalidated")); return 1; }
     }
 
-    private static int Exercise(string mode)
+    private static int Exercise(string mode, Guid? expectedCurrent)
     {
         OwnedWorker? worker = null;
         string? failure = null;
@@ -188,6 +199,7 @@ internal static class Program
             desktopCount,
             confirmations = gate.Confirmations,
             anonymousBaselineMatched = mode != "manual" ? failure is null : (bool?)null,
+            expectedCurrentMatched = expectedCurrent.HasValue ? failure is null : (bool?)null,
             distinctBindingsExtantAndMatched = mode == "manual" ? gate.Complete : (bool?)null,
             providerHealth = readErrors == 0 && latencies.Count > 0 ? "Available" : "Unavailable",
             transitions = Math.Max(0, gate.Confirmations - 1),
@@ -214,7 +226,7 @@ internal static class Program
             try
             {
                 var reading = worker!.Read();
-                endpoints.Accept(reading);
+                endpoints.Accept(reading, expectedCurrent);
                 if (mode != "manual")
                 {
                     if (baseline is not null && baseline != reading.Current) throw new DiagnosticFailure("UnexpectedCurrentDesktop");

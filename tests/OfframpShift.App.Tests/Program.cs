@@ -33,6 +33,7 @@ internal static class Program
     private static int Main(string[] args)
     {
         if (args is ["--desktop-worker"]) return OfframpShift.App.Program.Main(args);
+        if (args is ["--switch-worker"]) return OfframpShift.App.Program.Main(args);
         if (args is ["--inspect-nudge-lifecycle", var monitor] && monitor is "primary" or "secondary")
         {
             return NudgeLifecycleDiagnostic.Run(monitor == "secondary");
@@ -44,6 +45,29 @@ internal static class Program
         }
         if (args is ["--instance-client", var suffix])
         { using var client = new SingleInstance(suffix); return !client.IsOwner && client.Activate() ? 0 : 1; }
+        Test("switch command entry rejects missing confirmation and unauthorized flag combinations", () =>
+        {
+            foreach (var arguments in new[] {
+                new[] { "--qualify-switch-26200.9711" },
+                ["--qualify-switch-26300.9711"],
+                ["--qualify-switch-26300.9711", "not-confirmed", "personal", "work"],
+                ["--qualify-switch-26300.9711", "--confirm-experimental", "invalid", "invalid"],
+                ["--qualify-switch-26300.9712", "--confirm-experimental", "personal", "work"],
+                ["--qualify-switch-26200.9711", "not-confirmed", "personal", "work"],
+                ["--switch-worker", "--confirm-experimental"],
+                ["--switch-qualification-worker", "--confirm-experimental"],
+                ["--qualify-switch-26200.9711", "--confirm-experimental", "invalid", "invalid"] })
+                Check(OfframpShift.App.Program.Main(arguments) == 2);
+            foreach (var flag in new[] { "--qualify-switch-26200.9711", "--qualify-switch-26300.9711" })
+            {
+                var role = Guid.NewGuid().ToString();
+                Check(OfframpShift.App.Program.Main([flag, "--confirm-experimental", role, role]) == 2);
+                Check(OfframpShift.App.Program.Main([flag, "--confirm-experimental", Guid.Empty.ToString(), role]) == 2);
+            }
+            // An unsupported named target rejects before any qualification worker,
+            // even with syntactically valid and distinct GUIDs.
+            Check(DesktopFeasibility.SwitchWorkerEntry.Qualify(Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), "26300.9712") == 2);
+        });
         Test("tray projects saved allowance and qualifying break in every observed context", () =>
         {
             var model = new DashboardModel(); var snapshot = Snapshot() with
@@ -361,6 +385,33 @@ internal static class Program
             Check(window.ActionResult.Text == window.SettingsResult.Text && window.SettingsResult.Text.Contains("Task View"));
         });
         Pr8UiRegressions.Run(Test, () => Snapshot());
+        Test("switch STA worker watchdog exits with stdin withheld before any native activation", () =>
+        {
+            var path = Environment.ProcessPath ?? throw new InvalidOperationException();
+            var start = new ProcessStartInfo(path)
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+            if (Path.GetFileNameWithoutExtension(path).Equals("dotnet", StringComparison.OrdinalIgnoreCase))
+                start.ArgumentList.Add(Assembly.GetEntryAssembly()!.Location);
+            start.ArgumentList.Add("--switch-worker");
+            using var child = Process.Start(start) ?? throw new InvalidOperationException();
+            try
+            {
+                // Keep stdin open and empty. ReadBlock cannot finish, so the
+                // worker cannot decode authorization or construct NativeSession.
+                Check(child.WaitForExit(5_000)); Check(child.ExitCode == 124);
+                Check(child.StandardOutput.ReadToEnd().Length == 0 && child.StandardError.ReadToEnd().Length == 0);
+            }
+            finally
+            {
+                if (!child.HasExited) { child.Kill(); Check(child.WaitForExit(1_000)); }
+            }
+        });
         InteractiveUiRegressions.Run(Test, () => Snapshot());
         if (args is ["--render", var output])
         {

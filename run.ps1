@@ -37,6 +37,7 @@ if ($Command -eq 'format') {
         'src/OfframpShift.Core/OfframpShift.Core.csproj',
         'src/OfframpShift.Persistence/OfframpShift.Persistence.csproj',
         'src/OfframpShift.ApplicationHost/OfframpShift.ApplicationHost.csproj',
+        'src/OfframpShift.Switching/OfframpShift.Switching.csproj',
         'src/OfframpShift.App/OfframpShift.App.csproj'
     ) + $projects) {
         & $dotnet format (Join-Path $PSScriptRoot $relativeProject) --verify-no-changes --no-restore

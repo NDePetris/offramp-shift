@@ -33,9 +33,14 @@ public sealed record EvidenceResult(MonitoringObservation? Interval, string Reas
 
 public static class DesktopObservationPolicy
 {
-    // Exact owner-approved read-only builds; unrelated switching policy remains separate.
+    // Owner-approved exact 26200 builds and controlled 26300-family evaluation.
+    // This is independent of switching capability and consent.
+    private static bool Is26300Family(string build) => build?.Split('.') is ["26300", var revision] &&
+        uint.TryParse(revision, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out _);
     public static bool IsSupported(string build, string architecture) =>
-        build is "26200.9457" or "26200.9711" && architecture == "X64";
+        (build is "26200.9457" or "26200.9711" || Is26300Family(build)) && architecture == "X64";
+    public static bool SameConsentScope(string savedBuild, string currentBuild) =>
+        savedBuild == currentBuild || Is26300Family(savedBuild) && Is26300Family(currentBuild);
 }
 
 // Portable cleanup decision, with native process operations supplied by the owner.

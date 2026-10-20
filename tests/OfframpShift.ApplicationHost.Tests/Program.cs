@@ -12,8 +12,9 @@ internal static class Program
         try { body(); passed++; Console.WriteLine("PASS: " + name); }
         catch (Exception e) { failed++; Console.WriteLine("FAIL: " + name + " " + e.Message); }
     }
-    public static int Main()
+    public static int Main(string[] args)
     {
+        if (args is [var mode] && mode.StartsWith("--switch-fault-", StringComparison.Ordinal)) return SwitchRegressions.Fault(mode);
         Test("setup snapshots progress through consent individual assignments and explicit start", () =>
         {
             using var f = new Fixture(); using var app = f.App();
@@ -316,6 +317,10 @@ internal static class Program
         });
         Pr8Regressions.Run();
         InteractiveHostRegressions.Run();
+        SwitchRegressions.Run();
+        SwitchPolicyRegressions.Run();
+        SwitchWorkerGuardRegressions.Run();
+        FamilyCompatibilityRegressions.Run();
         Console.WriteLine($"Host: {passed} passed, {failed} failed, {assertions} assertions (synthetic providers, real local SQLite).");
         return failed == 0 ? 0 : 1;
     }

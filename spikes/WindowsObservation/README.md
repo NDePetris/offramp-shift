@@ -55,8 +55,9 @@ filesystem/process sandbox when its build/process restrictions prevent operation
 history. Ctrl+C stops it. It runs for at most 600 seconds. It writes no files.
 
 `--desktop` explicitly enables the experimental read-only COM helper, only on
-**26200.9457/x64** or **26200.9711/x64**, the two exact owner-approved read-only
-observation builds. All other builds reject before undocumented COM activation.
+**26200.9457/x64**, **26200.9711/x64**, or the **26300 family/x64** under the
+owner's separate controlled-testing decision. Other families, malformed revisions,
+and non-x64 OS/process configurations reject before undocumented COM activation.
 The newer build is approved for experimental owner-evaluation monitoring after
 the bounded owner-reported compatibility checks; this does not certify accounting
 accuracy, uninterrupted observation or unattended daily use.
@@ -69,6 +70,16 @@ unchanged and automatic switching/browser attribution remain NO-GO. Evidence and
 approval are recorded in [the compatibility record](../../docs/validation/windows-26200-9711.md).
 See [owner smoke commands](../../docs/validation/windows-26200-9711-smoke.md) for
 the updated production observation path and separate WPF integration check.
+
+26H2 preparation adds **26300.9711/x64/26H2 only** to the standalone compatibility
+diagnostic, with an explicit `-TargetBuild 26300.9711` opt-in. Following owner-reported
+Personal/Work read PASS and one confirmed switch, production observation now accepts
+the 26300 family for controlled integrated evaluation. Follow the current
+[integrated acceptance record](../../docs/validation/pr10-integrated-26300.md).
+The separate [PR 10 qualification procedure](../../docs/validation/pr10-explicit-switching.md)
+is retained as historical preparation; the owner has since reported limited native
+and integrated first-click PASS on 26300.9711/x64. No agent-run live test or broad
+compatibility certification is claimed, and no further repetitions are required.
 
 For a diagnostic Personal/Work mapping, supply distinct GUIDs deliberately obtained
 on the corresponding desktops by the operator, without printing or using their names:

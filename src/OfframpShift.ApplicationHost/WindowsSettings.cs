@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Nodes;
+using DesktopFeasibility;
 
 namespace OfframpShift.ApplicationHost;
 
@@ -10,7 +11,7 @@ public enum SettingsStatus { Ready, Missing, Invalid, Incompatible, Unavailable 
 
 public sealed record WindowsSettings
 {
-    [JsonRequired] public int Version { get; init; } = 3;
+    [JsonRequired] public int Version { get; init; } = 5;
     [JsonRequired] public Guid? Personal { get; init; }
     [JsonRequired] public Guid? Work { get; init; }
     [JsonRequired] public string Provider { get; init; } = "shell-com-53f5ca0b-readonly-v1";
@@ -20,11 +21,22 @@ public sealed record WindowsSettings
     [JsonRequired] public AppTheme Theme { get; init; }
     [JsonRequired] public bool? CloseToTray { get; init; }
     [JsonRequired] public ReminderStyle ReminderStyle { get; init; }
+    [JsonRequired] public bool SwitchingConsent { get; init; }
+    [JsonRequired] public string SwitchingConsentBuild { get; init; } = "";
+    [JsonRequired] public string SwitchingConsentFamily { get; init; } = "";
     [JsonIgnore] public bool Complete => Personal is not null && Work is not null && Consent;
+    public bool HasSwitchingConsent(string currentBuild) => SwitchingConsent && Complete &&
+        (SwitchingConsentFamily == "26300"
+            ? SwitchingConsentBuild == "" && SwitchCompatibility.Is26300Family(Build) && SwitchCompatibility.Is26300Family(currentBuild)
+            : SwitchingConsentFamily == "" && !SwitchCompatibility.Is26300Family(Build) && SwitchingConsentBuild == currentBuild && Build == currentBuild);
 
     public void Validate()
     {
-        if (Version != 3 || !Enum.IsDefined(ReminderStyle) || Provider != "shell-com-53f5ca0b-readonly-v1" || Build is null ||
+        if (Version != 5 || SwitchingConsentBuild is null || SwitchingConsentBuild.Length > 40 || SwitchingConsentFamily is null ||
+            SwitchingConsent && (!Complete || !(SwitchingConsentFamily == "26300" && SwitchingConsentBuild == "" && SwitchCompatibility.Is26300Family(Build) ||
+                SwitchingConsentFamily == "" && SwitchingConsentBuild.Length > 0 && SwitchingConsentBuild == Build && !SwitchCompatibility.Is26300Family(Build))) ||
+            !SwitchingConsent && (SwitchingConsentBuild.Length != 0 || SwitchingConsentFamily.Length != 0) ||
+            !Enum.IsDefined(ReminderStyle) || Provider != "shell-com-53f5ca0b-readonly-v1" || Build is null ||
             Build.Length > 40 || !Enum.IsDefined(Theme) || Personal == Guid.Empty || Work == Guid.Empty ||
             Personal is not null && Personal == Work || MonitoringEnabled && !Complete)
             throw new ArgumentException("Invalid Windows settings.");
@@ -51,21 +63,28 @@ public sealed class WindowsSettingsStore(string directory)
             foreach (var item in document.RootElement.EnumerateObject())
                 if (!names.Add(item.Name)) throw new JsonException();
             if (document.RootElement.TryGetProperty("Version", out var version) && version.ValueKind == JsonValueKind.Number &&
-                (!version.TryGetInt32(out var number) || number is not (1 or 2 or 3)))
+                (!version.TryGetInt32(out var number) || number is not (1 or 2 or 3 or 4 or 5)))
             { Status = SettingsStatus.Incompatible; return new(); }
             WindowsSettings settings;
-            if (version.ValueKind == JsonValueKind.Number && version.GetInt32() is 1 or 2)
+            if (version.ValueKind == JsonValueKind.Number && version.GetInt32() is 1 or 2 or 3 or 4)
             {
-                // Validate the exact v1 shape before adding the new required v2 field.
-                // Migration is in memory only; the next explicit atomic save writes v2.
+                // Validate each exact legacy shape; migration never opts into switching.
                 string[] legacyFields = ["Version", "Personal", "Work", "Provider", "Build", "Consent",
                     "MonitoringEnabled", "Theme", "CloseToTray"];
-                if (!names.SetEquals(version.GetInt32() == 1 ? legacyFields : [.. legacyFields, "BreakRemindersEnabled"])) throw new JsonException();
+                var oldVersion = version.GetInt32();
+                var expected = oldVersion == 1 ? legacyFields : oldVersion == 4
+                    ? [.. legacyFields, "ReminderStyle", "SwitchingConsent", "SwitchingConsentBuild"]
+                    : [.. legacyFields, oldVersion == 2 ? "BreakRemindersEnabled" : "ReminderStyle"];
+                if (!names.SetEquals(expected)) throw new JsonException();
+                if (oldVersion == 4) ValidateV4Consent(document.RootElement);
                 var migrated = JsonNode.Parse(document.RootElement.GetRawText())!;
-                var enabled = version.GetInt32() == 2 && document.RootElement.GetProperty("BreakRemindersEnabled").GetBoolean();
+                var enabled = oldVersion == 2 && document.RootElement.GetProperty("BreakRemindersEnabled").GetBoolean();
                 migrated.AsObject().Remove("BreakRemindersEnabled");
-                migrated["Version"] = 3;
-                migrated["ReminderStyle"] = (int)(enabled ? ReminderStyle.WindowsNotification : ReminderStyle.Off);
+                migrated["Version"] = 5;
+                if (oldVersion < 3) migrated["ReminderStyle"] = (int)(enabled ? ReminderStyle.WindowsNotification : ReminderStyle.Off);
+                migrated["SwitchingConsent"] = false;
+                migrated["SwitchingConsentBuild"] = "";
+                migrated["SwitchingConsentFamily"] = "";
                 settings = migrated.Deserialize<WindowsSettings>(Options) ?? throw new JsonException();
             }
             else settings = document.RootElement.Deserialize<WindowsSettings>(Options) ?? throw new JsonException();
@@ -76,6 +95,17 @@ public sealed class WindowsSettingsStore(string directory)
         catch (Exception e) when (e is JsonException or ArgumentException or InvalidOperationException) { Status = SettingsStatus.Invalid; }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Status = SettingsStatus.Unavailable; }
         return new();
+    }
+
+    private static void ValidateV4Consent(JsonElement legacy)
+    {
+        var consent = legacy.GetProperty("SwitchingConsent").GetBoolean();
+        var scope = legacy.GetProperty("SwitchingConsentBuild").GetString();
+        if (scope is null || scope.Length > 40 ||
+            consent && (scope.Length == 0 || scope != legacy.GetProperty("Build").GetString() ||
+                !legacy.GetProperty("Consent").GetBoolean() || legacy.GetProperty("Personal").ValueKind == JsonValueKind.Null ||
+                legacy.GetProperty("Work").ValueKind == JsonValueKind.Null) || !consent && scope.Length != 0)
+            throw new JsonException();
     }
 
     public void Save(WindowsSettings settings)
