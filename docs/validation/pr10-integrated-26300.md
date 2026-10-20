@@ -1,8 +1,9 @@
 # PR 10 — controlled 26300-family integrated owner testing
 
-Follow-up: the owner reports integrated switching works but the first click can
-appear to activate only. See the [focused correction and owner acceptance](pr10-first-click.md)
-for the current patch, pinned-window limitation and explicitly deferred accounting decision.
+**Final owner acceptance:** integrated switching and first-click behavior passed
+at `7de47ba6e4965db7443a0a3fb97588688122d046`. See the bounded acceptance matrix
+below and the [first-click investigation](pr10-first-click.md). Historical setup,
+qualification and automated evidence remains labeled separately.
 
 ## Owner evidence and decision — October 19, 2026
 
@@ -24,6 +25,139 @@ The owner explicitly **accepted this limited evidence for controlled, opt-in
 integrated application testing**. No further standalone switching repetitions
 are required first. This is the documented compatibility decision superseding the
 preparation-only 26300 restriction, not broad reliability or accessibility acceptance.
+
+## Final owner acceptance and PR review — October 19, 2026
+
+**Recommendation: READY WITH DOCUMENTED LIMITATIONS.** All seven automated
+closeout checks passed. The owner has accepted the primary integrated
+interaction; no additional standalone repetitions or broad accounting campaign
+are prerequisites for PR review. This is not approval to merge, release or use
+the application unattended.
+
+Owner-reported environment: Windows 11 26H2 **26300.9711/x64**, **.NET SDK 10.0.401**;
+primary **3440×1440 landscape at 100%**, secondary **2160×3840 portrait at 150%**.
+The first-click test revision is **`7de47ba6e4965db7443a0a3fb97588688122d046`**.
+These are supplied environment facts, not proof that each monitor was exercised.
+No native exercise was performed or independently reproduced by the agent.
+
+| Capability / exercise | Owner evidence | Boundary |
+|---|---|---|
+| Read-only Personal observation | **PASS** | Standalone qualification at `de869b5`; expected endpoint matched, clean worker exit |
+| Read-only Work observation | **PASS** | Same standalone evidence; independent from switching approval |
+| One explicit Personal → Work diagnostic | **PASS** | `ConfirmedSuccess`, visibly correct destination; earlier report found no Explorer/window instability |
+| Integrated Switch to Work | **PASS** | Owner confirmed the integrated action reaches Work; standalone success alone was not used to infer this |
+| First-click integrated switching | **PASS** | At `7de47ba`, worked on the first attempt without a preliminary activation click |
+| Extensions and dismissal, aggregate prior testing | **PASS — prior owner report** | Retained as supplied; does not prove every duration/route on the final revision |
+| Automatic nudge closure after the final switch | **NOT CONFIRMED** | Successful switching is not separate closure evidence |
+| Explorer/window stability during the final first-click run | **NOT CONFIRMED** | Earlier standalone stability observation is not transferred to this run |
+| Secondary-monitor presentation / complete mixed-DPI acceptance | **NOT CONFIRMED** | Display configuration supplied; no separate PR 10 per-monitor result |
+| Full keyboard interaction, high contrast, Narrator | **NOT CONFIRMED** | Earlier PR 5/9 evidence and automated WPF tests do not establish new PR 10 acceptance |
+| Separate Add 5 minutes, Escape and Alt+F4 on the final revision | **NOT CONFIRMED** | Aggregate extension/dismissal report does not enumerate these variants |
+| Recovery, long-duration accuracy, reboot/topology race matrix | **NOT RUN for this closeout** | Existing issues and PR 5 deferrals remain |
+| PR 5 Tests 8–12 | **NOT RUN — deferred** | Prior owner scope decision preserved |
+| Automatic switching | **NO-GO** | Not implemented or approved |
+
+### Complete implementation review
+
+The initial checkout was clean on `codex/pr10-explicit-switch-to-work`, HEAD
+`7de47ba6e4965db7443a0a3fb97588688122d046`. Local `main` and the merge base are
+`63c3f075148a69fd36e95553b86f5985e7859cfa`; GitHub independently confirms
+[PR #18 (PR 9)](https://github.com/NDePetris/offramp-shift/pull/18) is merged at
+that commit. The complete 58-file comparison includes all four PR 10 commits:
+`45c0d73`, `de869b5`, `83ab7a6`, `7de47ba`, rather than only the latest fix.
+
+Review found **no concrete safety defect blocking PR review**. Changes are limited
+to shared switching extraction/protocol/worker supervision, host/WPF authorization
+and consent, independently gated compatibility diagnostics and the approved family
+policy, related tests/project references and documentation. COM ABI slots are
+preserved; lockfile changes add only the shared project references. No Core,
+Persistence, ActivityMonitoring or BrowserAttribution implementation change appears
+against main; SQLite checkpoint semantics and accounting thresholds are unchanged.
+
+Verified safeguards: explicit default-off switching consent is independent from
+observation consent; strict v1–v4 migration never opts into switching. Numeric
+26300 UBRs on x64 share only the deliberately approved family scope; a major-family
+change revokes consent and cannot revive it on return. Observation retains both
+approved exact 26200 builds; application switching retains exact 26200.9457, while
+26200.9711 remains observation/diagnostic-only. Standalone qualification remains
+exact-build gated, and the original spike gate remains separate.
+
+Each request requires a strictly confirmed nudge, healthy fresh Personal context,
+valid distinct GUID bindings, matching shell/session/configuration/topology and a
+fresh atomic single-use authorization. The bounded STA child makes at most one
+native call and verifies the result; no retries, rollback, window relocation or
+synthetic input are added. Indeterminate results retain nudge lockout, retained
+feedback and manual Task View fallback. Existing extensions/dismissal retain their
+shared submission exclusion and durable acknowledgment. Saving disabled switching
+consent, Pause and Exit revoke unconsumed authorization; none undo a consumed call.
+
+The first-click capture is conditional and read-only. Requested HWND must equal
+the previously confirmed nudge HWND before and after capture, and sampled foreground
+must equal that same HWND. Events drained on both sides revoke external transitions,
+including leave-and-return. Sampler checks foreground/session stability; the switch
+worker independently validates again. The capture calls no estimator reset/Point
+or durable Core command. Existing event draining still informs accounting normally.
+Read-only worker methods expose no state-changing desktop operation.
+
+### Limits retained for review
+
+- Pinned/cross-desktop foreground windows can fail strict membership validation;
+  the owner's CandidateWrongDesktop report disappeared with a normal unpinned app.
+  No identity exception, window movement or automatic acceptance is added.
+- Family eligibility intentionally survives UBR updates, but undocumented COM ABI
+  drift can still break compatibility. Only limited 26300.9711 live evidence exists;
+  every UBR is not independently certified.
+- A successful verification point or worker termination cannot rule out delayed
+  shell effects. Check/call races and Explorer faults cannot be made atomic here.
+- Observation COM reply wait is 2 seconds, cleanup exit wait 1 second; collections
+  over 500 ms and evidence over 2 seconds old reject. Synchronous local Windows
+  queries/pipe writes remain outside the reply deadline, so the full capture has
+  **no absolute end-to-end deadline** and can delay the monitoring owner.
+- Explorer recovery ([#8](https://github.com/NDePetris/offramp-shift/issues/8)),
+  sustained monitoring/accuracy and the accepted PR 9 timing uncertainty
+  ([#9](https://github.com/NDePetris/offramp-shift/issues/9)) remain unresolved.
+  These are related follow-ups, not closed by the switching implementation.
+  This review does not identify a separate switching issue to close automatically.
+- Full Narrator, high contrast, keyboard/mixed-DPI acceptance and PR 5 Tests 8–12
+  remain at their recorded unconfirmed/deferred status. No recovery, accessibility,
+  accounting or unattended-use certification is implied.
+
+Separate agreed accounting follow-up, **not implemented in PR 10**: verified,
+unlocked time on Personal should count as usage regardless of input inactivity;
+idle-on-Personal should not earn break credit. No classification, idle/break
+threshold, checkpoint, allowance, playback detection or reset behavior is changed.
+Automatic switching and production browser attribution remain **NO-GO**.
+
+### Final automated closeout validation
+
+All commands were rerun on the complete implementation at `7de47ba` with pinned
+SDK **10.0.401**, warnings as errors. Exit codes were **0** throughout; subsequent
+edits change only these three validation documents and one stale probe README
+statement that incorrectly claimed no 26300 live evidence. No live observation/switching
+command, integrated test, desktop manipulation or Explorer restart was performed.
+
+| Command | Closeout result |
+|---|---|
+| `./run.ps1 test` | **PASS**: Core **82 tests / 38,755 assertions / 0 failures**; Persistence **83 / 772 / 0 failures**; host **283 / 2,438 / 0 failures**; WPF **80 / 242 / 0 failures** |
+| `./run.ps1 format` | **PASS**, verify-no-changes |
+| `./spikes/VirtualDesktop/run.ps1 test` | **PASS**, **58 tests / 0 failures**, including 1,000 topology permutations; **3** owned non-COM isolation checks passed |
+| `./spikes/BrowserAttribution/run.ps1 test` | **PASS**, **2,053 assertions**, **5 extension tests / 0 failures**, synthetic process/pipe transport passed |
+| `./spikes/WindowsObservation/run.ps1 test` | **PASS**, **41 tests / 10,282 assertions / 0 failures** |
+| `./spikes/WindowsObservation/compatibility.ps1 test` | **PASS**, **24** unsupported-entry cases and exact/family matrices; **16 diagnostic groups / 0 failures**, synthetic/owned processes, no COM |
+| `./spikes/WindowsObservation/run.ps1 format` | **PASS**, verify-no-changes |
+| `git diff --check` | **PASS**, including final documentation edits |
+
+Logs are local and ignored under `artifacts/pr10-closeout-*.log`. These are
+deterministic/simulated provider, WPF routing, disposable SQLite and owned non-COM
+process results, not new live compatibility or accounting evidence. Worker
+deadlines/cleanup, independent gates, migration/default-off consent, single-use
+grants, unrelated foreground rejection, first-click capture, one native attempt,
+indeterminate lockout and existing extension/dismissal regressions remain covered.
+
+The final closeout commit uses `docs: record PR 10 owner acceptance and limitations`.
+Its SHA is reported separately to avoid embedding a self-referential hash; the
+live first-click provenance remains `7de47ba`, not this documentation-only commit.
+No push, remote PR creation/modification, merge, deployment or release is authorized.
 
 ## Current implemented boundary
 
@@ -225,18 +359,21 @@ Return sanitized PASS/FAIL/BLOCKED/NOT RUN for consent-off availability, explici
 opt-in, one actual transition, independent Task View result, extensions, dismissal,
 manual fallback, disable behavior, worker cleanup, source/build/hardware and any
 unexpected focus/window effects. Record actual display count/layout/scaling and
-privilege/session facts for the integrated run; they are not supplied by the earlier
-brief report. Keep raw GUIDs, process lists, titles/content and settings private.
+privilege/session facts for any further integrated run. The final report above
+supplies layout/scaling, but no complete per-monitor or privilege/session matrix.
+Keep raw GUIDs, process lists, titles/content and settings private.
 
-Still unverified: integrated WPF native behavior on this patch, broad cumulative
+The integrated action and first-click behavior now have the bounded owner PASS
+above. Still unverified: final automatic closure and stability, broad cumulative
 update compatibility, Explorer recovery, races/topology deletion, reboot behavior,
-multiple monitors/mixed DPI, fullscreen/elevated applications, Narrator/full keyboard/
-high contrast, long-running monitoring/accounting accuracy and unattended use.
+secondary-monitor/full mixed-DPI acceptance, fullscreen/elevated applications,
+Narrator/full keyboard/high contrast, long-running monitoring/accounting accuracy
+and unattended use.
 PR 5 Tests 8–12 remain deferred; issues #8/#9 and PR 9 timing uncertainty remain.
 Process isolation cannot protect Explorer from every undocumented ABI fault.
 Automatic switching and production browser attribution remain **NO-GO**.
 
-## Automated validation
+## Historical family-enablement automated validation — `83ab7a6`
 
 All seven prescribed commands passed on the final implementation with SDK
 **10.0.401**, warnings as errors; `git diff --check` also passed. Logs are local
@@ -266,7 +403,7 @@ real. Automated success is not live shell compatibility or accounting certificat
 All live integrated exercises above remain owner-run and NOT RUN by the agent.
 A local commit was authorized following the final scope check. No push, PR, merge, deployment or release is authorized.
 
-## Exact changed-file inventory
+## Historical family-enablement changed-file inventory — `83ab7a6`
 
 All paths below are repository-relative; new test/document files are included.
 No Core/Persistence implementation or checkpoint schema file changed.
@@ -281,7 +418,7 @@ No Core/Persistence implementation or checkpoint schema file changed.
 | Observation/diagnostic policy regressions and accurate no-COM support report | `spikes/WindowsObservation/Tests/Program.cs`, `spikes/WindowsObservation/Compatibility/SelfTests.cs`, `spikes/WindowsObservation/Compatibility/Program.cs`, `spikes/WindowsObservation/CompatibilityGuardTests/Program.cs` |
 | Current decisions, historical boundaries and owner instructions | `AGENTS.md`, `README.md`, `docs/architecture/explicit-switching.md`, `docs/architecture/windows-app.md`, `docs/validation/pr10-explicit-switching.md`, `docs/validation/pr10-integrated-26300.md` (new), `spikes/VirtualDesktop/README.md`, `spikes/WindowsObservation/README.md`, `spikes/WindowsObservation/Compatibility/README.md` |
 
-## Final scope check and local commit
+## Historical family-enablement scope check and local commit — `83ab7a6`
 
 PASS: all 28 changed files, including the two new files, are part of the approved
 26300-family owner-testing change, its consent/schema migration, associated guards,

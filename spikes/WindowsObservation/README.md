@@ -75,9 +75,11 @@ the updated production observation path and separate WPF integration check.
 diagnostic, with an explicit `-TargetBuild 26300.9711` opt-in. Following owner-reported
 Personal/Work read PASS and one confirmed switch, production observation now accepts
 the 26300 family for controlled integrated evaluation. Follow the current
-[integrated test](../../docs/validation/pr10-integrated-26300.md); the separate, minimal
-[PR 10 qualification procedure](../../docs/validation/pr10-explicit-switching.md)
-instead of the historical 26200 matrix; no 26300 live evidence is claimed.
+[integrated acceptance record](../../docs/validation/pr10-integrated-26300.md).
+The separate [PR 10 qualification procedure](../../docs/validation/pr10-explicit-switching.md)
+is retained as historical preparation; the owner has since reported limited native
+and integrated first-click PASS on 26300.9711/x64. No agent-run live test or broad
+compatibility certification is claimed, and no further repetitions are required.
 
 For a diagnostic Personal/Work mapping, supply distinct GUIDs deliberately obtained
 on the corresponding desktops by the operator, without printing or using their names:

@@ -1,5 +1,24 @@
 # PR 10 — first-click interaction correction
 
+## Owner acceptance — October 19, 2026
+
+**PASS — owner-reported at `7de47ba6e4965db7443a0a3fb97588688122d046`.**
+On Windows 11 26H2 **26300.9711/x64**, SDK **10.0.401**, the owner confirmed
+integrated Switch to Work worked on the first attempt without a preliminary click
+to activate the nudge. Reported display configuration: primary **3440×1440,
+landscape, 100%**; secondary **2160×3840, portrait, 150%**.
+
+The earlier integrated report and reproduced race below describe the defect before
+this acceptance. The successful first-click report supports this bounded interaction
+result, not an instrumented proof of every native message in the earlier failure.
+Automatic nudge closure, Explorer/window stability during this final test,
+secondary-monitor presentation, full keyboard access, high contrast and Narrator
+remain **NOT CONFIRMED** for this PR 10 run. They are not inferred from switching
+success or from the presence of two monitors. Prior aggregate extension/dismissal
+success is recorded separately in the [complete owner acceptance matrix](pr10-integrated-26300.md#final-owner-acceptance-and-pr-review--october-19-2026).
+No agent-operated native test was performed, and no further live repetition is
+required to prepare the PR with these documented limitations.
+
 ## Baseline and investigation
 
 Reviewed branch `codex/pr10-explicit-switch-to-work` at
@@ -64,7 +83,11 @@ replayed input, topmost mode or focus workaround is added.
 References: [WM_MOUSEACTIVATE return semantics](https://learn.microsoft.com/en-us/windows/win32/inputdev/wm-mouseactivate),
 [WPF Window source](https://github.com/dotnet/wpf/blob/main/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Window.cs).
 
-## Owner acceptance — not run by the agent
+## Retained owner procedure — not run by the agent
+
+The primary first-click exercise has now passed as reported above. This procedure
+is retained for provenance and separately authorized follow-up; it is not a request
+to repeat native switching or a statement that every listed exercise passed.
 
 Use the [integrated setup and consent procedure](pr10-integrated-26300.md).
 Exit an older instance through its tray. In an ordinary unelevated x64 PowerShell
@@ -156,9 +179,10 @@ original implementation (282 host passes, one failure), then passed after the fi
 Ignored logs are under `artifacts/pr10-first-click-*.log`. Tests exercise
 simulated providers, WPF routing/owned HWNDs and non-COM worker faults. Actual
 pointer delivery, Windows foreground policy, both displays, Narrator and native
-switch behavior require the owner exercise above; no new live PASS is claimed.
+switch behavior outside the bounded owner-reported acceptance above remain
+unverified. Automated results never substitute for owner evidence.
 
-Final pre-commit review: exactly seven files cover the authorization correction,
+Historical first-click pre-commit review (`7de47ba`): exactly seven files cover the authorization correction,
 focus-refusal guidance, targeted host/WPF regressions and these architecture/owner
 instructions. No unrelated files or compatibility, consent, native switching,
 Core accounting or persistence changes are included. The seven passing checks

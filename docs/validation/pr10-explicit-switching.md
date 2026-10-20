@@ -1,6 +1,6 @@
 # PR 10 — explicit Switch to Work
 
-> Current owner decision: limited 26300.9711/x64 standalone qualification was owner-reported PASS and accepted for controlled integrated testing. The 26300 family policy is now implemented in the current patch. No further standalone repetitions are required. See [current evidence, scope and WPF test procedure](pr10-integrated-26300.md). The preparation gates/results/procedure below describe historical commit `de869b5`, not the current capability boundary.
+> Final acceptance, October 19, 2026: standalone Personal/Work read-only checks and one explicit Personal → Work diagnostic passed by owner report on 26300.9711/x64. Integrated Switch to Work and first-click behavior passed at `7de47ba6e4965db7443a0a3fb97588688122d046`; no preliminary activation click was needed. The owner-approved 26300-family policy is implemented. See the [current acceptance matrix, complete review and limitations](pr10-integrated-26300.md#final-owner-acceptance-and-pr-review--october-19-2026) and [first-click evidence](pr10-first-click.md). No additional standalone repetitions are required. The preparation gates/results/procedure below are historical `de869b5` evidence, not the current capability boundary or a request to rerun qualification.
 
 Prepared October 18, 2026. PR #18 was independently verified merged into main;
 original checkout base was `63c3f075148a69fd36e95553b86f5985e7859cfa`; the original implementation is committed as `45c0d73`. No remote PR,
@@ -61,10 +61,13 @@ package versions and warnings as errors. Probe checks use their ordinary output.
 
 **Agent-performed manual Windows switching PASS: none.** The subsequent owner-reported limited qualification is recorded in the current integrated procedure. No live switch, observation
 diagnostic, Explorer restart, desktop manipulation or OS experiment was performed.
-Off-screen WPF render inspection is layout evidence only. Actual transitions,
+Off-screen WPF render inspection is layout evidence only. At the historical
+implementation review, actual transitions,
 Narrator, full keyboard interaction, high contrast, mixed DPI, fullscreen and
 shell races remain untested for this change. PR 5 Tests 8–12 remain deferred;
-PR 9's owner-accepted timing uncertainty remains unresolved.
+PR 9's owner-accepted timing uncertainty remains unresolved. The later owner-run
+diagnostic, integrated and first-click PASS reports are recorded above; they do
+not establish the remaining accessibility, mixed-DPI or broad recovery matrix.
 
 ## Targeted safety corrections and re-review
 
