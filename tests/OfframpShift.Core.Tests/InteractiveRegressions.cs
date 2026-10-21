@@ -16,8 +16,8 @@ internal static class InteractiveRegressions
             PersonalInterval(f, 1_000, session: SessionState.Locked);
             PersonalInterval(f, 1_000, confidence: EvidenceConfidence.Unknown);
             f.Engine.SetPaused(true); Personal(f, 1_000); f.Engine.SetPaused(false);
-            check(f.Engine.State.ReminderRemainingMs == 60_000);
-            check(Personal(f, 59_999).Effects.Length == 0);
+            check(f.Engine.State.ReminderRemainingMs == 59_000);
+            check(Personal(f, 58_999).Effects.Length == 0);
             check(Personal(f, 1).Effects.Count(x => x.Kind == EffectKind.Nudge) == 1);
             var legacy = Create(); check(legacy.Send(30).State.Intervention == InterventionState.Grace);
             check(legacy.Send(6).State.ReminderRemainingMs == 10);
@@ -34,11 +34,11 @@ internal static class InteractiveRegressions
                 f.Send(1_000, input: InputState.Idle); f.Send(1_000, session: SessionState.Locked);
                 f.Send(1_000, confidence: EvidenceConfidence.Unknown);
                 f.Engine.SetPaused(true); f.Send(1_000); f.Engine.SetPaused(false);
-                check(f.Engine.State.SnoozeRemainingMs == duration && f.Engine.State.UsageMs == initial.UsageMs);
+                check(f.Engine.State.SnoozeRemainingMs == duration - 1_000 && f.Engine.State.UsageMs == initial.UsageMs + 1_000);
                 check(!f.Engine.DeferInteractive(duration == 60_000 ? 300_000 : 60_000).CheckpointRequired);
                 f.Restart(f.Engine.CreateCheckpoint());
-                check(f.Engine.State.SnoozeRemainingMs == duration);
-                check(Personal(f, duration - 1).Effects.Length == 0);
+                check(f.Engine.State.SnoozeRemainingMs == duration - 1_000);
+                check(PersonalInterval(f, duration - 1_001, input: InputState.Idle).Effects.Length == 0);
                 check(Personal(f, 1).Effects.Count(x => x.Kind == EffectKind.Nudge) == 1);
                 check(f.Engine.State.UsageMs == 30 + duration && f.Engine.State.Exhausted);
             });

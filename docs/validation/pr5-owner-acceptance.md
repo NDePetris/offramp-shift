@@ -73,9 +73,11 @@ normal data while the app is stopped; do not delete or replace it to run a check
 | 6. Lock and resume | Record saved totals; lock/unlock, then separately sleep/resume with work saved. Require retained totals, fresh observations and no accounting across uncertain gaps. Paused state must persist. A healthy dashboard alone cannot establish interval accuracy. |
 | 7. Context and feedback | Manually inspect Personal/Work, then Other on a disposable third desktop; verify unavailable/Unknown never looks earned and stale display does not advance by wall clock. In isolated test data use short valid durations to observe saved usage/break, reset, exhaustion/grace/nudging feedback; these are advisory states, not active interventions. Restore durations explicitly. |
 
-Passive video with no input may currently earn break credit after idle
-qualification on Personal. Record it as current policy, not an observer defect;
-cumulative-break or media-aware policy changes are separate work.
+Historical policy at the PR 5 tested revision allowed idle-qualified Personal
+break credit. PR 11 supersedes that policy: otherwise eligible unlocked Personal
+time counts without input; only Work/lock qualifies. This does not change the
+original acceptance provenance or deferred Tests 8–12. See
+[the separate PR 11 procedure](pr11-personal-usage.md).
 
 ## Deferred criteria — Tests 8–12, isolated data and saved work required
 

@@ -82,8 +82,9 @@
       <TextBox x:Name="AllowanceInput" HorizontalAlignment="Left" AutomationProperties.Name="Allowance in minutes" />
       <Label Content="Required _break (minutes)" Target="{Binding ElementName=BreakInput}" />
       <TextBox x:Name="BreakInput" HorizontalAlignment="Left" AutomationProperties.Name="Required break in minutes" />
-      <Label Content="_Idle threshold (seconds)" Target="{Binding ElementName=IdleInput}" />
-      <TextBox x:Name="IdleInput" HorizontalAlignment="Left" AutomationProperties.Name="Idle threshold in seconds" />
+      <Label Content="Reminder _inactivity threshold (seconds)" Target="{Binding ElementName=IdleInput}" />
+      <TextBlock Text="Inactivity suppresses reminders. Eligible Personal time still counts; only Work or lock qualifies as a break." TextWrapping="Wrap" Margin="0,0,0,6" />
+      <TextBox x:Name="IdleInput" HorizontalAlignment="Left" AutomationProperties.Name="Reminder inactivity threshold in seconds" />
       <Button Content="Save monitoring settings" Click="SaveDurations" IsEnabled="{Binding CanEdit}" HorizontalAlignment="Left" />
       <Button x:Name="ResetUsageButton" Content="Reset _usage…" Click="ResetUsage" IsEnabled="{Binding CanResetUsage}" HorizontalAlignment="Left" AutomationProperties.HelpText="Requires confirmation. Clears accumulated usage and break progress; preserves settings and Pause." />
       <TextBlock Text="Break reminders" Style="{StaticResource SectionTitle}" />
@@ -93,7 +94,7 @@
       <Button x:Name="SaveRemindersButton" Content="Save reminder preference" Click="SaveReminders" IsEnabled="{Binding CanEditReminders}" HorizontalAlignment="Left" />
       <Label Content="Reminder repeat interval (_minutes, 1–60)" Target="{Binding ElementName=RepeatInput}" />
       <TextBox x:Name="RepeatInput" HorizontalAlignment="Left" AutomationProperties.Name="Reminder repeat interval in whole minutes" IsEnabled="{Binding CanEdit}" />
-      <TextBlock Text="Applies to both reminder styles. Repeats and extra time advance only during counted Personal use. Time on Work or away from the computer doesn't count." Margin="0,0,0,8" />
+      <TextBlock Text="Applies to both reminder styles. Repeats and extra time advance only during counted Personal use. Time on Work or while locked doesn't count. Unlocked Personal time counts even without input." Margin="0,0,0,8" />
       <Button x:Name="SaveRepeatButton" Content="Save reminder repeat interval" Click="SaveRepeat" IsEnabled="{Binding CanEdit}" HorizontalAlignment="Left" />
       <TextBlock Text="Experimental desktop switching" Style="{StaticResource SectionTitle}" />
       <CheckBox x:Name="SwitchingInput" IsEnabled="{Binding CanEditReminders}" AutomationProperties.Name="Allow an explicit Switch to Work attempt from a nudge">

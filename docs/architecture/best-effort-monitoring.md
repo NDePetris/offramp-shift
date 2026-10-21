@@ -83,14 +83,16 @@ Work foreground changes and Work input resumption do not themselves end a break.
 Observed desktop excursions, including change-and-return, invalidate affected
 pending intervals. Undetected excursions remain possible estimation errors.
 
-Idle qualification counts only observed healthy awake time since a fresh baseline
-or valid latest input. Before the configured 60-second threshold, eligible
-Personal time can count. At qualification, intervals split mathematically and
-QualifiedIdle earns break credit directly. Certified Idle retains Core's original
-qualification rules. Startup, retry and restart receive no historical idle credit.
-Temporary gaps freeze qualification; regressing/ambiguous input ticks invalidate it.
-Already-idle startup time is not charged as Personal while fresh qualification
-is accumulated; it is reported unknown and earns no historical break credit.
+PR 11 counts otherwise eligible unlocked Personal intervals regardless of input
+inactivity. Active, Idle and QualifiedIdle follow the same application rules;
+Other and excluded activity earn neither usage nor break. Only verified Work or
+lock earns break credit. The estimator no longer splits or suppresses intervals
+at the inactivity threshold or on ordinary input resumption. Already-idle startup
+requires a fresh valid baseline and counts only subsequent bounded intervals.
+Input capability, valid last-input evidence and discontinuity checks remain
+required. The configured inactivity threshold gates reminder presentation, not
+usage or break qualification. Unknown and suspended time earns no credit.
+No media detection or future policy system is introduced.
 
 Core preserves an incomplete break through at most 5,000 ms consecutive and
 15,000 ms cumulative transient uncertainty. Exactly equal boundaries are allowed;

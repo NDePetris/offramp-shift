@@ -75,8 +75,8 @@ than wrapping. Exhausted usage continues accumulating until reset.
 
 ## Usage and continuous breaks
 
-Only confirmed, active, input-active, classified counted Personal intervals
-consume usage. Work, Other/excluded activity, idle, lock, uncertainty, suspension,
+Only confirmed, unlocked, classified counted Personal intervals consume usage,
+regardless of input inactivity (PR 11). Work, Other/excluded activity, lock, uncertainty, suspension,
 and explicit pause consume none. Usage survives application changes, short
 breaks, restart, and calendar rollover. Allowance exhaustion remains latched.
 
@@ -84,12 +84,12 @@ Breaks are independent from usage:
 
 - Confirmed Work and confirmed lock earn credit immediately. Lock needs known
   desktop scope and monitoring confidence, but not foreground application/input.
-- Confirmed idle outside Work earns credit only after the continuous idle
-  threshold. The first 60 seconds earn no retroactive credit and consume no usage.
-  Work earns break credit even during its initial idle qualification period.
-- Counted Personal and neutral/excluded activity end the break. Idle before its
-  threshold also ends a partial break; qualified idle, Work, and lock can connect
-  when certified coverage is uninterrupted.
+- Input inactivity alone never earns break credit on Personal or Other. Active,
+  Idle and QualifiedIdle use the existing Personal application inclusion/exclusion
+  rules. Unknown input still fails closed for unlocked observations.
+- Counted Personal and neutral/excluded activity end the break, including idle
+  Personal after a partial Work break. Work and lock can connect when verified
+  coverage is uninterrupted, regardless of input activity.
 - Unknown desktop/session/input where required, conflicting/unavailable evidence,
   suspend, rejected intervals, gaps, and explicit pause clear partial continuity.
   Pause freezes usage and all timers, earning no reset credit. Resume starts fresh.
@@ -130,7 +130,7 @@ Its remainder advances during all verified, unpaused monitoring intervals,
 excluding uncertainty and unexplained downtime. Snooze expiry makes a reminder
 due; delivery waits for counted Personal activity. Pause freezes every timer.
 
-Intervals split allowance exhaustion, grace, idle qualification, and snooze
+Intervals split allowance exhaustion, grace, and snooze
 expiry mathematically, including exact boundaries. At most one nudge is emitted
 per interval; missed reminders are coalesced, and the next repeat interval starts
 at that observation's end. No burst of catch-up notifications is produced.
@@ -160,7 +160,8 @@ and state consistency. It restores totals, pause, exhaustion, configuration,
 timer remainders and effect suppression. It discards partial break/idle credit
 and observation baselines, never advancing timers for downtime. A completed-break
 latch is preserved conservatively until evidence ends that qualifying streak;
-requalifying idle after restart does not rearm a completed-break reset.
+legacy idle progress cannot earn new break credit. Historical completed resets
+are retained; they are never reconstructed or retrospectively changed.
 Use restored configuration first; apply an explicit new configuration through
 `ChangeConfiguration` rather than reinterpreting persisted totals.
 

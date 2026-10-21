@@ -89,7 +89,7 @@ internal static class Program
                 Equal(0L, restarted.State.UsageMs);
                 True(restarted.State.BreakCompleted);
                 Equal(sequence, restarted.State.EffectSequence);
-                Equal(0, restarted.Observe(f.Clock.Interval(16, input: InputState.Idle)).Effects.Length);
+                Equal(0, restarted.Observe(f.Clock.Interval(16, DesktopScope.Work, input: InputState.Idle)).Effects.Length);
                 Equal(sequence, restarted.State.EffectSequence);
             });
             Test("snooze and grace suppression survive restart", () =>

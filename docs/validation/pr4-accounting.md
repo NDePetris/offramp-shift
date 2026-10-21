@@ -180,9 +180,11 @@ differences, not paths/titles/URLs or a raw event ledger.
 2. **Work:** Use a fresh store and Work for three minutes, including focus changes
    and input resumption after idle. Require zero Personal usage and qualifying
    break progress without spurious resets. Do not relabel UnknownMs as credit.
-3. **Idle:** Fresh Personal baseline, cease input for at least 90 seconds. Require
-   one sixty-second qualification, eligible Personal time before it, then idle
-   credit; no doubled threshold. Report actual input times and unknown duration.
+3. **Idle (superseded by PR 11):** The original exercise expected idle break
+   qualification. For current builds, use the bounded
+   [PR 11 procedure](pr11-personal-usage.md): eligible unlocked Personal time
+   continues counting without idle break credit. Historical PR 4 evidence above
+   retains its original policy/provenance; do not repeat the broad campaign.
 4. **Transitions:** Manually change Personal/Work/Personal, including a pinned
    foreground window and brief change-and-return. Compare independent totals;
    transition uncertainty earns nothing. Separate ordinary application changes

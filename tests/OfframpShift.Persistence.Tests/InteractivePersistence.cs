@@ -7,6 +7,22 @@ internal static class InteractivePersistence
 {
     internal static void Run()
     {
+        Test("legacy idle progress cannot complete a break after restoration", () =>
+        {
+            using var f = new Fixture();
+            using (var session = f.Session()) session.Observe(f.Clock.Interval(10));
+            var node = JsonNode.Parse(f.Row().Payload)!;
+            node["State"]!["BreakProgressMs"] = 14;
+            node["State"]!["IdleProgressMs"] = 6;
+            f.Payload(node.ToJsonString());
+            f.Clock.Now = new(Guid.NewGuid(), 1_000_000);
+            using var restored = f.Session();
+            Equal(10L, restored.State.UsageMs);
+            Equal(0L, restored.State.BreakProgressMs); Equal(0L, restored.State.IdleProgressMs);
+            var result = restored.Observe(f.Clock.Interval(20, input: InputState.Idle), true);
+            Equal(30L, result.State.UsageMs); Equal(0L, result.State.BreakProgressMs);
+            Equal(0, result.Effects.Count(x => x.Kind == EffectKind.AllowanceReset));
+        });
         foreach (var version in new[] { 1, 2, 3 })
             foreach (var grace in new[] { true, false })
                 Test($"existing v{version} {(grace ? "grace" : "repeat")} restores then adopts shared policy only on Personal evidence", () =>
@@ -60,7 +76,7 @@ internal static class InteractivePersistence
                 using var restored = f.Session();
                 Equal(InterventionState.PersonalDeferred, restored.State.Intervention);
                 Equal(duration, restored.State.SnoozeRemainingMs);
-                Equal(0, restored.Observe(f.Clock.Interval(1), true).Effects.Length);
+                Equal(0, restored.Observe(f.Clock.Interval(1, input: InputState.Idle), true).Effects.Length);
                 Equal(duration - 1, restored.State.SnoozeRemainingMs);
                 True(!restored.DeferInteractive(duration).CheckpointRequired);
             });

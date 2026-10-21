@@ -86,8 +86,11 @@ Both enabled styles prompt at the durably accepted exhaustion boundary, without
 automatic grace, subject to existing sampling, holdback and freshness limits.
 Add 1 minute, Add 5 minutes, X, Escape and Alt+F4 use a distinct durable deferral.
 Extensions and repeats advance only through counted Personal usage. Work, lock,
-idle, neutral, Unknown, Pause and downtime consume none; a qualifying break
+neutral, Unknown, Pause and downtime consume none; a qualifying break
 clears the intervention normally. Usage continues; extra time grants no allowance.
+PR 11 supersedes the original idle exclusion: verified eligible unlocked Personal
+time consumes extensions and repeats even without input. The inactivity threshold
+continues suppressing presentation, without replay on input return.
 Legacy `Snooze()` retains its all-verified-time clock.
 
 Core stores one shared reminder repeat interval: default 60,000 ms, restricted

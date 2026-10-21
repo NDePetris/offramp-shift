@@ -20,7 +20,7 @@ public sealed class IntervalEstimator
     private readonly Queue<Pending> pending = new();
     private EvidencePoint? previous;
     private ProviderHealth? previousHealth;
-    private long idleCoverage, lastSequence, lastCommittedEnd, currentGeneration;
+    private long lastSequence, lastCommittedEnd, currentGeneration;
     private Guid committedEpoch;
     public long EstimatedMs { get; private set; }
     public long UnknownMs { get; private set; }
@@ -109,8 +109,6 @@ public sealed class IntervalEstimator
             scope != priorScope && scope != DesktopScope.Unknown && priorScope != DesktopScope.Unknown;
         if (point.Awake100ns is { } awake && before.Awake100ns is { } priorAwake &&
             (awake < priorAwake || duration - (long)Math.Min((awake - priorAwake) / 10_000, (ulong)long.MaxValue) > 250)) hard = true;
-        var sameInput = point.IdleAgeMs is { } age && before.IdleAgeMs is { } priorAge &&
-            point.UptimeMs - age == before.UptimeMs - priorAge;
         var inputRegressed = point.IdleAgeMs is { } a && before.IdleAgeMs is { } b &&
             point.UptimeMs - a < before.UptimeMs - b;
         hard |= inputRegressed;
@@ -122,40 +120,21 @@ public sealed class IntervalEstimator
             before.SessionHealth == Capability.Available && point.Session is SessionState.Active or SessionState.Locked;
         if (point.Session == SessionState.Active)
         {
-            known &= point.Input == Capability.Available && before.Input == Capability.Available;
+            known &= point.Input == Capability.Available && before.Input == Capability.Available &&
+                point.IdleAgeMs is >= 0 && before.IdleAgeMs is >= 0;
             if (scope == DesktopScope.Personal)
                 known &= point.Foreground == Capability.Available && before.Foreground == Capability.Available &&
                     point.Application is { Verified: true } && point.Application == before.Application && point.Window == before.Window && point.Process == before.Process;
         }
         var start = before.Time;
         var end = point.Time;
-        var idleBefore = idleCoverage;
-        if (known && point.Session == SessionState.Active)
-            idleCoverage = sameInput ? Math.Min(configuration.IdleThresholdMs, idleCoverage + duration) : Math.Min(configuration.IdleThresholdMs, Math.Min(duration, point.IdleAgeMs ?? 0));
-        else if (hard) idleCoverage = 0;
-        if (known && scope != DesktopScope.Work && point.Session == SessionState.Active && !sameInput && idleBefore >= configuration.IdleThresholdMs && configuration.IdleThresholdMs > 0)
-        { known = false; hard = true; }
         if (known)
         {
-            if (point.Session == SessionState.Active && scope != DesktopScope.Work && sameInput)
-            {
-                var untilQualified = Math.Min(duration, Math.Max(0, configuration.IdleThresholdMs - idleBefore));
-                var eligibleActive = Math.Min(untilQualified, Math.Max(0, configuration.IdleThresholdMs - (before.IdleAgeMs ?? 0)));
-                var activeEnd = start with { Milliseconds = start.Milliseconds + eligibleActive };
-                var qualifiedStart = start with { Milliseconds = start.Milliseconds + untilQualified };
-                Enqueue(Estimate(start, activeEnd, InputState.Active));
-                Enqueue(new(activeEnd, qualifiedStart, DesktopScope.Unknown, SessionState.Unknown, null,
-                    InputState.Unknown, MonitoringAvailability.Available, EvidenceConfidence.Unknown)
-                { Continuity = ContinuityDisposition.PreserveTransient });
-                Enqueue(Estimate(qualifiedStart, end, InputState.QualifiedIdle));
-                Reason = untilQualified == duration && eligibleActive == 0 ? "IdleAwaitingMonitoredQualification" : "BoundedEstimate";
-            }
-            else
-            {
-                Enqueue(Estimate(start, end, point.Session == SessionState.Locked ? InputState.Unknown :
-                    idleCoverage >= configuration.IdleThresholdMs ? InputState.QualifiedIdle : InputState.Active));
-                Reason = "BoundedEstimate";
-            }
+            // Inactivity describes input for consumers; it never splits accounting.
+            // Only the fresh observed interval is estimated, including idle startup.
+            Enqueue(Estimate(start, end, point.Session == SessionState.Locked ? InputState.Unknown :
+                point.IdleAgeMs >= configuration.IdleThresholdMs ? InputState.QualifiedIdle : InputState.Active));
+            Reason = "BoundedEstimate";
         }
         else
         {
@@ -210,7 +189,7 @@ public sealed class IntervalEstimator
 
     public void Reset()
     {
-        pending.Clear(); previous = null; previousHealth = null; idleCoverage = 0;
+        pending.Clear(); previous = null; previousHealth = null;
         interrupted = hardInterruption = false;
         Reason = "AwaitingBaseline";
     }

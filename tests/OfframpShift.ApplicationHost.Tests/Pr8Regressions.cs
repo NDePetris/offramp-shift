@@ -27,6 +27,35 @@ internal static class Pr8Regressions
 
     internal static void Run()
     {
+        foreach (var style in new[] { ReminderStyle.InteractiveWindow, ReminderStyle.WindowsNotification })
+            Test($"idle Personal advances committed cadence without presentation or replay: {style}", () =>
+            {
+                using var f = new Fixture(); f.Enable();
+                f.Settings.Save(f.Settings.Load() with { ReminderStyle = style });
+                using (var session = f.Session())
+                    session.ChangeConfiguration(session.Configuration with
+                    { AllowanceMs = 2_000, RequiredBreakMs = 10_000, IdleThresholdMs = 6_000 });
+                using var app = f.App();
+                for (var ms = 0; ms <= 125_000; ms += 1_000)
+                {
+                    // The first observation is already idle. No pre-baseline credit.
+                    f.Source!.IdleAgeMs = 60_000 + ms;
+                    f.Advance(app, ms);
+                    Check(!app.Reminders.TryTake(Environment.TickCount64));
+                    Check(app.Snapshot().State!.BreakProgressMs == 0);
+                }
+                var before = app.Snapshot().State!;
+                Check(before.UsageMs == 124_000 && before.Exhausted && !before.BreakCompleted);
+                Check(before.EffectSequence == 4 && before.ReminderRemainingMs == 58_000);
+                f.Source!.IdleAgeMs = 0;
+                for (var ms = 126_000; ms <= 130_000; ms += 1_000)
+                {
+                    f.Advance(app, ms);
+                    Check(!app.Reminders.TryTake(Environment.TickCount64));
+                }
+                Check(app.Snapshot().State!.UsageMs == 129_000);
+                Check(app.Snapshot().State!.EffectSequence == before.EffectSequence);
+            });
         Test("strict v1 migration preserves every preference and writes v5 only on explicit save", () =>
         {
             using var f = new Fixture(); f.Enable();
