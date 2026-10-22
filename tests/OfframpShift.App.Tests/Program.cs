@@ -262,19 +262,19 @@ internal static class Program
                 }
             }
         });
-        Test("family artwork adapts without recoloring and stays decorative in high contrast", () =>
+        Test("canonical window icons adapt and native context glyph stays decorative in high contrast", () =>
         {
             var window = new MainWindow(_ => Task.FromResult(HostCommandResult.Success()), () => Task.CompletedTask, () => Task.CompletedTask);
             Check(!BrandAssets.IsDark(Brushes.White) && BrandAssets.IsDark(Brushes.Black));
             window.ApplyBrand(false, false);
-            Check(ReferenceEquals(window.FamilySymbol.Source, BrandAssets.Symbol(false)));
+            Check(window.ContextIcon.Text == "\uE7F4");
             Check(ReferenceEquals(window.Icon, BrandAssets.WindowIcon(false)));
             window.ApplyBrand(true, false);
-            Check(ReferenceEquals(window.FamilySymbol.Source, BrandAssets.Symbol(true)));
+            Check(window.ContextIcon.Text == "\uE7F4");
             Check(ReferenceEquals(window.Icon, BrandAssets.WindowIcon(true)));
             window.ApplyBrand(true, true);
-            Check(window.FamilySymbol.Visibility == Visibility.Collapsed && window.Title == "Offramp Shift");
-            Check(UIElementAutomationPeer.CreatePeerForElement(window.FamilySymbol) is null);
+            Check(window.ContextIcon.Visibility == Visibility.Visible && window.Title == "Offramp Shift");
+            Check(!window.ContextIcon.Focusable && UIElementAutomationPeer.CreatePeerForElement(window.ContextIcon) is null);
         });
         Test("native WPF views load bind and expose accessible labels without live monitoring", () =>
         {

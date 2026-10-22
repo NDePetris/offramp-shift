@@ -53,10 +53,8 @@ public partial class MainWindow : Window
         Resources["ShiftAccent"] = highContrast ? SystemColors.WindowTextBrush : Brush(dark ? "#79AFC9" : "#2E5A4F");
         Resources["ShiftTrack"] = highContrast ? SystemColors.ControlBrush : Brush(dark ? "#50675D" : "#E3E3DC");
         Resources["ShiftDivider"] = highContrast ? SystemColors.WindowTextBrush : Brush(dark ? "#50675D" : "#C8BCA7");
-        FamilySymbol.Source = BrandAssets.Symbol(dark);
-        // The decorative mark never overrides high-contrast system colors.
-        // The adjacent native text heading remains the accessible app identity.
-        FamilySymbol.Visibility = highContrast ? Visibility.Collapsed : Visibility.Visible;
+        // Context uses a native monitor glyph; canonical artwork stays in the
+        // window/tray icons and the unchanged reminder surface.
         Icon = BrandAssets.WindowIcon(dark);
     }
 

@@ -26,9 +26,12 @@ WindowsSettings v5, SQLite schema and Core policies remain unchanged.
 `DashboardModel` owns one `CommittedPresentation`. Home and `TraySummary` consume
 its same immutable Ready state/configuration pair, epoch and publication sequence;
 future Diagnostics can use the same projection. No display timer earns usage,
-break credit or reminder progress. Whole minutes floor; positive sub-minute
-values display `<1 min`. Integer formatting supports durations beyond TimeSpan's
-range. PersonalDeferred uses the committed snooze remainder; ordinary Nudging uses
+break credit or reminder progress. Durations of at least one minute retain whole
+minutes (floor). Below one minute, display seconds: earned usage/overage/break
+progress floor, remaining time and configured targets round up. Zero is `0 sec`;
+1 ms remaining is `1 sec`, 999 ms earned is `0 sec`, and 59,999 ms remaining is
+`60 sec` before the 60,000 ms boundary becomes `1 min`. No display clock is added.
+Integer formatting supports durations beyond TimeSpan's range. PersonalDeferred uses the committed snooze remainder; ordinary Nudging uses
 the committed repeat remainder, never concurrently. Legacy Snoozed is not treated
 as PersonalDeferred. Off reminders show no countdown. A due remainder is not proof
 of presentation/delivery.
@@ -90,7 +93,7 @@ All seven required checks passed (exit 0), with warnings as errors:
 
 | Check | Evidence |
 |---|---|
-| `./run.ps1 test` | Core 82 / 40,598 assertions; Persistence 84 / 778; Host 291 / 3,002; WPF 83 / 195; zero failures |
+| `./run.ps1 test` | Core 82 / 40,598 assertions; Persistence 84 / 778; Host 291 / 3,002; WPF 86 / 195; zero failures after owner-feedback corrections |
 | `./run.ps1 format` | Build and verify-no-changes PASS |
 | `./spikes/VirtualDesktop/run.ps1 test` | Fake policy and owned non-COM worker checks PASS |
 | `./spikes/BrowserAttribution/run.ps1 test` | Synthetic policy/extension/registration/transport checks PASS |
@@ -122,17 +125,21 @@ updates and disposal; it does not exercise physical tray-menu interaction.
 It checks initial 440 x 540 DIP dimensions, resize to 400 x 500 and 700 x 700,
 Light/Dark themes and routed overview/detail/Back navigation. It renders actual
 WPF client controls for normal, exhausted, extension, paused, stale, unavailable,
-Work, pending-command and zero-overage latched states. Images exclude system nonclient chrome.
+Work, pending-command, sub-minute and zero-overage latched states. Updated captures
+use PrintWindow on the harness-owned HWND, including system nonclient chrome.
+No desktop screenshot or other application's window is captured. Composited DWM
+decoration may differ from this native print rendering.
 
-Observed local environment: Windows build **26300.9711**, x64 process, **144 DPI / 150%** on
-the selected monitor after layout settlement; DPI is
-recorded by the inspection under `artifacts/pra-screens/environment.txt`. Native
+Observed local environment: Windows build **26300.9711**, x64 process, both connected
+monitors at **144 DPI / 150%** and **96 DPI / 100%**, respectively. DPI is
+recorded under `artifacts/pra-feedback-captures/monitor-*/environment.txt`. Native
 DPI/resize messages are drained before capture. This is automated native-shell
 inspection with synthetic state, not agent-operated live monitoring, physical
 keyboard, tray-menu, switching or Narrator acceptance.
 
-Representative client captures are included below; the full local set is under
-`artifacts/pra-screens`.
+Representative updated native captures are included below; the full local set is
+under `artifacts/pra-feedback-captures`. These replace the original root-visual
+captures, whose margin handling shifted/cropped the right and bottom edges.
 
 | Light Home | Dark Home |
 |---|---|
@@ -142,14 +149,61 @@ Representative client captures are included below; the full local set is under
 |---|---|
 | ![Shown WPF exhausted state with synthetic committed remainders](images/pr-a/light-exhausted.png) | ![Shown WPF retained values with delayed synthetic publication](images/pr-a/light-stale.png) |
 
+| 45-second remainder, 100% display | 45-second remainder, 150% display |
+|---|---|
+| ![Native WPF Home at 440 x 540 DIP on the 100 percent monitor](images/pr-a/subminute-100.png) | ![Native WPF Home at 440 x 540 DIP on the 150 percent monitor](images/pr-a/subminute-150.png) |
+
+![Temporary Desktop setup at minimum size, native 150 percent display](images/pr-a/desktop-minimum-150.png)
+
 A batched
 comparison with the measured mockups found empty qualifier rows consuming space;
 one correction batch collapsed those rows and tightened reminder/break groups.
 Native controls, scrolling and readable text take priority over exact SVG pixels.
-The canonical family symbol remains in the context header, the native gear is a
-Fluent button, and zero-overage exhaustion receives its approved distinct label.
+The context header now uses the approved native Segoe MDL2 monitor glyph. Canonical
+window/tray/reminder artwork is unchanged. The native gear is a Fluent button,
+and zero-overage exhaustion receives its approved distinct label.
 High contrast maps brand resources to system brushes; real Windows contrast-theme
 and accessibility acceptance is still required.
+
+## Owner-feedback corrections — October 22, 2026
+
+The owner's native PR #21 report identified overlapping Home scrollbars and dense
+temporary Settings, requested seconds below one minute, and corrected the context
+icon. No independent review or additional live accounting validation is inferred.
+
+The active Fluent ScrollViewer template puts its content grid in ColumnSpan=2,
+across the scrollbar's Auto column. Before correction, the rendered stale Home's
+content presenter was 385.33 DIP wide and the 12-DIP scrollbar began at 373.33 DIP:
+the regions overlapped. A keyed style applied only to the three main page viewers
+puts the presenter in column 0 and the native scrollbar in column 1 with an 8-DIP
+gutter. After correction, the presenter ends at 365.33 DIP and the scrollbar begins
+at 373.33 DIP. Scrollbars retain native styling, viewport/thumb sizing and scrolling
+behavior; native input/dropdown and reminder scroll viewers are not restyled.
+
+The shown-window inspection checks presenter/content/control bounds, the gutter,
+and successful ScrollToEnd for overflow. At both actual display scales, common
+healthy normal/sub-minute/exhausted/extension and paused Home fits at 440 x 540 DIP
+without scrolling. The footer gap is reduced from 16 to 12 DIP to avoid a 0.06-DIP
+paused-state overflow on the 100% monitor, without hiding information or shrinking
+text. Minimum 400 x 500, long messages and enlarged content retain vertical
+scrolling. All five temporary detail groups were captured and checked at starting
+and minimum sizes, with wrapping for section headings and the closing checkbox.
+All existing settings and operational actions remain accessible.
+
+The inspection additionally enlarges rendered TextBlock fonts by 150% and 200% as
+layout stress, including long operational messages. This is not an exercise of the
+Windows text-size setting. Actual Windows text enlargement, 125%/200% display
+scales, real contrast themes, physical keyboard/Narrator and manual tray interaction
+remain owner validation; no system display/accessibility preferences were changed.
+Geometry/template diagnostics and final screenshots are ignored under
+`artifacts/pra-feedback-*`. Seconds regressions cover zero/subsecond/boundaries,
+earned versus remaining rounding, paused/stale and unchanged-snapshot behavior.
+
+Settings prose density is intentionally deferred to PR B: replace these temporary
+editors with the approved concise grouped detail views, progressive disclosure and
+protected drafts with explicit Save/Back/Cancel/conflict behavior. This follow-up
+does not implement those editors, Diagnostics, reminder styling or any domain-policy,
+persistence, switching or authorization changes.
 
 ## Focused owner checklist — not executed by this record
 

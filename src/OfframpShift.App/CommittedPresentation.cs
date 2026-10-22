@@ -48,6 +48,13 @@ internal sealed class CommittedPresentation
     internal static bool IsFresh(HostSnapshot snapshot, long nowTick) => nowTick >= snapshot.PublishedTick &&
         (ulong)nowTick - (ulong)snapshot.PublishedTick <= 2_000;
 
-    internal static string Duration(long milliseconds) => milliseconds <= 0 ? "0 min" : milliseconds < 60_000 ? "<1 min" :
-        (milliseconds / 60_000).ToString(CultureInfo.CurrentCulture) + " min";
+    internal static string Duration(long milliseconds, bool remaining = false)
+    {
+        if (milliseconds <= 0) return "0 sec";
+        if (milliseconds >= 60_000) return (milliseconds / 60_000).ToString(CultureInfo.CurrentCulture) + " min";
+        // Remaining/target values must not reach zero early; earned time must
+        // not be overstated. Division before addition also avoids overflow.
+        var seconds = milliseconds / 1_000 + (remaining && milliseconds % 1_000 != 0 ? 1 : 0);
+        return seconds.ToString(CultureInfo.CurrentCulture) + " sec";
+    }
 }

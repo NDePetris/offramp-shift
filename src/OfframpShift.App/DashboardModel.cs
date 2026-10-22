@@ -103,10 +103,10 @@ public sealed class DashboardModel : INotifyPropertyChanged
         Persistence = snapshot.Persistence == PersistenceStatus.Ready ? "Accounting saved locally" : $"Accounting storage: {snapshot.Persistence} ({snapshot.StorageFailure})";
         if (committed.Recorded is { State: var state, Configuration: var configuration })
         {
-            Usage = $"{Duration(state.UsageMs)} used of {Duration(configuration.AllowanceMs)} allowance";
+            Usage = $"{Duration(state.UsageMs)} used of {CommittedPresentation.Duration(configuration.AllowanceMs, remaining: true)} allowance";
             Confidence = $"Estimated portion: {Duration(state.EstimatedUsageMs)}. Unknown time earns no usage or break credit.";
             Break = state.BreakCompleted ? "Break completed; allowance reset" :
-                $"{Duration(state.BreakProgressMs)} of {Duration(configuration.RequiredBreakMs)} qualifying break";
+                $"{Duration(state.BreakProgressMs)} of {CommittedPresentation.Duration(configuration.RequiredBreakMs, remaining: true)} qualifying break";
             Advisory = state.Exhausted ? snapshot.Available && !stale && !state.Paused && snapshot.Settings.MonitoringEnabled ?
                 state.Intervention == OfframpShift.Core.InterventionState.PersonalDeferred ? "Extra Personal time active; usage continues." :
                 state.Intervention == OfframpShift.Core.InterventionState.Snoozed ? "Reminders snoozed; usage continues." :
@@ -186,17 +186,17 @@ public sealed class DashboardModel : INotifyPropertyChanged
         var over = Math.Max(0, state.UsageMs - config.AllowanceMs);
         ShowUsageProgress = !state.Exhausted;
         HeroLabel = state.Exhausted ? over > 0 ? "Over allowance" : "Allowance exhausted" : "Personal time remaining";
-        HeroValue = state.Exhausted && over == 0 ? "—" : CommittedPresentation.Duration(state.Exhausted ? over : Math.Max(0, config.AllowanceMs - state.UsageMs));
-        Arithmetic = $"{CommittedPresentation.Duration(state.UsageMs)} used · {CommittedPresentation.Duration(config.AllowanceMs)} allowance";
+        HeroValue = state.Exhausted && over == 0 ? "—" : CommittedPresentation.Duration(state.Exhausted ? over : Math.Max(0, config.AllowanceMs - state.UsageMs), remaining: !state.Exhausted);
+        Arithmetic = $"{CommittedPresentation.Duration(state.UsageMs)} used · {CommittedPresentation.Duration(config.AllowanceMs, remaining: true)} allowance";
         ShowExhaustionExplanation = state.Exhausted && over == 0;
-        BreakValue = $"{CommittedPresentation.Duration(state.BreakProgressMs)} of {CommittedPresentation.Duration(config.RequiredBreakMs)}";
+        BreakValue = $"{CommittedPresentation.Duration(state.BreakProgressMs)} of {CommittedPresentation.Duration(config.RequiredBreakMs, remaining: true)}";
         BreakExplanation = state.BreakCompleted ? "Break completed; allowance reset" : held ? "Last recorded qualifying break" :
             currentContext && snapshot.Context == DesktopScope.Work ? "Verified Work time contributes to your break" : "Qualifying break progress";
         if (state.Exhausted && snapshot.Settings.ReminderStyle != ReminderStyle.Off &&
             state.Intervention is InterventionState.PersonalDeferred or InterventionState.Nudging)
         {
             ReminderLabel = state.Intervention == InterventionState.PersonalDeferred ? "Extra Personal time remaining" : "Next reminder";
-            ReminderValue = CommittedPresentation.Duration(state.Intervention == InterventionState.PersonalDeferred ? state.SnoozeRemainingMs : state.ReminderRemainingMs);
+            ReminderValue = CommittedPresentation.Duration(state.Intervention == InterventionState.PersonalDeferred ? state.SnoozeRemainingMs : state.ReminderRemainingMs, remaining: true);
         }
     }
     private static string AssignmentText(string role, Guid? id, AssignmentStatus status) => role + " desktop: " +

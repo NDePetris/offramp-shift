@@ -26,9 +26,56 @@ internal static class PresentationRegressions
             Check(model.HeroLabel == "Allowance exhausted" && model.ShowExhaustionExplanation && model.HeroValue == "—");
             Check(model.Tray.Tooltip == "Allowance exhausted");
             model.Apply(value with { State = value.State! with { UsageMs = value.Configuration.AllowanceMs - 1 } }, value.PublishedTick);
-            Check(model.HeroValue == "<1 min");
+            Check(model.HeroValue == "1 sec");
             Check(DashboardModel.Duration(long.MaxValue).EndsWith(" min", StringComparison.Ordinal));
-            Check(TraySummary.Duration(0) == "0 min" && TraySummary.Duration(1) == "<1 min");
+            Check(TraySummary.Duration(0) == "0 sec" && TraySummary.Duration(1) == "0 sec");
+        });
+        test("seconds use conservative role-based rounding and preserve minute boundaries", () =>
+        {
+            foreach (var item in new (long Ms, string Earned, string Remaining)[] {
+                (0L, "0 sec", "0 sec"),
+                (1L, "0 sec", "1 sec"), (999L, "0 sec", "1 sec"),
+                (1_000L, "1 sec", "1 sec"), (1_001L, "1 sec", "2 sec"),
+                (9_000L, "9 sec", "9 sec"), (45_000L, "45 sec", "45 sec"),
+                (59_000L, "59 sec", "59 sec"), (59_001L, "59 sec", "60 sec"),
+                (59_999L, "59 sec", "60 sec"), (60_000L, "1 min", "1 min"),
+                (60_001L, "1 min", "1 min"), (119_999L, "1 min", "1 min"), (120_000L, "2 min", "2 min") })
+            {
+                Check(CommittedPresentation.Duration(item.Ms) == item.Earned);
+                Check(CommittedPresentation.Duration(item.Ms, remaining: true) == item.Remaining);
+            }
+        });
+        test("seconds stay committed through pause and stale updates and agree across Home and tray", () =>
+        {
+            var model = new DashboardModel(); var seed = snapshot();
+            var value = seed with
+            {
+                Configuration = seed.Configuration! with { AllowanceMs = 60_000, RequiredBreakMs = 45_001 },
+                State = seed.State! with { UsageMs = 15_001, BreakProgressMs = 9_999 },
+                Settings = seed.Settings with { ReminderStyle = ReminderStyle.InteractiveWindow }
+            };
+            model.Apply(value, value.PublishedTick);
+            Check(model.HeroValue == "45 sec" && model.Arithmetic == "15 sec used · 1 min allowance" && model.BreakValue == "9 sec of 46 sec");
+            Check(model.Tray.Allowance.Contains("45 sec") && model.Tray.Break.Contains("9 sec of 46 sec"));
+            foreach (var paused in new[] { false, true })
+            {
+                var held = value with { State = value.State with { Paused = paused } };
+                foreach (var tick in new[] { value.PublishedTick, value.PublishedTick + 1_999, value.PublishedTick + 2_001, value.PublishedTick + 90_000 })
+                {
+                    model.Apply(held, tick);
+                    Check(model.HeroValue == "45 sec" && model.BreakValue == "9 sec of 46 sec" && model.Snapshot!.State!.UsageMs == 15_001);
+                    Check(model.Tray.Allowance.Contains(model.HeroValue));
+                }
+            }
+            foreach (var intervention in new[] { InterventionState.Nudging, InterventionState.PersonalDeferred })
+            {
+                var next = value with { State = value.State with { Exhausted = true, UsageMs = 60_999, Intervention = intervention, ReminderRemainingMs = 9_001, SnoozeRemainingMs = 45_001 } };
+                model.Apply(next, value.PublishedTick);
+                Check(model.HeroLabel == "Over allowance" && model.HeroValue == "0 sec");
+                Check(model.ReminderValue == (intervention == InterventionState.Nudging ? "10 sec" : "46 sec"));
+                model.Apply(next, value.PublishedTick + 10_000);
+                Check(model.ReminderValue == (intervention == InterventionState.Nudging ? "10 sec" : "46 sec"));
+            }
         });
         test("committed extension and repeat are exclusive and never extrapolate", () =>
         {
@@ -128,6 +175,29 @@ internal static class PresentationRegressions
 
     internal static void Views(Action<string, Action> test, Func<HostSnapshot> snapshot)
     {
+        test("overflowing Home and legacy settings reserve a gutter and remain scrollable", () =>
+        {
+            var window = new MainWindow(_ => Task.FromResult(HostCommandResult.Success()), () => Task.CompletedTask, () => Task.CompletedTask);
+            window.Apply(snapshot() with { Available = false, Detail = string.Join(" ", Enumerable.Repeat("Observations unavailable. Recorded values are retained; review monitoring.", 12)) });
+            var root = (FrameworkElement)window.Content;
+            void Arrange()
+            { root.Measure(new(360, 400)); root.Arrange(new(0, 0, 360, 400)); root.UpdateLayout(); }
+            void Verify(ScrollViewer viewer)
+            {
+                Arrange(); ScrollLayoutChecks.Clearance(viewer);
+                if (viewer.ComputedVerticalScrollBarVisibility != Visibility.Visible) throw new InvalidOperationException("Overflow was not scrollable.");
+                viewer.ScrollToEnd(); viewer.UpdateLayout(); viewer.UpdateLayout();
+                if (viewer.VerticalOffset <= 0) throw new InvalidOperationException("ScrollToEnd failed.");
+                ScrollLayoutChecks.Clearance(viewer);
+            }
+            Verify(window.HomePage);
+            window.OpenSettings();
+            ((Panel)window.SettingsOverview.Content).Children.OfType<Button>().First(button => (string)button.Tag == "Desktop")
+                .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Verify(window.SettingsDetail);
+            if (window.ConsentButton.ContentTemplate is null || ((TextBlock)window.CloseInput.Content).TextWrapping != TextWrapping.Wrap)
+                throw new InvalidOperationException("Temporary settings must retain wrapped control labels.");
+        });
         test("compact native shell routes overview and details while preserving existing editors", () =>
         {
             var window = new MainWindow(_ => Task.FromResult(HostCommandResult.Success()), () => Task.CompletedTask, () => Task.CompletedTask);
