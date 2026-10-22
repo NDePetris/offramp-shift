@@ -98,26 +98,40 @@ Test("completed break resets once, then counted Personal rearms", () =>
     Equal(0, f.Send(50, DesktopScope.Work).Effects.Length);
     f.Send(2); Equal(1, Effects(f.Send(15, DesktopScope.Work), EffectKind.AllowanceReset));
 });
-Test("idle boundary earns only time after threshold", () =>
+Test("Personal inactivity beyond idle and break thresholds keeps counting without reset", () =>
 {
-    var f = new Fixture(); f.Send(8);
-    f.Send(5, input: InputState.Idle); Equal(0L, f.Engine.State.BreakProgressMs);
-    f.Send(1, input: InputState.Idle); Equal(0L, f.Engine.State.BreakProgressMs);
-    f.Send(14, input: InputState.Idle); Equal(14L, f.Engine.State.BreakProgressMs); Equal(8L, f.Engine.State.UsageMs);
-    f.Send(1, input: InputState.Idle); Equal(0L, f.Engine.State.UsageMs);
-    Equal(0, f.Send(30, input: InputState.Idle).Effects.Length);
+    foreach (var threshold in new[] { 0L, 6L, 100L })
+    {
+        var f = new Fixture(Fixture.Small with { IdleThresholdMs = threshold }); f.Send(8);
+        for (var i = 0; i < 200; i++)
+        {
+            var result = f.Send(1, input: InputState.Idle);
+            Equal(0L, result.State.BreakProgressMs); Check(!result.State.BreakCompleted);
+            Equal(0, Effects(result, EffectKind.AllowanceReset));
+        }
+        Equal(208L, f.Engine.State.UsageMs);
+    }
 });
-Test("idle qualification inside a single certified interval", () =>
+Test("Work active and idle both reset once", () =>
 {
-    var f = new Fixture(); f.Send(8); f.Send(20, input: InputState.Idle);
-    Equal(14L, f.Engine.State.BreakProgressMs); Equal(8L, f.Engine.State.UsageMs);
-    f.Send(1, input: InputState.Idle); Equal(0L, f.Engine.State.UsageMs);
+    foreach (var input in new[] { InputState.Active, InputState.Idle, InputState.QualifiedIdle })
+    {
+        var f = new Fixture(); f.Send(3);
+        Equal(1, Effects(f.Send(15, DesktopScope.Work, input), EffectKind.AllowanceReset));
+        Equal(0, f.Send(30, DesktopScope.Work, input).Effects.Length);
+    }
 });
-Test("zero idle threshold and Work idle priority", () =>
+Test("idle Other and excluded Personal never earn usage or break", () =>
 {
-    var f = new Fixture(Fixture.Small with { IdleThresholdMs = 0 }); f.Send(3); f.Send(15, input: InputState.Idle);
-    Equal(0L, f.Engine.State.UsageMs);
-    f = new Fixture(); f.Send(3); f.Send(15, DesktopScope.Work, InputState.Idle); Equal(0L, f.Engine.State.UsageMs);
+    foreach (var input in new[] { InputState.Active, InputState.Idle, InputState.QualifiedIdle })
+        foreach (var scope in new[] { DesktopScope.Personal, DesktopScope.Other })
+        {
+            var f = new Fixture(Fixture.Small with { Applications = ["excluded"] });
+            f.Send(4); f.Send(14, DesktopScope.Work);
+            var result = f.Send(100, scope, input, app: new("excluded", true));
+            Equal(ActivityKind.Neutral, result.Activity); Equal(4L, result.State.UsageMs);
+            Equal(0L, result.State.BreakProgressMs); Equal(0, result.Effects.Length);
+        }
 });
 Test("lock earns immediately, unlock continues only qualifying activity", () =>
 {
@@ -129,7 +143,7 @@ Test("lock earns immediately, unlock continues only qualifying activity", () =>
 Test("idle below threshold cannot bridge a Work break", () =>
 {
     var f = new Fixture(); f.Send(4); f.Send(14, DesktopScope.Work); f.Send(6, input: InputState.Idle);
-    Equal(0L, f.Engine.State.BreakProgressMs); f.Send(1, input: InputState.Idle); Equal(1L, f.Engine.State.BreakProgressMs);
+    Equal(0L, f.Engine.State.BreakProgressMs); f.Send(1, input: InputState.Idle); Equal(0L, f.Engine.State.BreakProgressMs); Equal(11L, f.Engine.State.UsageMs);
 });
 Test("pause freezes usage/timers and invalidates partial break", () =>
 {
@@ -164,8 +178,8 @@ Test("zero grace nudges at exact exhaustion", () =>
 Test("grace and repeat use only counted Personal time", () =>
 {
     var f = new Fixture(); f.Send(30); f.Send(5, DesktopScope.Work); f.Send(5, DesktopScope.Other);
-    f.Send(5, input: InputState.Idle); Equal(6L, f.Engine.State.ReminderRemainingMs);
-    f.Send(6); Equal(InterventionState.Nudging, f.Engine.State.Intervention);
+    f.Send(5, input: InputState.Idle); Equal(1L, f.Engine.State.ReminderRemainingMs);
+    f.Send(1); Equal(InterventionState.Nudging, f.Engine.State.Intervention);
     f.Send(5, DesktopScope.Work); f.Send(5, DesktopScope.Other); Equal(10L, f.Engine.State.ReminderRemainingMs);
     Equal(0, f.Send(9).Effects.Length); Equal(1, Effects(f.Send(1), EffectKind.Nudge));
 });
@@ -360,18 +374,16 @@ Test("completed-break latch survives recovery", () =>
     var f = new Fixture(); f.Send(5); f.Send(15, DesktopScope.Work); var checkpoint = f.Engine.CreateCheckpoint(); f.Restart(checkpoint);
     Equal(0, f.Send(30, DesktopScope.Work).Effects.Length); f.Send(1); Equal(1, Effects(f.Send(15, DesktopScope.Work), EffectKind.AllowanceReset));
 });
-Test("idle and locked completed-break latches survive recovery", () =>
+Test("Work and locked completed-break latches survive recovery", () =>
 {
-    foreach (var idle in new[] { false, true })
+    foreach (var locked in new[] { false, true })
     {
         var f = new Fixture(); f.Send(5);
-        f.Send(idle ? 21 : 15, input: idle ? InputState.Idle : InputState.Unknown,
-            session: idle ? SessionState.Active : SessionState.Locked);
+        f.Send(15, DesktopScope.Work, session: locked ? SessionState.Locked : SessionState.Active);
         f.Restart(f.Engine.CreateCheckpoint());
-        var result = f.Send(30, input: idle ? InputState.Idle : InputState.Unknown,
-            session: idle ? SessionState.Active : SessionState.Locked);
+        var result = f.Send(30, DesktopScope.Work, session: locked ? SessionState.Locked : SessionState.Active);
         Equal(0, result.Effects.Length); Check(result.State.BreakCompleted);
-        f.Send(1); Equal(1L, f.Engine.State.UsageMs);
+        f.Send(1, input: InputState.Idle); Equal(1L, f.Engine.State.UsageMs);
     }
 });
 Test("paused checkpoint remains paused after restart", () =>

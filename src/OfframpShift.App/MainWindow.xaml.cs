@@ -126,7 +126,7 @@ public partial class MainWindow : Window
         if (!ParseDuration(AllowanceInput.Text, 60_000, false, out var allowance) ||
             !ParseDuration(BreakInput.Text, 60_000, false, out var requiredBreak) ||
             !ParseDuration(IdleInput.Text, 1_000, true, out var idle))
-        { SettingsResult.Text = "Enter positive allowance and break durations and a nonnegative idle threshold, with millisecond precision or less."; return; }
+        { SettingsResult.Text = "Enter positive allowance and break durations and a nonnegative reminder inactivity threshold, with millisecond precision or less."; return; }
         await Run(new(HostCommandKind.ChangeDurations) { AllowanceMs = allowance, RequiredBreakMs = requiredBreak, IdleThresholdMs = idle });
     }
     private async void SaveAppearance(object sender, RoutedEventArgs e) => await Run(new(HostCommandKind.ChangeAppearance)

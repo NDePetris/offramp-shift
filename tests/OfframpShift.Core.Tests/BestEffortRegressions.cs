@@ -17,15 +17,15 @@ internal static class BestEffortRegressions
             check(f.Send(100).State.UsageMs == 1_100 && f.Engine.State.EstimatedUsageMs == 1_000);
             check(f.Send(1_501, confidence: EvidenceConfidence.Estimated).State.UsageMs == 1_100);
         });
-        test("estimated idle does not require another sixty seconds", () =>
+        test("estimated and certified idle follow Personal application rules", () =>
         {
             var f = Make();
             f.Send(1_000, confidence: EvidenceConfidence.Estimated);
             var idle = f.Send(1_000, input: InputState.QualifiedIdle, confidence: EvidenceConfidence.Estimated);
-            check(idle.State.UsageMs == 1_000 && idle.State.BreakProgressMs == 1_000);
-            check(f.Send(1_000, input: InputState.Idle, confidence: EvidenceConfidence.Estimated).Activity == ActivityKind.Uncertain);
+            check(idle.State.UsageMs == 2_000 && idle.State.BreakProgressMs == 0);
+            check(f.Send(1_000, input: InputState.Idle, confidence: EvidenceConfidence.Estimated).Activity == ActivityKind.CountedPersonal);
             var strict = new Fixture();
-            check(strict.Send(1, input: InputState.QualifiedIdle).Activity == ActivityKind.Uncertain);
+            check(strict.Send(1, input: InputState.QualifiedIdle).Activity == ActivityKind.CountedPersonal);
         });
         test("estimated receipt age accepts two seconds exactly and rejects one extra millisecond", () =>
         {

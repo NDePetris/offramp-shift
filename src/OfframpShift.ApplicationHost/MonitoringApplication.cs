@@ -305,7 +305,7 @@ internal sealed class MonitoringApplication : IDisposable
             $"Foreground identity unavailable: {point.ForegroundFailure}. This interval earns no credit." :
             state!.Paused ? "Monitoring is paused. Usage and break progress do not advance." :
             !available ? "Waiting for fresh healthy observations. Unknown time earns no usage or break credit." :
-            runtime?.Reason != "BoundedEstimate" && CanAccount ? "Waiting for fresh interval evidence or idle qualification. Transition, stale and unknown intervals earn no credit." :
+            runtime?.Reason != "BoundedEstimate" && CanAccount ? "Waiting for fresh interval evidence. Transition, stale and unknown intervals earn no credit." :
             "Estimated monitoring; owner evaluation only. Explorer recovery and sustained accounting reliability remain unresolved.";
         return new(++sequence, Environment.TickCount64, session.Status, session.Failure, settingsStore.Status, settings,
             state, config, context, status, message.Length > 0 ? message + " " + detail : detail,

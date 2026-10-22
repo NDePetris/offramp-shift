@@ -178,6 +178,27 @@ See the validation closeout for the #9 follow-up recommendation. No accounting
 or timer policy changes are inferred. Any presentation-caused desktop switch
 remains a blocker; existing NO-GO gates, read-only build restrictions and recovery remain.
 
+## Personal usage accounting (PR 11)
+
+Verified, unlocked, otherwise eligible Personal desktop presence consumes usage,
+including video playback or an unattended desktop beyond the inactivity and break
+durations. Existing application rules still apply. Only verified Work/lock time
+qualifies for a break; idle on Personal or Other never qualifies. Paused, unknown,
+unavailable, unsupported and suspended time earns neither credit. Continuity,
+fresh baselines, holdback and all native evidence gates remain unchanged.
+
+Idle Personal also consumes Personal-only extensions and advances Core repeat
+cadence. The configured **Reminder inactivity threshold** still suppresses
+presentation; committed effects can be suppressed and never replay on input
+resumption. No new timers, accounting owner or focus authorization are added.
+Saving durations retains its existing unfinished-break invalidation behavior.
+
+Checkpoint v3, SQLite schema 1 and Windows settings v5 are unchanged. Existing
+usage, exhaustion, extensions and completed-break latches restore as before;
+unfinished break/idle continuity is discarded. Legacy idle fields remain readable
+but cannot grant break credit. No history is rewritten or downtime charged.
+See [PR 11 validation and owner procedure](../validation/pr11-personal-usage.md).
+
 ## Break reminders and manual usage reset (PR 8 baseline)
 
 Break reminders are opt-in and default off. They consume only newly committed

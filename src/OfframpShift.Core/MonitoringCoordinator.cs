@@ -144,6 +144,7 @@ public sealed class MonitoringCoordinator
                 if (left == 0) state = state with { Intervention = InterventionState.Nudging, ReminderRemainingMs = 0 };
             }
 
+            // Retained serialized diagnostic state only; never qualifies a break.
             var idleBefore = state.IdleProgressMs;
             state = state with
             {
@@ -161,14 +162,6 @@ public sealed class MonitoringCoordinator
                 case ActivityKind.Work:
                 case ActivityKind.Locked:
                     EarnBreak(duration, effects);
-                    break;
-                case ActivityKind.Idle:
-                    var qualificationRemaining = observation.Input == InputState.QualifiedIdle ? 0 : configuration.IdleThresholdMs - idleBefore;
-                    // A restored completed break needs no new credit. Keep its latch
-                    // while idle is requalified so restart cannot repeat that reset.
-                    if (qualificationRemaining > 0 && !state.BreakCompleted) ClearBreak();
-                    if (duration > qualificationRemaining)
-                        EarnBreak(duration - qualificationRemaining, effects);
                     break;
                 default:
                     ClearBreak();

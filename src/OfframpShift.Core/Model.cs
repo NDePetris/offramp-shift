@@ -50,6 +50,7 @@ public sealed record MonitoringConfiguration
 {
     public long AllowanceMs { get; init; } = 30 * 60_000;
     public long RequiredBreakMs { get; init; } = 15 * 60_000;
+    // Reminder presentation inactivity threshold; no usage or break qualification.
     public long IdleThresholdMs { get; init; } = 60_000;
     public long GraceMs { get; init; } = 60_000;
     public long RepeatNudgeMs { get; init; } = 10 * 60_000;
@@ -85,15 +86,12 @@ public static class ApplicationClassifier
             !Enum.IsDefined(observation.Input) || observation.Availability != MonitoringAvailability.Available ||
             (observation.Confidence != EvidenceConfidence.Confirmed &&
                 !(observation.Confidence == EvidenceConfidence.Estimated && configuration.Accounting == AccountingMode.BestEffort)) ||
-            observation.Desktop == DesktopScope.Unknown ||
-            (observation.Input == InputState.QualifiedIdle && observation.Confidence != EvidenceConfidence.Estimated) ||
-            (observation.Input == InputState.Idle && observation.Confidence == EvidenceConfidence.Estimated))
+            observation.Desktop == DesktopScope.Unknown)
             return ActivityKind.Uncertain;
         if (observation.Session == SessionState.Locked) return ActivityKind.Locked;
         if (observation.Session != SessionState.Active || observation.Input == InputState.Unknown)
             return ActivityKind.Uncertain;
         if (observation.Desktop == DesktopScope.Work) return ActivityKind.Work;
-        if (observation.Input is InputState.Idle or InputState.QualifiedIdle) return ActivityKind.Idle;
         if (observation.Desktop == DesktopScope.Other) return ActivityKind.Neutral;
         if (observation.Application is not { Verified: true } app || string.IsNullOrWhiteSpace(app.Key))
             return ActivityKind.Uncertain;

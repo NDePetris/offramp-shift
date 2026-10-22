@@ -23,17 +23,24 @@ internal static class EstimatorRegressions
             e.Point(Point(2_000), health);
             check(e.Finalize(new(epoch, 5_001), health).Single().Confidence == EvidenceConfidence.Unknown);
         });
-        test("idle qualification splits at threshold once and cannot use startup history", () =>
+        test("already-idle startup counts only fresh Personal intervals across threshold and input return", () =>
         {
-            var e = Make();
-            e.Point(Point(10_000), health); e.Point(Point(11_000), health); e.Point(Point(12_000), health);
-            var before = e.Finalize(new(epoch, 12_000), health).Single();
-            check(before.Confidence == EvidenceConfidence.Unknown);
-            e.Point(Point(13_000), health);
-            var second = e.Finalize(new(epoch, 13_000), health).Single();
-            check(second.Confidence == EvidenceConfidence.Unknown);
-            e.Point(Point(14_000), health);
-            check(e.Finalize(new(epoch, 14_000), health).Single().Input == InputState.QualifiedIdle);
+            var e = Make(); e.Point(Point(10_000), health);
+            check(e.Finalize(new(epoch, 10_000), health).Count == 0);
+            var clock = new FakeClock { Now = new(epoch, 10_000) };
+            var engine = new MonitoringCoordinator(clock, configuration);
+            for (var ms = 11_000; ms <= 20_000; ms += 1_000)
+            {
+                clock.Now = new(epoch, ms);
+                e.Point(Point(ms, lastInput: ms >= 18_000 ? 17_500 : 0), health);
+                foreach (var observation in e.Finalize(clock.Now, health))
+                {
+                    check(observation.Confidence == EvidenceConfidence.Estimated);
+                    check(engine.Observe(observation).Activity == ActivityKind.CountedPersonal);
+                }
+            }
+            check(engine.State.UsageMs == 9_000 && engine.State.BreakProgressMs == 0);
+            check(e.UnknownMs == 0);
         });
         test("rapid foreground change and return cannot become matching-endpoint activity", () =>
         {
