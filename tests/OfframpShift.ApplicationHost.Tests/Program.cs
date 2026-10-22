@@ -316,6 +316,7 @@ internal static class Program
             Check(File.ReadAllText(path) == "{\"Version\":999}"); Check(f.ProviderCreates == 0);
         });
         Pr8Regressions.Run();
+        PresentationEpochRegressions.Run();
         InteractiveHostRegressions.Run();
         SwitchRegressions.Run();
         SwitchPolicyRegressions.Run();

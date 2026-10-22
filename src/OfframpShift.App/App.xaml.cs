@@ -16,6 +16,7 @@ public partial class ShiftApplication : Application
     private int actionsInFlight;
     private AppTheme? theme;
     private NudgePresenter? nudges;
+    private readonly CommandCoordinator commands = new();
     public ShiftApplication() { InitializeComponent(); }
     internal ShiftApplication(SingleInstance instance) : this() { this.instance = instance; }
     protected override void OnStartup(StartupEventArgs e)
@@ -23,6 +24,12 @@ public partial class ShiftApplication : Application
         base.OnStartup(e);
         controller = WindowsApplication.Start();
         window = new(Execute, ExitAsync, CloseAsync); MainWindow = window;
+        commands.Changed += () =>
+        {
+            window.Model.SetCommandPending(commands.IsPending);
+            window.ReportAction(commands.Message);
+            if (window.Model.Snapshot is { } current) tray?.Apply(current, window.Model);
+        };
         nudges = new(command => command.Kind is HostCommandKind.BeginNudgePresentation or HostCommandKind.CompleteNudgePresentation ? controller.ExecuteAsync(command) : Execute(command),
             () => controller.Completion.IsCompleted || exiting ? null : controller.Latest,
             detail => { window.ReportAction(detail); tray?.ReportNudgeFailure(detail); }, new NudgePlatform(),
@@ -42,13 +49,14 @@ public partial class ShiftApplication : Application
     {
         if (window is null || exiting) return;
         window.Show(); if (window.WindowState == WindowState.Minimized) window.WindowState = WindowState.Normal;
-        if (settings) window.Navigation.SelectedIndex = 1;
+        if (settings) window.OpenSettings();
         window.Activate();
     }
     private void Refresh()
     {
         if (controller is null || window is null) return;
         RefreshBrand();
+        commands.RefreshWaiting();
         if (controller.Latest is not { } value)
         {
             if (controller.Completion.IsCompleted)
@@ -80,7 +88,7 @@ public partial class ShiftApplication : Application
     private void RefreshBrand()
     {
         if (window is null) return;
-        var dark = BrandAssets.IsDark(window.Background);
+        var dark = BrandAssets.IsDark(window.TryFindResource("WindowBackground") as System.Windows.Media.Brush);
         window.ApplyBrand(dark, SystemParameters.HighContrast); tray?.ApplyBrand(dark);
     }
     // The framework Fluent theme selector remains evaluation-marked in .NET 10.
@@ -91,6 +99,15 @@ public partial class ShiftApplication : Application
 #pragma warning restore WPF0001
     private async Task<HostCommandResult> Execute(HostCommand command)
     {
+        // Keep the nudge's durable deferral transaction and reporting path intact.
+        if (command.Kind == HostCommandKind.DeferInteractive) return await ExecuteHost(command);
+        if (commands.IsPending) return HostCommandResult.Failure("An action is already awaiting confirmation.");
+        var result = await commands.ExecuteAsync(command, ExecuteHost);
+        tray?.ReportActionResult(command, result);
+        return result;
+    }
+    private async Task<HostCommandResult> ExecuteHost(HostCommand command)
+    {
         if (controller is null || exiting) return HostCommandResult.Failure("The app is stopping.");
         actionsInFlight++;
         try
@@ -98,8 +115,8 @@ public partial class ShiftApplication : Application
             var result = await controller.ExecuteAsync(command);
             // NudgePresenter reports actionable deferral failures once, after
             // distinguishing a failed save from automatic context closure.
-            if (command.Kind != HostCommandKind.DeferInteractive || result.Succeeded)
-                window?.ReportAction(result.Message.Length == 0 ? "Saved action completed." : result.Message);
+            if (command.Kind == HostCommandKind.DeferInteractive && result.Succeeded)
+                window?.ReportAction(result.Message.Length == 0 ? "Extra Personal time saved." : result.Message);
             Refresh(); return result;
         }
         finally { actionsInFlight--; }

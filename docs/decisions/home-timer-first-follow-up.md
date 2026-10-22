@@ -1,5 +1,12 @@
 # Home timer-first follow-up — deferred beyond PR 9
 
+October 22, 2026: the approved redesign's PR A implements this presentation on
+merged Personal Usage Accounting baseline `81d9aab`. The title below retains the
+historical PR 9 scope decision. See [PR A](../validation/pr-a-timer-first-home.md)
+for the current contract, including distinct latched-zero-overage exhaustion,
+shared retained values and validation limits. Diagnostics/settings drafts and
+reminder styling remain later slices; no accounting policy is changed here.
+
 Owner requirements captured October 16, 2026. Recommended tracking: a dedicated
 subsequent GitHub issue and cohesive Home UI PR. This is not PR 9 implementation
 scope and does not approve a new timing/accounting model.

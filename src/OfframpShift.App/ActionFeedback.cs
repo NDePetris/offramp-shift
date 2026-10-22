@@ -30,6 +30,10 @@ internal sealed class TrayActionFeedback
     internal async Task<bool> ExecuteAsync(HostCommand command, Func<HostCommand, Task<HostCommandResult>> execute)
     {
         var result = await execute(command);
+        return Record(command, result);
+    }
+    internal bool Record(HostCommand command, HostCommandResult result)
+    {
         if (result.Succeeded)
         {
             if (failedCommand == command.Kind) Dismiss();

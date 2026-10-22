@@ -23,6 +23,17 @@ for the subsequent focused UI changes.
 
 ## Ownership
 
+PR A adds a compact timer-first Home and Home/Settings overview/detail shell.
+`DashboardModel` owns the shared in-memory committed presentation pair used by
+Home/tray; the owner publishes a process-local `AccountingPresentationEpoch` before
+accounting replacement/reset/reassignment/reopen/retry boundaries. Only Ready
+state/configuration pairs populate the cache; epoch changes and terminal ownership
+invalidate obsolete values. The ordinary UI command coordinator provides pending,
+delayed and explicit-result feedback without replacing host or nudge transactions.
+Existing settings editors remain temporary; protected drafts/conflicts and optional
+Diagnostics are PR B, reminder visual changes PR C. See
+[the PR A contract and validation](../validation/pr-a-timer-first-home.md).
+
 `OfframpShift.ApplicationHost` references ActivityMonitoring, WindowsObservation
 and Persistence. PR 8 adds an explicit durable Core usage-reset operation; the
 checkpoint format is now version 3 for PR 9 interactive cadence. The probe
