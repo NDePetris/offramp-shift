@@ -13,6 +13,8 @@ public sealed record HostSnapshot(long Sequence, long PublishedTick, Persistence
     bool CanKeepNudgeOpen = false, long ReminderGeneration = 0, Guid ReminderEpoch = default,
     string ReminderStatus = "No committed nudge event yet.", Guid PresentationId = default)
 {
+    // Process-local presentation boundary; never persisted or used for eligibility.
+    public Guid AccountingPresentationEpoch { get; init; }
     public string SwitchingUnavailableReason { get; init; } = "Switching availability is unknown.";
 }
 

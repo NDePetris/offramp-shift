@@ -17,7 +17,8 @@ public partial class MainWindow : Window
         "This cannot be undone. Your monitoring settings and Pause state will stay the same.";
     private MonitoringConfiguration? displayedConfiguration;
     private WindowsSettings? displayedSettings;
-    private bool busy;
+    internal string CurrentPage { get; private set; } = "Home";
+    private System.Windows.Controls.Button? originatingRow;
     private (bool Dark, bool HighContrast)? artwork;
 
     internal MainWindow(Func<HostCommand, Task<HostCommandResult>> execute, Func<Task> exit, Func<Task> close, Func<bool>? confirmUsageReset = null)
@@ -29,6 +30,11 @@ public partial class MainWindow : Window
         ThemeInput.ItemsSource = Enum.GetValues<AppTheme>();
         RemindersInput.ItemsSource = new[] { "Off", "Windows notification", "Interactive window" };
         Closing += OnClosing;
+        PreviewKeyDown += (_, e) =>
+        {
+            if (CurrentPage != "Home" && (e.Key == System.Windows.Input.Key.Left && System.Windows.Input.Keyboard.Modifiers == System.Windows.Input.ModifierKeys.Alt))
+            { e.Handled = true; NavigateBack(); }
+        };
         ApplyBrand(BrandAssets.IsDark(Background), SystemParameters.HighContrast);
     }
 
@@ -36,16 +42,27 @@ public partial class MainWindow : Window
     {
         if (artwork == (dark, highContrast)) return;
         artwork = (dark, highContrast);
-        FamilySymbol.Source = BrandAssets.Symbol(dark);
-        // The decorative mark never overrides high-contrast system colors.
-        // The adjacent native text heading remains the accessible app identity.
-        FamilySymbol.Visibility = highContrast ? Visibility.Collapsed : Visibility.Visible;
+        System.Windows.Media.SolidColorBrush Brush(string color)
+        {
+            var brush = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(color));
+            brush.Freeze(); return brush;
+        }
+        Resources["ShiftCanvas"] = highContrast ? SystemColors.WindowBrush : Brush(dark ? "#1F2B28" : "#F6F3EC");
+        Resources["ShiftText"] = highContrast ? SystemColors.WindowTextBrush : Brush(dark ? "#F6F3EC" : "#1F2B28");
+        Resources["ShiftSupporting"] = highContrast ? SystemColors.WindowTextBrush : Brush(dark ? "#C8BCA7" : "#405F54");
+        Resources["ShiftAccent"] = highContrast ? SystemColors.WindowTextBrush : Brush(dark ? "#79AFC9" : "#2E5A4F");
+        Resources["ShiftTrack"] = highContrast ? SystemColors.ControlBrush : Brush(dark ? "#50675D" : "#E3E3DC");
+        Resources["ShiftDivider"] = highContrast ? SystemColors.WindowTextBrush : Brush(dark ? "#50675D" : "#C8BCA7");
+        // Context uses a native monitor glyph; canonical artwork stays in the
+        // window/tray icons and the unchanged reminder surface.
         Icon = BrandAssets.WindowIcon(dark);
     }
 
     internal void Apply(HostSnapshot snapshot, bool ownerStopped = false)
     {
-        Model.Apply(snapshot, ownerStopped ? snapshot.PublishedTick + 2_001 : Environment.TickCount64);
+        if (ownerStopped) { Model.MarkUnavailable("The monitoring owner stopped. Exit and restart the app."); return; }
+        Model.Apply(snapshot, Environment.TickCount64);
+        if (!ReferenceEquals(Model.Snapshot, snapshot)) return;
         if (snapshot.Configuration is { } config && config != displayedConfiguration)
         {
             displayedConfiguration = config;
@@ -71,34 +88,63 @@ public partial class MainWindow : Window
 
     private async Task Run(HostCommand command)
     {
-        if (busy) return;
-        busy = true;
+        if (!Model.CommandsIdle) return;
+        Model.SetCommandPending(true);
         try
         {
-            ActionResult.Text = SettingsResult.Text = "Applying…";
+            ReportAction(CommandCoordinator.PendingText(command.Kind));
             var result = await execute(command);
-            ReportAction(result.Message.Length == 0 ? "Saved action completed." : result.Message);
+            ReportAction(result.Message.Length == 0 ? result.Succeeded ? "Action confirmed." : "The action did not complete." : result.Message);
         }
-        finally { busy = false; }
+        finally { Model.SetCommandPending(false); }
     }
     internal void ReportAction(string message)
     {
         if (ActionResult.Text == message && SettingsResult.Text == message) return;
         ActionResult.Text = SettingsResult.Text = message;
         // WPF LiveSetting alone does not raise a UIA live-region event for TextBlock changes.
-        var target = Navigation.SelectedIndex == 1 ? SettingsResult : ActionResult;
+        var target = CurrentPage == "Home" ? ActionResult : SettingsResult;
         if (System.Windows.Automation.Peers.UIElementAutomationPeer.FromElement(target) is { } peer)
             peer.RaiseAutomationEvent(System.Windows.Automation.Peers.AutomationEvents.LiveRegionChanged);
     }
     private void OpenSetup(object sender, RoutedEventArgs e)
     {
-        Navigation.SelectedIndex = 1;
+        Navigate("Desktop");
         SetupHeading.BringIntoView();
         if (Model.CanConsent) ConsentButton.Focus();
         else if (Model.CanStart) SetupStartButton.Focus();
         else if (Model.CanAssign) PersonalButton.Focus();
-        else if (Navigation.SelectedItem is System.Windows.Controls.TabItem tab) tab.Focus();
+        else BackButton.Focus();
     }
+    internal void OpenSettings() => Navigate("Settings");
+    private void OpenSettings(object sender, RoutedEventArgs e) => OpenSettings();
+    private void OpenDetail(object sender, RoutedEventArgs e)
+    {
+        originatingRow = (System.Windows.Controls.Button)sender;
+        Navigate((string)originatingRow.Tag);
+    }
+    private void GoBack(object sender, RoutedEventArgs e) => NavigateBack();
+    internal void NavigateBack()
+    {
+        if (CurrentPage == "Home") return;
+        var home = CurrentPage == "Settings";
+        Navigate(home ? "Home" : "Settings");
+        if (home) SettingsButton.Focus(); else originatingRow?.Focus();
+    }
+    private void Navigate(string page)
+    {
+        CurrentPage = page;
+        HomeHeader.Visibility = HomePage.Visibility = page == "Home" ? Visibility.Visible : Visibility.Collapsed;
+        BackButton.Visibility = page == "Home" ? Visibility.Collapsed : Visibility.Visible;
+        SettingsOverview.Visibility = page == "Settings" ? Visibility.Visible : Visibility.Collapsed;
+        SettingsDetail.Visibility = page is "Home" or "Settings" ? Visibility.Collapsed : Visibility.Visible;
+        foreach (var section in new[] { DesktopSection, MonitoringSection, RemindersSection, AppearanceSection, AdvancedSection })
+            section.Visibility = section.Name == page + "Section" ? Visibility.Visible : Visibility.Collapsed;
+        System.Windows.Automation.AutomationProperties.SetName(BackButton, page == "Settings" ? "Back to Home" : "Back to Settings");
+        SettingsDetail.ScrollToTop();
+        if (page != "Home") BackButton.Focus();
+    }
+    private async void ToggleMonitoring(object sender, RoutedEventArgs e) => await Run(new(Model.Snapshot?.State?.Paused == true ? HostCommandKind.Resume : HostCommandKind.Pause));
     private async void Start(object sender, RoutedEventArgs e) => await Run(new(HostCommandKind.Start));
     private async void Pause(object sender, RoutedEventArgs e) => await Run(new(HostCommandKind.Pause));
     private async void Resume(object sender, RoutedEventArgs e) => await Run(new(HostCommandKind.Resume));
@@ -143,7 +189,7 @@ public partial class MainWindow : Window
     }
     private async void ResetUsage(object sender, RoutedEventArgs e)
     {
-        if (busy || !Model.CanResetUsage) return;
+        if (!Model.CommandsIdle || !Model.CanResetUsage) return;
         if (confirmUsageReset()) await Run(new(HostCommandKind.ResetUsage) { Confirmed = true });
     }
     private async void Recover(object sender, RoutedEventArgs e)

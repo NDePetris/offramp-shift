@@ -7,9 +7,9 @@ internal sealed class TrayService : IDisposable
 {
     private readonly Forms.NotifyIcon icon;
     private readonly Forms.ToolStripMenuItem status = new("Starting") { Enabled = false };
-    private readonly Forms.ToolStripMenuItem context = new("Current context: Unknown") { Enabled = false };
-    private readonly Forms.ToolStripMenuItem allowance = new("Saved allowance unavailable") { Enabled = false };
-    private readonly Forms.ToolStripMenuItem qualifyingBreak = new("Saved qualifying break unavailable") { Enabled = false };
+    private readonly Forms.ToolStripMenuItem context = new(TraySummary.Starting.Context) { Enabled = false };
+    private readonly Forms.ToolStripMenuItem allowance = new(TraySummary.Starting.Allowance) { Enabled = false };
+    private readonly Forms.ToolStripMenuItem qualifyingBreak = new(TraySummary.Starting.Break) { Enabled = false };
     private readonly Forms.ToolStripMenuItem pause;
     private readonly Forms.ToolStripMenuItem retry;
     private readonly Forms.ToolStripMenuItem save;
@@ -76,6 +76,13 @@ internal sealed class TrayService : IDisposable
         if (balloons.BeginError())
             RequestBalloon("Offramp Shift — action needs attention",
                 "The action did not complete. Open the tray menu and choose Action needs attention for details.", Forms.ToolTipIcon.Warning);
+    }
+    internal void ReportActionResult(HostCommand command, HostCommandResult result)
+    {
+        if (disposed) return;
+        var notify = feedback.Record(command, result);
+        feedbackItem.Visible = feedback.Message.Length > 0;
+        if (notify) NotifyFailure();
     }
     internal void ReportNudgeFailure(string detail)
     {

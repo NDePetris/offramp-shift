@@ -68,79 +68,7 @@ internal static class Program
             // even with syntactically valid and distinct GUIDs.
             Check(DesktopFeasibility.SwitchWorkerEntry.Qualify(Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), "26300.9712") == 2);
         });
-        Test("tray projects saved allowance and qualifying break in every observed context", () =>
-        {
-            var model = new DashboardModel(); var snapshot = Snapshot() with
-            { Configuration = new() { Accounting = AccountingMode.BestEffort, AllowanceMs = 1_800_000, RequiredBreakMs = 300_000 } };
-            foreach (var context in Enum.GetValues<DesktopScope>())
-            {
-                model.Apply(snapshot with { Context = context }, snapshot.PublishedTick);
-                Check(model.Tray.Context == "Current context: " + context);
-                Check(model.Tray.Allowance == "Saved allowance: 28m left");
-                Check(model.Tray.Break == "Saved qualifying break: <1m of 5m");
-                Check(model.Tray.Tooltip == context + " | 28m remaining" && model.Tray.Tooltip.Length <= 63);
-            }
-            model.Apply(snapshot with { State = snapshot.State! with { UsageMs = 65_999, BreakProgressMs = 12_999 } }, snapshot.PublishedTick);
-            var summary = model.Tray;
-            model.Apply(snapshot, snapshot.PublishedTick + 2_000);
-            Check(model.Tray == summary); // No extrapolation or second-level menu churn.
-        });
-        Test("tray retained values distinguish pause unavailability stale updates and owner failure", () =>
-        {
-            var model = new DashboardModel(); var snapshot = Snapshot();
-            model.Apply(snapshot, snapshot.PublishedTick); var saved = model.Tray;
-            model.Apply(snapshot with { Status = "Paused", State = snapshot.State! with { Paused = true } }, snapshot.PublishedTick);
-            Check(model.Tray.Status == "Paused — saved values retained" && model.Tray.Tooltip == "Paused | 28m remaining");
-            foreach (var tick in new[] { snapshot.PublishedTick - 1, snapshot.PublishedTick + 2_001 })
-            {
-                model.Apply(snapshot, tick);
-                Check(model.Tray.Status.Contains("stale updates") && model.Tray.Status.Contains("retained"));
-                Check(model.Tray.Context == "Current context: Unknown" && model.Tray.Allowance == saved.Allowance && model.Tray.Break == saved.Break);
-                Check(model.Tray.Tooltip == "Unavailable (stale) | Last recorded: 28m remaining");
-            }
-            model.Apply(snapshot with { Status = "Unavailable", Available = false }, snapshot.PublishedTick);
-            Check(model.Tray.Context == "Current context: Unknown" && model.Tray.Status.Contains("Unavailable") && model.Tray.Tooltip == "Unavailable | Last recorded: 28m remaining");
-            model.MarkUnavailable("Owner failed");
-            Check(model.Tray.Status.Contains("retained") && model.Tray.Allowance == saved.Allowance && model.Tray.Tooltip == "Unavailable | Last recorded: 28m remaining");
-        });
-        Test("tray shows setup and missing committed accounting without presenting pending data as saved", () =>
-        {
-            var model = new DashboardModel(); var snapshot = Snapshot();
-            model.Apply(snapshot with { Status = "Ready to start", Settings = snapshot.Settings with { MonitoringEnabled = false } }, snapshot.PublishedTick);
-            Check(model.Tray.Status.Contains("setup incomplete") && model.Tray.Tooltip.Contains("Setup incomplete"));
-            foreach (var persistence in new[] { PersistenceStatus.PendingCommit, PersistenceStatus.Blocked, PersistenceStatus.Incompatible, PersistenceStatus.RecoveryRequired })
-            {
-                // Even a supplied state cannot bypass the persistence guard.
-                model.Apply(snapshot with { Persistence = persistence, Available = false, Status = persistence.ToString() }, snapshot.PublishedTick);
-                Check(model.Tray.Allowance == "Saved allowance unavailable" && model.Tray.Break == "Saved qualifying break unavailable");
-                Check(model.Tray.Tooltip == "Unavailable | Allowance unavailable");
-            }
-            model.Apply(snapshot with { State = null, Configuration = null }, snapshot.PublishedTick);
-            Check(model.Tray.Allowance == "Saved allowance unavailable" && model.Tray.Break == "Saved qualifying break unavailable");
-            Check(TraySummary.Starting.Context == "Current context: Unknown");
-        });
-        Test("tray represents exhausted completed zero and sub-minute saved durations", () =>
-        {
-            var model = new DashboardModel(); var snapshot = Snapshot();
-            var config = snapshot.Configuration!;
-            foreach (var state in new[] { snapshot.State! with { Exhausted = true }, snapshot.State! with { UsageMs = config.AllowanceMs } })
-            {
-                model.Apply(snapshot with { State = state }, snapshot.PublishedTick);
-                Check(model.Tray.Allowance == "Saved allowance: Allowance exhausted" && model.Tray.Tooltip == "Personal | Allowance exhausted");
-                model.Apply(snapshot with { State = state, Available = false, Status = "Unavailable" }, snapshot.PublishedTick);
-                Check(model.Tray.Tooltip == "Unavailable | Last recorded: Allowance exhausted");
-            }
-            model.Apply(snapshot with { State = snapshot.State! with { UsageMs = config.AllowanceMs - 1, BreakProgressMs = 0 } }, snapshot.PublishedTick);
-            Check(model.Tray.Allowance == "Saved allowance: <1m left" && model.Tray.Break.StartsWith("Saved qualifying break: 0m of "));
-            model.Apply(snapshot with { State = snapshot.State! with { UsageMs = 0, BreakCompleted = true } }, snapshot.PublishedTick);
-            Check(model.Tray.Break == "Saved qualifying break: completed; allowance reset");
-            Check(TraySummary.Duration(60_000) == "1m" && TraySummary.Duration(3_600_000) == "60m");
-            model.Apply(snapshot with { Status = "Establishing baseline", Configuration = config with { AllowanceMs = 900_000_000_000_000 }, State = snapshot.State! with { UsageMs = 0 } }, snapshot.PublishedTick);
-            Check(model.Tray.Tooltip.Length <= 63 && model.Tray.Tooltip.EndsWith("m remaining"));
-            model.Apply(snapshot with { Configuration = config with { AllowanceMs = 900_000_000_000_000 } }, snapshot.PublishedTick + 2_001);
-            Check(model.Tray.Tooltip.Length <= 63 && model.Tray.Tooltip.StartsWith("Unavailable (stale) | Last recorded: "));
-            Check(TraySummary.Starting.Unavailable().Status == "Unavailable");
-        });
+        PresentationRegressions.Run(Test, () => Snapshot());
         Test("setup projection identifies next prerequisite without exposing desktop identities", () =>
         {
             var model = new DashboardModel(); var ready = Snapshot();
@@ -334,19 +262,19 @@ internal static class Program
                 }
             }
         });
-        Test("family artwork adapts without recoloring and stays decorative in high contrast", () =>
+        Test("canonical window icons adapt and native context glyph stays decorative in high contrast", () =>
         {
             var window = new MainWindow(_ => Task.FromResult(HostCommandResult.Success()), () => Task.CompletedTask, () => Task.CompletedTask);
             Check(!BrandAssets.IsDark(Brushes.White) && BrandAssets.IsDark(Brushes.Black));
             window.ApplyBrand(false, false);
-            Check(ReferenceEquals(window.FamilySymbol.Source, BrandAssets.Symbol(false)));
+            Check(window.ContextIcon.Text == "\uE7F4");
             Check(ReferenceEquals(window.Icon, BrandAssets.WindowIcon(false)));
             window.ApplyBrand(true, false);
-            Check(ReferenceEquals(window.FamilySymbol.Source, BrandAssets.Symbol(true)));
+            Check(window.ContextIcon.Text == "\uE7F4");
             Check(ReferenceEquals(window.Icon, BrandAssets.WindowIcon(true)));
             window.ApplyBrand(true, true);
-            Check(window.FamilySymbol.Visibility == Visibility.Collapsed && window.Title == "Offramp Shift");
-            Check(UIElementAutomationPeer.CreatePeerForElement(window.FamilySymbol) is null);
+            Check(window.ContextIcon.Visibility == Visibility.Visible && window.Title == "Offramp Shift");
+            Check(!window.ContextIcon.Focusable && UIElementAutomationPeer.CreatePeerForElement(window.ContextIcon) is null);
         });
         Test("native WPF views load bind and expose accessible labels without live monitoring", () =>
         {
@@ -354,13 +282,13 @@ internal static class Program
             window.Apply(Snapshot());
             var root = (FrameworkElement)window.Content;
             root.Measure(new(820, 760)); root.Arrange(new(0, 0, 820, 760)); root.UpdateLayout();
-            Check(window.Model.Usage.Contains("1m 5s")); Check(window.Navigation.Items.Count == 2);
+            Check(window.Model.HeroValue == "28 min"); Check(window.CurrentPage == "Home");
             Check(AutomationProperties.GetName(window.AllowanceInput) == "Allowance in minutes");
             var peer = UIElementAutomationPeer.CreatePeerForElement(window.AllowanceInput);
             Check(peer is not null && peer.GetAutomationControlType() == AutomationControlType.Edit);
-            Check(window.AllowanceInput.Focusable && window.Navigation.Focusable);
+            Check(window.AllowanceInput.Focusable && window.SettingsButton.Focusable);
             window.SetupButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-            window.UpdateLayout(); Check(window.Navigation.SelectedIndex == 1 && window.ThemeInput.Items.Count == 3);
+            window.UpdateLayout(); Check(window.CurrentPage == "Desktop" && window.ThemeInput.Items.Count == 3);
             Check(AutomationProperties.GetLiveSetting(window.SettingsResult) == AutomationLiveSetting.Polite);
             foreach (var button in new[] { window.ConsentButton, window.PersonalButton, window.WorkButton, window.SetupStartButton, window.SetupButton })
             {
@@ -385,6 +313,7 @@ internal static class Program
             Check(window.ActionResult.Text == window.SettingsResult.Text && window.SettingsResult.Text.Contains("Task View"));
         });
         Pr8UiRegressions.Run(Test, () => Snapshot());
+        PresentationRegressions.Views(Test, () => Snapshot());
         Test("switch STA worker watchdog exits with stdin withheld before any native activation", () =>
         {
             var path = Environment.ProcessPath ?? throw new InvalidOperationException();
@@ -413,6 +342,7 @@ internal static class Program
             }
         });
         InteractiveUiRegressions.Run(Test, () => Snapshot());
+        if (args is ["--inspect-home-shell", var inspectionOutput]) HomeShellInspection.Run(Snapshot(), inspectionOutput);
         if (args is ["--render", var output])
         {
             Directory.CreateDirectory(output);
@@ -459,17 +389,25 @@ internal static class Program
                             Status = "Setup required",
                             Detail = "Opt in to experimental Estimated monitoring to observe and assign desktops."
                         };
-                        window.Apply(snapshot); window.Navigation.SelectedIndex = settings ? 1 : 0;
+                        window.Apply(snapshot);
+                        if (settings)
+                        {
+                            window.OpenSettings();
+                            var section = scenario.Name.StartsWith("Reminders", StringComparison.Ordinal) ? "Reminders" :
+                                scenario.Name.StartsWith("Setup", StringComparison.Ordinal) ? "Desktop" : "Monitoring";
+                            ((Panel)window.SettingsOverview.Content).Children.OfType<Button>().First(button => (string)button.Tag == section)
+                                .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                        }
                         var content = (FrameworkElement)window.Content;
                         var bounds = new Rect(0, 0, scenario.Width, scenario.Height);
                         content.Measure(bounds.Size); content.Arrange(bounds); content.UpdateLayout();
                         if (scenario.Name.StartsWith("Reminders", StringComparison.Ordinal))
                         {
-                            DependencyObject? ancestor = window.ResetUsageButton;
+                            DependencyObject? ancestor = window.RemindersInput;
                             while (ancestor is not null && ancestor is not ScrollViewer) ancestor = VisualTreeHelper.GetParent(ancestor);
                             if (ancestor is ScrollViewer scroll)
                             {
-                                var offset = window.ResetUsageButton.TransformToAncestor(scroll).Transform(new Point()).Y;
+                                var offset = window.RemindersInput.TransformToAncestor(scroll).Transform(new Point()).Y;
                                 scroll.ScrollToVerticalOffset(offset - 12); content.UpdateLayout();
                             }
                         }

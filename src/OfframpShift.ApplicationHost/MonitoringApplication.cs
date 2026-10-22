@@ -23,6 +23,7 @@ internal sealed class MonitoringApplication : IDisposable
     private bool providerFault;
     private string message = "";
     private long sequence, lastProviderAttempt = -10_000;
+    private Guid accountingPresentationEpoch = Guid.NewGuid();
     private SwitchAuthorization? pendingSwitch;
     internal BreakReminderMailbox Reminders { get; } = new();
     internal object? ObservationDiagnostics => runtime?.Diagnostics;
@@ -113,6 +114,8 @@ internal sealed class MonitoringApplication : IDisposable
                     session.SetPaused(command.Kind == HostCommandKind.Pause);
                     runtime?.ResetConfiguration(); break;
                 case HostCommandKind.RetrySave:
+                    Require(session.Status == PersistenceStatus.PendingCommit, "No pending commit.");
+                    accountingPresentationEpoch = Guid.NewGuid();
                     session.RetryPendingCommit();
                     runtime?.ResetConfiguration(); EnsureRuntime(); break;
                 case HostCommandKind.RetryMonitoring:
@@ -148,6 +151,7 @@ internal sealed class MonitoringApplication : IDisposable
                     Require(replacement.Personal != replacement.Work,
                         "Personal and Work must use different desktops. Choose the other desktop in Task View, then assign it through the tray menu.");
                     replacement.Validate();
+                    accountingPresentationEpoch = Guid.NewGuid();
                     ResetRuntime();
                     SaveSettings(replacement);
                     // Reuse restoration to clear unfinished Core continuity; do not invent a domain command.
@@ -221,6 +225,7 @@ internal sealed class MonitoringApplication : IDisposable
                     message = "Extra Personal time saved; usage continues."; break;
                 case HostCommandKind.ResetUsage:
                     Require(command.Confirmed && Ready, "Confirm Reset usage; ready accounting storage is required.");
+                    accountingPresentationEpoch = Guid.NewGuid();
                     session.ResetUsage();
                     runtime?.ResetConfiguration();
                     message = "Usage and break progress reset and saved. Pause and monitoring settings are unchanged.";
@@ -230,10 +235,12 @@ internal sealed class MonitoringApplication : IDisposable
                     SaveSettings(settings with { CloseToTray = command.CloseToTray }); break;
                 case HostCommandKind.ReopenStorage:
                     Require(session.Status == PersistenceStatus.Blocked, "Reopen is only available for blocked storage.");
+                    accountingPresentationEpoch = Guid.NewGuid();
                     ResetRuntime(); session.Dispose(); session = openSession(); EnsureRuntime(); break;
                 case HostCommandKind.Recover:
                     Require(command.Confirmed && session.Status == PersistenceStatus.RecoveryRequired,
                         "Explicit recovery confirmation is required; recovery is unavailable in this state.");
+                    accountingPresentationEpoch = Guid.NewGuid();
                     ResetRuntime();
                     session.Reinitialize(new());
                     Reminders.ResetSession();
@@ -316,7 +323,7 @@ internal sealed class MonitoringApplication : IDisposable
             CanAccount && !providerFault && settings.ReminderStyle == ReminderStyle.InteractiveWindow && runtime?.CanKeepNudgeOpen == true,
             runtime?.ReminderGeneration ?? 0, runtime?.ReminderEpoch ?? Guid.Empty,
             runtime?.ReminderStatus ?? "Observation unavailable; no reminder delivery.", runtime?.PresentationId ?? Guid.Empty)
-        { SwitchingUnavailableReason = SwitchingUnavailableReason };
+        { SwitchingUnavailableReason = SwitchingUnavailableReason, AccountingPresentationEpoch = accountingPresentationEpoch };
     }
 
     private string SwitchingUnavailableReason =>

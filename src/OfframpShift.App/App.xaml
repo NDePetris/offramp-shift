@@ -25,6 +25,7 @@
     <Setter Property="Padding" Value="8" />
    </Style>
    <Style x:Key="SectionTitle" TargetType="TextBlock">
+    <Setter Property="TextWrapping" Value="Wrap" />
     <Setter Property="FontSize" Value="20" />
     <Setter Property="FontWeight" Value="SemiBold" />
     <Setter Property="Margin" Value="0,24,0,12" />
