@@ -92,6 +92,12 @@ internal sealed class MonitoringApplication : IDisposable
         message = "";
         try
         {
+            if (command.Kind is HostCommandKind.ChangeDurations or HostCommandKind.ChangeInteractiveRepeat)
+                Require(Ready, "Storage is unavailable.");
+            if (command.Kind is HostCommandKind.ChangeAppearance or HostCommandKind.ChangeBreakReminders or HostCommandKind.ChangeSwitchingConsent)
+                Require(settingsStore.Status is SettingsStatus.Ready or SettingsStatus.Missing, "Windows settings are unavailable. Review settings storage before saving.");
+            if (command.Expected is { } expectedSettings && !expectedSettings.Matches(command.Kind, settings, session.Configuration))
+                return HostCommandResult.Failure("These settings changed while you were editing. Your draft is retained. Cancel to load the confirmed values, then review your changes.") with { ConfigurationConflict = true };
             switch (command.Kind)
             {
                 case HostCommandKind.Consent:

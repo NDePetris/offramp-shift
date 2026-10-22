@@ -16,6 +16,8 @@ public partial class ShiftApplication : Application
     private int actionsInFlight;
     private AppTheme? theme;
     private NudgePresenter? nudges;
+    private UiPreferences? uiPreferences;
+    private DiagnosticsCompanion? diagnostics;
     private readonly CommandCoordinator commands = new();
     public ShiftApplication() { InitializeComponent(); }
     internal ShiftApplication(SingleInstance instance) : this() { this.instance = instance; }
@@ -24,6 +26,16 @@ public partial class ShiftApplication : Application
         base.OnStartup(e);
         controller = WindowsApplication.Start();
         window = new(Execute, ExitAsync, CloseAsync); MainWindow = window;
+        uiPreferences = new(SqliteCheckpointStore.DefaultDirectory); uiPreferences.Load();
+        diagnostics = new(uiPreferences, () => new DiagnosticsWindow(window, commands, () => Open(false)));
+        window.ShowDiagnosticsPreference(uiPreferences.ShowDiagnostics, uiPreferences.Error);
+        window.SetDiagnosticsEnabled = enabled =>
+        {
+            var saved = diagnostics.SetEnabled(enabled);
+            window.ShowDiagnosticsPreference(uiPreferences.ShowDiagnostics, uiPreferences.Error);
+            return saved;
+        };
+        window.OpenDiagnosticsAction = diagnostics.Open;
         commands.Changed += () =>
         {
             window.Model.SetCommandPending(commands.IsPending);
@@ -71,6 +83,7 @@ public partial class ShiftApplication : Application
         nudges?.Refresh(controller.Completion.IsCompleted || exiting);
         window.NudgeStatus.Visibility = value.Settings.ReminderStyle == ReminderStyle.InteractiveWindow ? Visibility.Visible : Visibility.Collapsed;
         window.NudgeStatus.Text = "Last reminder: " + value.ReminderStatus + " " + nudges?.Status;
+        diagnostics?.Window?.Refresh();
         if (controller.TryTakeReminder(out var reminder) && actionsInFlight == 0 && Environment.TickCount64 - value.PublishedTick is >= 0 and <= 2_000)
         {
             if (reminder?.Style == ReminderStyle.InteractiveWindow) _ = nudges?.PresentAsync(reminder);
@@ -127,6 +140,7 @@ public partial class ShiftApplication : Application
         closing = true;
         try
         {
+            if (!await window.ProtectDraftsAsync()) return;
             if (tray is null) { await ExitAsync(); return; }
             var choice = controller?.Latest?.Settings.CloseToTray;
             bool? selected = null;
@@ -150,6 +164,7 @@ public partial class ShiftApplication : Application
     private async Task ExitAsync()
     {
         if (exiting || controller is null || window is null) return;
+        if (!await window.ProtectDraftsAsync()) return;
         if (controller.Latest?.Persistence == PersistenceStatus.PendingCommit)
         {
             var answer = MessageBox.Show(window, "A checkpoint is pending. Yes retries the exact save; No exits and may lose the pending change; Cancel keeps the app open.",
@@ -157,7 +172,7 @@ public partial class ShiftApplication : Application
             if (answer == MessageBoxResult.Cancel) return;
             if (answer == MessageBoxResult.Yes) { await Execute(new(HostCommandKind.RetrySave)); return; }
         }
-        exiting = true; nudges?.Close(); window.ActionResult.Text = "Stopping monitoring and disposing providers…";
+        exiting = true; diagnostics?.Dispose(); nudges?.Close(); window.ActionResult.Text = "Stopping monitoring and disposing providers…";
         var stopped = controller.StopAsync();
         if (await Task.WhenAny(stopped, Task.Delay(12_000)) != stopped)
         {
@@ -172,6 +187,7 @@ public partial class ShiftApplication : Application
     protected override void OnExit(ExitEventArgs e)
     {
         Microsoft.Win32.SystemEvents.DisplaySettingsChanged -= DisplaySettingsChanged;
+        diagnostics?.Dispose();
         nudges?.Close(); controller?.StopAsync(); timer?.Stop(); tray?.Dispose();
         base.OnExit(e);
     }

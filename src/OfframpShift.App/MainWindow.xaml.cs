@@ -13,10 +13,20 @@ public partial class MainWindow : Window
     private readonly Func<Task> exit;
     private readonly Func<Task> close;
     private readonly Func<bool> confirmUsageReset;
+    internal Func<bool, bool>? SetDiagnosticsEnabled { get; set; }
+    internal Action? OpenDiagnosticsAction { get; set; }
+    internal void ShowDiagnosticsPreference(bool enabled, string error)
+    { DiagnosticsInput.IsChecked = enabled; OpenDiagnosticsButton.IsEnabled = enabled; DiagnosticsPreferenceResult.Text = error; }
+    private void ChangeDiagnostics(object sender, RoutedEventArgs e) => SetDiagnosticsEnabled?.Invoke(DiagnosticsInput.IsChecked == true);
+    private void OpenDiagnostics(object sender, RoutedEventArgs e) => OpenDiagnosticsAction?.Invoke();
+    internal async Task ExecuteDiagnosticAsync(HostCommandKind kind)
+    {
+        if (kind == HostCommandKind.Recover) Recover(this, new());
+        else if (kind == HostCommandKind.RepairSettings) RepairSettings(this, new());
+        else await Run(new(kind));
+    }
     internal const string ResetUsageConfirmation = "Reset accumulated usage and clear current break progress, including any completed break? " +
         "This cannot be undone. Your monitoring settings and Pause state will stay the same.";
-    private MonitoringConfiguration? displayedConfiguration;
-    private WindowsSettings? displayedSettings;
     internal string CurrentPage { get; private set; } = "Home";
     private System.Windows.Controls.Button? originatingRow;
     private (bool Dark, bool HighContrast)? artwork;
@@ -63,38 +73,24 @@ public partial class MainWindow : Window
         if (ownerStopped) { Model.MarkUnavailable("The monitoring owner stopped. Exit and restart the app."); return; }
         Model.Apply(snapshot, Environment.TickCount64);
         if (!ReferenceEquals(Model.Snapshot, snapshot)) return;
-        if (snapshot.Configuration is { } config && config != displayedConfiguration)
-        {
-            displayedConfiguration = config;
-            AllowanceInput.Text = ((decimal)config.AllowanceMs / 60_000).ToString(CultureInfo.CurrentCulture);
-            BreakInput.Text = ((decimal)config.RequiredBreakMs / 60_000).ToString(CultureInfo.CurrentCulture);
-            IdleInput.Text = ((decimal)config.IdleThresholdMs / 1_000).ToString(CultureInfo.CurrentCulture);
-            RepeatInput.Text = (config.InteractiveRepeatNudgeMs / 60_000).ToString(CultureInfo.CurrentCulture);
-        }
-        if (snapshot.Settings != displayedSettings)
-        {
-            displayedSettings = snapshot.Settings; ThemeInput.SelectedItem = snapshot.Settings.Theme;
-            CloseInput.IsChecked = snapshot.Settings.CloseToTray ?? false;
-            RemindersInput.SelectedIndex = (int)snapshot.Settings.ReminderStyle;
-            SwitchingInput.IsChecked = snapshot.Settings.SwitchingConsent;
-            SwitchingCapability.Text = (DesktopFeasibility.SwitchCompatibility.Is26300Family(snapshot.Settings.Build)
-                ? "Consent applies to Windows build family 26300 on x64. "
-                : "Consent applies to exact build " + snapshot.Settings.Build + ". ") +
-                (DesktopFeasibility.SwitchCompatibility.Application(snapshot.Settings.Build, System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString())
-                ? "Limited explicit experiments only; each click is independently validated."
-                : "Application switching is unavailable on this build or architecture.");
-        }
+        RefreshDrafts(snapshot);
     }
 
-    private async Task Run(HostCommand command)
+    private async Task<HostCommandResult> Run(HostCommand command)
     {
-        if (!Model.CommandsIdle) return;
+        if (!Model.CommandsIdle) return HostCommandResult.Failure("An action is already pending.");
         Model.SetCommandPending(true);
         try
         {
             ReportAction(CommandCoordinator.PendingText(command.Kind));
             var result = await execute(command);
             ReportAction(result.Message.Length == 0 ? result.Succeeded ? "Action confirmed." : "The action did not complete." : result.Message);
+            return result;
+        }
+        catch (Exception e) when (e is not OutOfMemoryException)
+        {
+            var failure = HostCommandResult.Failure("The action could not be confirmed. Your draft is retained; review monitoring and storage before trying again.");
+            ReportAction(failure.Message); return failure;
         }
         finally { Model.SetCommandPending(false); }
     }
@@ -109,6 +105,7 @@ public partial class MainWindow : Window
     }
     private void OpenSetup(object sender, RoutedEventArgs e)
     {
+        originatingRow = ((System.Windows.Controls.Panel)SettingsOverview.Content).Children.OfType<System.Windows.Controls.Button>().First(button => (string)button.Tag == "Desktop");
         Navigate("Desktop");
         SetupHeading.BringIntoView();
         if (Model.CanConsent) ConsentButton.Focus();
@@ -116,7 +113,7 @@ public partial class MainWindow : Window
         else if (Model.CanAssign) PersonalButton.Focus();
         else BackButton.Focus();
     }
-    internal void OpenSettings() => Navigate("Settings");
+    internal async void OpenSettings() { if (await ProtectDraftsAsync()) Navigate("Settings"); }
     private void OpenSettings(object sender, RoutedEventArgs e) => OpenSettings();
     private void OpenDetail(object sender, RoutedEventArgs e)
     {
@@ -124,25 +121,39 @@ public partial class MainWindow : Window
         Navigate((string)originatingRow.Tag);
     }
     private void GoBack(object sender, RoutedEventArgs e) => NavigateBack();
-    internal void NavigateBack()
+    internal async void NavigateBack()
     {
-        if (CurrentPage == "Home") return;
+        if (CurrentPage == "Home" || !await ProtectDraftsAsync(false)) return;
         var home = CurrentPage == "Settings";
         Navigate(home ? "Home" : "Settings");
         if (home) SettingsButton.Focus(); else originatingRow?.Focus();
     }
     private void Navigate(string page)
     {
+        SettingsResult.Text = "";
         CurrentPage = page;
         HomeHeader.Visibility = HomePage.Visibility = page == "Home" ? Visibility.Visible : Visibility.Collapsed;
         BackButton.Visibility = page == "Home" ? Visibility.Collapsed : Visibility.Visible;
         SettingsOverview.Visibility = page == "Settings" ? Visibility.Visible : Visibility.Collapsed;
+        MonitoringActions.Visibility = page == "Monitoring" ? Visibility.Visible : Visibility.Collapsed;
         SettingsDetail.Visibility = page is "Home" or "Settings" ? Visibility.Collapsed : Visibility.Visible;
         foreach (var section in new[] { DesktopSection, MonitoringSection, RemindersSection, AppearanceSection, AdvancedSection })
             section.Visibility = section.Name == page + "Section" ? Visibility.Visible : Visibility.Collapsed;
         System.Windows.Automation.AutomationProperties.SetName(BackButton, page == "Settings" ? "Back to Home" : "Back to Settings");
         SettingsDetail.ScrollToTop();
-        if (page != "Home") BackButton.Focus();
+        if (Model.Snapshot is { } snapshot) RefreshDrafts(snapshot);
+        if (page != "Home")
+        {
+            System.Windows.Controls.Control target = page switch
+            {
+                "Monitoring" => AllowanceInput,
+                "Reminders" => RemindersInput,
+                "Appearance" => ThemeInput,
+                "Advanced" => DiagnosticsInput,
+                _ => BackButton
+            };
+            target.Focus();
+        }
     }
     private async void ToggleMonitoring(object sender, RoutedEventArgs e) => await Run(new(Model.Snapshot?.State?.Paused == true ? HostCommandKind.Resume : HostCommandKind.Pause));
     private async void Start(object sender, RoutedEventArgs e) => await Run(new(HostCommandKind.Start));
@@ -167,26 +178,11 @@ public partial class MainWindow : Window
         }
         catch (OverflowException) { return false; }
     }
-    private async void SaveDurations(object sender, RoutedEventArgs e)
-    {
-        if (!ParseDuration(AllowanceInput.Text, 60_000, false, out var allowance) ||
-            !ParseDuration(BreakInput.Text, 60_000, false, out var requiredBreak) ||
-            !ParseDuration(IdleInput.Text, 1_000, true, out var idle))
-        { SettingsResult.Text = "Enter positive allowance and break durations and a nonnegative reminder inactivity threshold, with millisecond precision or less."; return; }
-        await Run(new(HostCommandKind.ChangeDurations) { AllowanceMs = allowance, RequiredBreakMs = requiredBreak, IdleThresholdMs = idle });
-    }
-    private async void SaveAppearance(object sender, RoutedEventArgs e) => await Run(new(HostCommandKind.ChangeAppearance)
-    { Theme = ThemeInput.SelectedItem is AppTheme theme ? theme : AppTheme.System, CloseToTray = CloseInput.IsChecked == true });
-    private async void SaveReminders(object sender, RoutedEventArgs e) => await Run(new(HostCommandKind.ChangeBreakReminders)
-    { ReminderStyle = (ReminderStyle)RemindersInput.SelectedIndex });
-    private async void SaveSwitching(object sender, RoutedEventArgs e) => await Run(new(HostCommandKind.ChangeSwitchingConsent)
-    { Confirmed = SwitchingInput.IsChecked == true });
-    private async void SaveRepeat(object sender, RoutedEventArgs e)
-    {
-        if (!int.TryParse(RepeatInput.Text, NumberStyles.Integer, CultureInfo.CurrentCulture, out var minutes) || minutes is < 1 or > 60)
-        { SettingsResult.Text = "Enter a whole number of minutes from 1 to 60."; return; }
-        await Run(new(HostCommandKind.ChangeInteractiveRepeat) { DurationMs = minutes * 60_000L });
-    }
+    private async void SaveDurations(object sender, RoutedEventArgs e) => await SaveDraftAsync(SettingsGroup.Durations);
+    private async void SaveAppearance(object sender, RoutedEventArgs e) => await SaveDraftAsync(SettingsGroup.Appearance);
+    private async void SaveReminders(object sender, RoutedEventArgs e) => await SaveDraftAsync(SettingsGroup.ReminderStyle);
+    private async void SaveSwitching(object sender, RoutedEventArgs e) => await SaveDraftAsync(SettingsGroup.Switching);
+    private async void SaveRepeat(object sender, RoutedEventArgs e) => await SaveDraftAsync(SettingsGroup.Repeat);
     private async void ResetUsage(object sender, RoutedEventArgs e)
     {
         if (!Model.CommandsIdle || !Model.CanResetUsage) return;

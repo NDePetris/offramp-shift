@@ -43,6 +43,7 @@
    <RowDefinition Height="Auto"/>
    <RowDefinition Height="*"/>
    <RowDefinition Height="Auto"/>
+   <RowDefinition Height="Auto"/>
   </Grid.RowDefinitions>
   <Grid x:Name="HomeHeader" Margin="0,0,0,20">
    <Grid.ColumnDefinitions>
@@ -134,9 +135,15 @@
   </ScrollViewer>
   <ScrollViewer x:Name="SettingsDetail" Style="{StaticResource ContentScroll}" Grid.Row="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
    <StackPanel>
-    <TextBlock x:Name="SettingsResult" AutomationProperties.LiveSetting="Polite" Margin="0,0,0,8"/>
+    <TextBlock x:Name="SettingsResult" Style="{StaticResource RecordedText}" AutomationProperties.LiveSetting="Polite" Margin="0,0,0,8"/>
     <StackPanel x:Name="SettingsControls" IsEnabled="{Binding CommandsIdle}">
      <StackPanel.Resources>
+      <Style x:Key="SectionTitle" TargetType="TextBlock">
+       <Setter Property="TextWrapping" Value="Wrap"/>
+       <Setter Property="FontSize" Value="20"/>
+       <Setter Property="FontWeight" Value="SemiBold"/>
+       <Setter Property="Margin" Value="0,0,0,16"/>
+      </Style>
       <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
        <Setter Property="ContentTemplate">
         <Setter.Value>
@@ -149,85 +156,126 @@
      </StackPanel.Resources>
      <StackPanel x:Name="DesktopSection" Visibility="Collapsed">
       <TextBlock x:Name="SetupHeading" Text="Desktop setup" Style="{StaticResource SectionTitle}"/>
-      <TextBlock Text="Monitoring uses bounded estimates and can miss activity. Explorer recovery and sustained reliability remain unresolved. Consent enables read-only desktop observation on an approved Windows build or build family; Start monitoring enables accounting."/>
-      <TextBlock Text="{Binding NextSetupAction}" Margin="0,12,0,12"/>
-      <TextBlock Text="{Binding ConsentStatus}"/>
-      <Button x:Name="ConsentButton" Content="I _agree — enable experimental observation" Click="Consent" HorizontalAlignment="Left" IsEnabled="{Binding CanConsent}"/>
-      <TextBlock Text="{Binding Bindings}" Margin="0,12,0,12"/>
-      <TextBlock Text="Current desktop context" FontWeight="SemiBold"/>
-      <TextBlock Text="{Binding Context}" Margin="0,4,0,12"/>
-      <TextBlock Text="Manually choose each desktop in Task View. Use the Offramp Shift tray menu on that desktop to assign Personal or Work without opening this window. Existing assignments are replaced only by your explicit action. Reassignment stops monitoring until you Start again."/>
+      <TextBlock Text="{Binding NextSetupAction}" Margin="0,0,0,12"/>
+      <TextBlock Text="Allow read-only desktop observation on supported Windows. Start monitoring separately to begin accounting." Visibility="{Binding CanConsent, Converter={StaticResource BooleanToVisibility}}" Margin="0,0,0,8"/>
+      <Button x:Name="ConsentButton" Content="I _agree — enable experimental observation" Click="Consent" HorizontalAlignment="Left" IsEnabled="{Binding CanConsent}" Visibility="{Binding CanConsent, Converter={StaticResource BooleanToVisibility}}"/>
+      <TextBlock Text="{Binding PersonalStatus}" Margin="0,16,0,4"/>
+      <TextBlock Text="{Binding WorkStatus}" Margin="0,0,0,8"/>
+      <TextBlock Text="{Binding Context}"/>
       <WrapPanel Margin="0,8,0,0">
        <Button x:Name="PersonalButton" Content="Use current desktop as _Personal" Click="AssignPersonal" IsEnabled="{Binding CanAssign}"/>
        <Button x:Name="WorkButton" Content="Use current desktop as _Work" Click="AssignWork" IsEnabled="{Binding CanAssign}"/>
       </WrapPanel>
       <TextBlock Text="{Binding StartStatus}" Margin="0,12,0,4"/>
       <Button x:Name="SetupStartButton" Content="_Start monitoring" Click="Start" IsEnabled="{Binding CanStart}" HorizontalAlignment="Left"/>
+      <Expander Header="How desktop setup works" Margin="0,16,0,0">
+       <StackPanel>
+        <TextBlock Text="{Binding ConsentStatus}" Margin="0,0,0,8"/>
+        <TextBlock Text="Choose each desktop in Task View, then assign Personal or Work using the tray menu without opening this window. Assignments must be distinct, valid desktop GUIDs. Reassignment stops monitoring until you Start again."/>
+        <TextBlock Text="Assignment never switches desktops automatically. Observation requires explicit consent and an approved Windows build. Monitoring uses bounded estimates; Explorer recovery and sustained reliability remain unresolved." Margin="0,8,0,0"/>
+       </StackPanel>
+      </Expander>
      </StackPanel>
      <StackPanel x:Name="MonitoringSection" Visibility="Collapsed">
       <TextBlock Text="Monitoring" Style="{StaticResource SectionTitle}"/>
-      <TextBlock Text="Duration changes apply prospectively and clear an unfinished break. Increasing allowance does not clear an exhausted allowance; take a qualifying break or explicitly reset usage." Margin="0,0,0,12"/>
-      <Label Content="_Allowance (minutes)" Target="{Binding ElementName=AllowanceInput}"/>
-      <TextBox x:Name="AllowanceInput" HorizontalAlignment="Left" AutomationProperties.Name="Allowance in minutes"/>
-      <Label Content="Required _break (minutes)" Target="{Binding ElementName=BreakInput}"/>
-      <TextBox x:Name="BreakInput" HorizontalAlignment="Left" AutomationProperties.Name="Required break in minutes"/>
-      <Label Content="Reminder _inactivity threshold (seconds)" Target="{Binding ElementName=IdleInput}"/>
-      <TextBlock Text="Inactivity suppresses reminders. Eligible Personal time still counts; only Work or lock qualifies as a break." TextWrapping="Wrap" Margin="0,0,0,6"/>
-      <TextBox x:Name="IdleInput" HorizontalAlignment="Left" AutomationProperties.Name="Reminder inactivity threshold in seconds"/>
-      <Button Content="Save monitoring settings" Click="SaveDurations" IsEnabled="{Binding CanEdit}" HorizontalAlignment="Left"/>
-      <Button x:Name="ResetUsageButton" Content="Reset _usage…" Click="ResetUsage" IsEnabled="{Binding CanResetUsage}" HorizontalAlignment="Left" AutomationProperties.HelpText="Requires confirmation. Clears accumulated usage and break progress; preserves settings and Pause."/>
+      <Label Content="_Personal allowance (minutes)" Target="{Binding ElementName=AllowanceInput}"/>
+      <TextBox x:Name="AllowanceInput" HorizontalAlignment="Left" AutomationProperties.Name="Personal allowance in minutes"/>
+      <Label Content="Required _qualifying break (minutes)" Target="{Binding ElementName=BreakInput}"/>
+      <TextBox x:Name="BreakInput" HorizontalAlignment="Left" AutomationProperties.Name="Required qualifying break in minutes"/>
+      <TextBlock Text="Changes apply to future accounting. Saving clears an unfinished qualifying break." Foreground="{DynamicResource ShiftSupporting}" Margin="0,4,0,12"/>
+      <TextBlock Text="A longer allowance does not clear exhaustion. Take a qualifying break or use Reset usage…" Foreground="{DynamicResource ShiftSupporting}" FontSize="12" Margin="0,0,0,12"/>
+      <Expander Header="More monitoring options" Margin="0,4,0,12">
+       <StackPanel>
+        <Label Content="Reminder _inactivity threshold (seconds)" Target="{Binding ElementName=IdleInput}"/>
+        <TextBox x:Name="IdleInput" HorizontalAlignment="Left" AutomationProperties.Name="Reminder inactivity threshold in seconds"/>
+        <TextBlock Text="Inactivity suppresses reminders. Eligible Personal time still counts; only Work or lock qualifies as a break." FontSize="12"/>
+        <Button x:Name="ResetUsageButton" Content="Reset _usage…" Click="ResetUsage" IsEnabled="{Binding CanResetUsage}" HorizontalAlignment="Left" AutomationProperties.HelpText="Requires confirmation. Clears usage and break progress; preserves settings and Pause."/>
+       </StackPanel>
+      </Expander>
      </StackPanel>
      <StackPanel x:Name="RemindersSection" Visibility="Collapsed">
-      <TextBlock Text="Break reminders" Style="{StaticResource SectionTitle}"/>
+      <TextBlock Text="Reminders" Style="{StaticResource SectionTitle}"/>
       <Label Content="_Reminder style" Target="{Binding ElementName=RemindersInput}"/>
       <ComboBox x:Name="RemindersInput" IsEnabled="{Binding CanEditReminders}" HorizontalAlignment="Left" MinWidth="220" AutomationProperties.Name="Reminder style"/>
-      <TextBlock Text="Off by default. Both styles remind you as soon as your Personal allowance runs out. Windows notifications may be suppressed or delayed by Windows. Interactive window can take foreground focus. Changing style preserves usage and break progress." Margin="0,8,0,8"/>
-      <Button x:Name="SaveRemindersButton" Content="Save reminder preference" Click="SaveReminders" IsEnabled="{Binding CanEditReminders}" HorizontalAlignment="Left"/>
-      <Label Content="Reminder repeat interval (_minutes, 1–60)" Target="{Binding ElementName=RepeatInput}"/>
+      <TextBlock Text="Off by default. Reminds you when your Personal allowance runs out." Foreground="{DynamicResource ShiftSupporting}" Margin="0,8,0,8"/>
+      <Button x:Name="SaveRemindersButton" Content="Save reminder style" Click="SaveReminders" IsEnabled="{Binding CanEditReminders}" HorizontalAlignment="Left"/>
+      <Border Height="1" Background="{DynamicResource ShiftDivider}" Margin="0,12,0,12"/>
+      <Label Content="Repeat interval (_minutes, 1–60)" Target="{Binding ElementName=RepeatInput}"/>
       <TextBox x:Name="RepeatInput" HorizontalAlignment="Left" AutomationProperties.Name="Reminder repeat interval in whole minutes" IsEnabled="{Binding CanEdit}"/>
-      <TextBlock Text="Applies to both reminder styles. Repeats and extra time advance only during counted Personal use. Time on Work or while locked doesn't count. Unlocked Personal time counts even without input." Margin="0,0,0,8"/>
-      <Button x:Name="SaveRepeatButton" Content="Save reminder repeat interval" Click="SaveRepeat" IsEnabled="{Binding CanEdit}" HorizontalAlignment="Left"/>
+      <Button x:Name="SaveRepeatButton" Content="Save repeat interval" Click="SaveRepeat" IsEnabled="{Binding CanEdit}" HorizontalAlignment="Left"/>
+      <TextBlock Text="Style and repeat interval save separately." FontSize="12" Foreground="{DynamicResource ShiftSupporting}" Margin="0,8,0,8"/>
+      <Expander Header="About reminders" Margin="0,8,0,8">
+       <TextBlock Text="Windows notifications may be suppressed or delayed. The interactive window can take foreground focus. Changing style preserves usage and break progress. Repeats and extra time advance only during counted Personal use, including unlocked Personal time without input. Work and lock do not count."/>
+      </Expander>
+      <Button Content="Cancel" Click="CancelDraft" HorizontalAlignment="Left"/>
      </StackPanel>
      <StackPanel x:Name="AppearanceSection" Visibility="Collapsed">
       <TextBlock Text="Appearance and closing" Style="{StaticResource SectionTitle}"/>
       <Label Content="_Theme" Target="{Binding ElementName=ThemeInput}"/>
       <ComboBox x:Name="ThemeInput" HorizontalAlignment="Left" MinWidth="160" AutomationProperties.Name="Theme"/>
       <CheckBox x:Name="CloseInput" AutomationProperties.Name="Keep running in the tray when I close the window" Margin="0,16,0,8">
-       <TextBlock Text="Keep running in the tray when I close the window" TextWrapping="Wrap"/>
+       <TextBlock Text="Keep running in the tray when I close the window"/>
       </CheckBox>
-      <TextBlock Text="Tray Exit stops the app. Previously enabled monitoring resumes on later app launches when setup and providers are valid. Pause is preserved across restart. Windows login startup is not configured."/>
-      <Button Content="Save appearance and close behavior" Click="SaveAppearance" HorizontalAlignment="Left"/>
-      <Button Content="E_xit Offramp Shift" Click="Exit" HorizontalAlignment="Left"/>
+      <TextBlock Text="Tray Exit always stops the app. Pause is preserved across restart." Foreground="{DynamicResource ShiftSupporting}" Margin="0,0,0,16"/>
+      <WrapPanel>
+       <Button Content="Save changes" Click="SaveAppearance" IsEnabled="{Binding CanEditReminders}"/>
+       <Button Content="Cancel" Click="CancelDraft"/>
+      </WrapPanel>
+      <Button Content="E_xit Offramp Shift" Click="Exit" HorizontalAlignment="Left" Margin="0,20,0,0"/>
      </StackPanel>
      <StackPanel x:Name="AdvancedSection" Visibility="Collapsed">
-      <TextBlock Text="Experimental desktop switching" Style="{StaticResource SectionTitle}"/>
-      <CheckBox x:Name="SwitchingInput" IsEnabled="{Binding CanEditReminders}" AutomationProperties.Name="Allow an explicit Switch to Work attempt from a nudge">
-       <TextBlock Text="Allow an explicit Switch to Work attempt from a nudge"/>
-      </CheckBox>
-      <TextBlock Text="Separate, default-off consent: Windows 26300 family on x64, or an approved exact build. Uncheck and save to disable switching. An uncertain result may include a delayed transition; check with Win+Tab. No automatic switching or retries." Margin="0,8,0,8"/>
-      <TextBlock x:Name="SwitchingCapability" Margin="0,0,0,8"/>
-      <Button Content="Save switching consent" Click="SaveSwitching" IsEnabled="{Binding CanEditReminders}" HorizontalAlignment="Left"/>
-      <TextBlock Text="Storage and recovery" Style="{StaticResource SectionTitle}"/>
-      <TextBlock Text="{Binding Persistence}"/>
-      <TextBlock Text="{Binding Detail}" Margin="0,8,0,8"/>
-      <WrapPanel>
-       <Button Content="{Binding RetryLabel}" Click="RetryMonitoring" IsEnabled="{Binding CanRetryMonitoring}"/>
-       <Button Content="Retry save" Click="RetrySave" IsEnabled="{Binding CanRetrySave}"/>
-       <Button Content="Reopen storage" Click="ReopenStorage" IsEnabled="{Binding CanReopen}"/>
-       <Button Content="Recover accounting…" Click="Recover" IsEnabled="{Binding CanRecover}"/>
-      </WrapPanel>
-      <Button Content="Repair Windows settings…" Click="RepairSettings" IsEnabled="{Binding CanRepairSettings}" HorizontalAlignment="Left"/>
-      <Expander Header="Technical monitoring details" Margin="0,16,0,0">
+      <TextBlock Text="Advanced" Style="{StaticResource SectionTitle}"/>
+      <TextBlock Text="Diagnostics" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,12"/>
+      <CheckBox x:Name="DiagnosticsInput" Content="Show Diagnostics" Click="ChangeDiagnostics" AutomationProperties.Name="Show Diagnostics"/>
+      <TextBlock Text="Inspect monitoring, accounting and recovery in a separate window." Foreground="{DynamicResource ShiftSupporting}" Margin="0,8,0,12"/>
+      <Button x:Name="OpenDiagnosticsButton" Content="Open Diagnostics" Click="OpenDiagnostics" IsEnabled="False" HorizontalAlignment="Left"/>
+      <TextBlock x:Name="DiagnosticsPreferenceResult" AutomationProperties.LiveSetting="Polite" FontSize="12"/>
+      <Border Height="1" Background="{DynamicResource ShiftDivider}" Margin="0,16,0,12"/>
+      <Expander Header="Recovery and maintenance" Margin="0,0,0,16">
+       <StackPanel>
+        <TextBlock Text="{Binding Persistence}"/>
+        <TextBlock Text="{Binding Detail}" Margin="0,8,0,8"/>
+        <WrapPanel>
+         <Button Content="{Binding RetryLabel}" Click="RetryMonitoring" IsEnabled="{Binding CanRetryMonitoring}"/>
+         <Button Content="Retry save" Click="RetrySave" IsEnabled="{Binding CanRetrySave}"/>
+         <Button Content="Reopen storage" Click="ReopenStorage" IsEnabled="{Binding CanReopen}"/>
+         <Button Content="Recover accounting…" Click="Recover" IsEnabled="{Binding CanRecover}"/>
+        </WrapPanel>
+        <Button Content="Repair Windows settings…" Click="RepairSettings" IsEnabled="{Binding CanRepairSettings}" HorizontalAlignment="Left"/>
+       </StackPanel>
+      </Expander>
+      <Expander Header="Experimental switching" Margin="0,0,0,16">
+       <StackPanel>
+        <CheckBox x:Name="SwitchingInput" IsEnabled="{Binding CanEditReminders}" AutomationProperties.Name="Allow an explicit Switch to Work attempt from a nudge">
+         <TextBlock Text="Allow an explicit Switch to Work attempt from a nudge"/>
+        </CheckBox>
+        <TextBlock Text="Separate consent · Supported Windows only. Default off. No automatic switching or retries. An uncertain result may include a delayed transition; check Win+Tab." Margin="0,8,0,8"/>
+        <TextBlock x:Name="SwitchingCapability" FontSize="12" Margin="0,0,0,8"/>
+        <WrapPanel>
+         <Button Content="Save switching consent" Click="SaveSwitching" IsEnabled="{Binding CanEditReminders}"/>
+         <Button Content="Cancel" Click="CancelDraft"/>
+        </WrapPanel>
+       </StackPanel>
+      </Expander>
+      <Expander Header="Technical monitoring details">
        <StackPanel>
         <TextBlock Text="{Binding Status}"/>
         <TextBlock Text="{Binding Confidence}"/>
-        <TextBlock x:Name="NudgeStatus" TextWrapping="Wrap"/>
+        <TextBlock x:Name="NudgeStatus"/>
        </StackPanel>
       </Expander>
+      <TextBlock Text="Diagnostics is off by default." FontSize="12" Foreground="{DynamicResource ShiftSupporting}" Margin="0,16,0,0"/>
      </StackPanel>
     </StackPanel>
    </StackPanel>
   </ScrollViewer>
-  <TextBlock Grid.Row="2" Text="Estimated accounting · Local only · Owner evaluation" FontSize="12" Foreground="{DynamicResource ShiftSupporting}" Margin="0,12,0,0"/>
+  <StackPanel x:Name="MonitoringActions" Grid.Row="2" Visibility="Collapsed" IsEnabled="{Binding CommandsIdle}">
+   <Border Height="1" Background="{DynamicResource ShiftDivider}" Margin="0,12,0,8"/>
+   <WrapPanel>
+    <Button Content="Save changes" Click="SaveDurations" IsEnabled="{Binding CanEdit}"/>
+    <Button x:Name="MonitoringCancelButton" Content="Cancel" Click="CancelDraft"/>
+   </WrapPanel>
+  </StackPanel>
+  <TextBlock Grid.Row="3" Text="Estimated accounting · Local only · Owner evaluation" FontSize="12" Foreground="{DynamicResource ShiftSupporting}" Margin="0,12,0,0"/>
  </Grid>
 </Window>
