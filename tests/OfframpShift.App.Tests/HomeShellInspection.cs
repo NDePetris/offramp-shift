@@ -69,6 +69,20 @@ internal static class HomeShellInspection
                     throw new InvalidOperationException("Common healthy Home state should fit at the starting size.");
             }
             window.Model.SetCommandPending(false); window.ReportAction("");
+            var reminder = new NudgeWindow(_ => Task.FromResult(HostCommandResult.Success()), openMain: () => { })
+            { ShowActivated = false, ShowInTaskbar = false, MaxHeight = 680 };
+            reminder.ApplyBrand(dark, false); reminder.SetSwitchAvailability("");
+            reminder.Show();
+            SetWindowPos(new System.Windows.Interop.WindowInteropHelper(reminder).Handle, 0, area.X + 40, area.Y + 40, 0, 0, 0x0015);
+            Capture(reminder, Path.Combine(output, $"{(dark ? "dark" : "light")}-reminder.png"));
+            reminder.Width = 320; reminder.MaxHeight = 360;
+            reminder.SetSwitchAvailability(string.Join(" ", Enumerable.Repeat("Switching unavailable. Select Work manually with Win+Tab.", 5)));
+            reminder.Result.Text = "Extra time was not saved. Local storage is unavailable. Review recovery in Offramp Shift.";
+            Capture(reminder, Path.Combine(output, $"{(dark ? "dark" : "light")}-reminder-constrained.png"));
+            var reminderScroll = (ScrollViewer)reminder.Content;
+            reminderScroll.ScrollToEnd(); Settle(reminder);
+            if (reminderScroll.VerticalOffset <= 0) throw new InvalidOperationException("Reminder errors/actions must remain scrollable.");
+            reminder.CloseAutomatically();
             var diagnostics = new DiagnosticsWindow(window, new CommandCoordinator(), () => { }) { ShowActivated = false, ShowInTaskbar = false };
             diagnostics.Show();
             SetWindowPos(new System.Windows.Interop.WindowInteropHelper(diagnostics).Handle, 0, area.X + 40, area.Y + 40, 0, 0, 0x0015);
@@ -92,6 +106,11 @@ internal static class HomeShellInspection
             window.NavigateBack(); window.Apply(value with { Sequence = ++valueSequence, PublishedTick = Environment.TickCount64 });
             window.Width = 400; window.Height = 500; window.UpdateLayout();
             Capture(window, Path.Combine(output, $"{(dark ? "dark" : "light")}-minimum.png"));
+            window.Apply(value with { Sequence = ++valueSequence, PublishedTick = Environment.TickCount64, State = value.State! with { UsageMs = long.MaxValue, Exhausted = true } });
+            Capture(window, Path.Combine(output, $"{(dark ? "dark" : "light")}-long-timer.png"));
+            window.ApplyBrand(dark, true);
+            Capture(window, Path.Combine(output, $"{(dark ? "dark" : "light")}-system-brush-simulation.png"));
+            window.ApplyBrand(dark, false);
             window.Width = 700; window.Height = 700; window.UpdateLayout();
             Capture(window, Path.Combine(output, $"{(dark ? "dark" : "light")}-wide.png"));
             window.Width = 440; window.Height = 540;
@@ -131,12 +150,15 @@ internal static class HomeShellInspection
     private static void Capture(Window window, string path)
     {
         Settle(window);
+        // Settle the final extent after a sequence of bound content changes.
+        foreach (var viewer in Descendants(window).OfType<ScrollViewer>().Where(x => x.IsVisible)) viewer.InvalidateMeasure();
+        Settle(window);
         foreach (var viewer in (window is MainWindow main ? new[] { main.HomePage, main.SettingsOverview, main.SettingsDetail } : Descendants(window).OfType<ScrollViewer>()).Where(x => x.IsVisible))
         {
-            ScrollLayoutChecks.Clearance(viewer);
             var facts = Descendants(viewer).OfType<FrameworkElement>().Where(x => x is ScrollContentPresenter or System.Windows.Controls.Primitives.ScrollBar).Select(x =>
                 $"{x.GetType().Name} {x.Name}: {x.TransformToAncestor(viewer).TransformBounds(new Rect(x.RenderSize))}; visibility={x.Visibility}");
             File.AppendAllText(Path.Combine(Path.GetDirectoryName(path)!, "layout.txt"), $"{Path.GetFileName(path)} {viewer.Name}: viewport={viewer.ViewportWidth}x{viewer.ViewportHeight}; extent={viewer.ExtentWidth}x{viewer.ExtentHeight}\n{string.Join("\n", facts)}\n");
+            ScrollLayoutChecks.Clearance(viewer);
         }
         // Capture only this harness-owned HWND, including native chrome. A
         // VisualBrush of the margined root can shift/crop the right/bottom edge.

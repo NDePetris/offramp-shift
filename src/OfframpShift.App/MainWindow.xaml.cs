@@ -52,19 +52,8 @@ public partial class MainWindow : Window
     {
         if (artwork == (dark, highContrast)) return;
         artwork = (dark, highContrast);
-        System.Windows.Media.SolidColorBrush Brush(string color)
-        {
-            var brush = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(color));
-            brush.Freeze(); return brush;
-        }
-        Resources["ShiftCanvas"] = highContrast ? SystemColors.WindowBrush : Brush(dark ? "#1F2B28" : "#F6F3EC");
-        Resources["ShiftText"] = highContrast ? SystemColors.WindowTextBrush : Brush(dark ? "#F6F3EC" : "#1F2B28");
-        Resources["ShiftSupporting"] = highContrast ? SystemColors.WindowTextBrush : Brush(dark ? "#C8BCA7" : "#405F54");
-        Resources["ShiftAccent"] = highContrast ? SystemColors.WindowTextBrush : Brush(dark ? "#79AFC9" : "#2E5A4F");
-        Resources["ShiftTrack"] = highContrast ? SystemColors.ControlBrush : Brush(dark ? "#50675D" : "#E3E3DC");
-        Resources["ShiftDivider"] = highContrast ? SystemColors.WindowTextBrush : Brush(dark ? "#50675D" : "#C8BCA7");
-        // Context uses a native monitor glyph; canonical artwork stays in the
-        // window/tray icons and the unchanged reminder surface.
+        QuietRoadPalette.Apply(this, dark, highContrast);
+        HeroRoad.ApplyTheme(dark, highContrast);
         Icon = BrandAssets.WindowIcon(dark);
     }
 

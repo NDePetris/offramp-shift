@@ -10,16 +10,20 @@ public partial class NudgeWindow : Window
 {
     private readonly Func<long, Task<HostCommandResult>> defer;
     private readonly Func<Task<SwitchCompletion>> switchToWork;
+    private readonly Action? openMain;
+    private (bool Dark, bool HighContrast)? artwork;
     private bool switchingDisabled;
     private string switchingUnavailableReason = "Switching availability is unknown.";
     private enum Closure { None, ContextInvalidated, CommandCompleted }
     private Closure closure;
     private bool submitted, closed;
     internal bool CanReportFailure => !closed && closure == Closure.None;
-    internal NudgeWindow(Func<long, Task<HostCommandResult>> defer, Func<Task<SwitchCompletion>>? switchToWork = null)
+    internal NudgeWindow(Func<long, Task<HostCommandResult>> defer, Func<Task<SwitchCompletion>>? switchToWork = null, Action? openMain = null)
     {
         InitializeComponent();
         this.defer = defer;
+        this.openMain = openMain;
+        OpenMainButton.IsEnabled = openMain is not null;
         this.switchToWork = switchToWork ?? (() => Task.FromResult(SwitchCompletion.Reject("Switching is unavailable.")));
         // Establish logical focus before an HWND is shown. Enter is not an extension.
         FocusManager.SetFocusedElement(this, NudgeHeading);
@@ -27,13 +31,29 @@ public partial class NudgeWindow : Window
         Closed += (_, _) => closed = true;
         PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) { e.Handled = true; Close(); } };
         ApplyBrand();
+        SetSwitchAvailability(switchingUnavailableReason);
     }
     internal void ApplyBrand()
     {
-        var dark = BrandAssets.IsDark(Background);
+        var dark = BrandAssets.IsDark(TryFindResource("WindowBackground") as System.Windows.Media.Brush);
+        ApplyBrand(dark, SystemParameters.HighContrast);
+    }
+    internal void ApplyBrand(bool dark, bool highContrast)
+    {
+        if (artwork == (dark, highContrast)) return;
+        artwork = (dark, highContrast);
+        QuietRoadPalette.Apply(this, dark, highContrast);
+        ReminderRoad.ApplyTheme(dark, highContrast);
         Icon = BrandAssets.WindowIcon(dark);
         FamilySymbol.Source = BrandAssets.Symbol(dark);
-        FamilySymbol.Visibility = SystemParameters.HighContrast ? Visibility.Collapsed : Visibility.Visible;
+        FamilySymbol.Visibility = highContrast ? Visibility.Collapsed : Visibility.Visible;
+    }
+    private void OpenMain(object sender, RoutedEventArgs e)
+    {
+        if (closed || closure != Closure.None) return;
+        // Navigation deliberately leaves the authorized reminder HWND alive.
+        // Closing here would invoke the existing durable one-minute deferral.
+        openMain?.Invoke();
     }
     internal void SetSwitchAvailability(string reason)
     {
@@ -43,7 +63,8 @@ public partial class NudgeWindow : Window
         if (SwitchAvailability.Text != message)
         {
             SwitchAvailability.Text = message;
-            System.Windows.Automation.Peers.UIElementAutomationPeer.FromElement(SwitchAvailability)?.RaiseAutomationEvent(
+            SwitchWarning.Text = reason.Length == 0 ? "Experimental switching · one explicit attempt." : reason;
+            System.Windows.Automation.Peers.UIElementAutomationPeer.FromElement(SwitchWarning)?.RaiseAutomationEvent(
                 System.Windows.Automation.Peers.AutomationEvents.LiveRegionChanged);
         }
         Controls(!submitted && !closed);
@@ -61,6 +82,7 @@ public partial class NudgeWindow : Window
     {
         OneMinute.IsEnabled = FiveMinutes.IsEnabled = enabled;
         SwitchWork.IsEnabled = enabled && !switchingDisabled && switchingUnavailableReason.Length == 0;
+        SwitchWork.Visibility = switchingUnavailableReason.Length == 0 && !switchingDisabled ? Visibility.Visible : Visibility.Collapsed;
     }
     private void Announce(string message)
     {
