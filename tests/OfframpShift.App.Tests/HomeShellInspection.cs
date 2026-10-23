@@ -69,6 +69,13 @@ internal static class HomeShellInspection
                     throw new InvalidOperationException("Common healthy Home state should fit at the starting size.");
             }
             window.Model.SetCommandPending(false); window.ReportAction("");
+            var diagnostics = new DiagnosticsWindow(window, new CommandCoordinator(), () => { }) { ShowActivated = false, ShowInTaskbar = false };
+            diagnostics.Show();
+            SetWindowPos(new System.Windows.Interop.WindowInteropHelper(diagnostics).Handle, 0, area.X + 40, area.Y + 40, 0, 0, 0x0015);
+            Capture(diagnostics, Path.Combine(output, $"{(dark ? "dark" : "light")}-diagnostics.png"));
+            diagnostics.Width = 640; diagnostics.Height = 480;
+            Capture(diagnostics, Path.Combine(output, $"{(dark ? "dark" : "light")}-diagnostics-minimum.png"));
+            diagnostics.Close();
             window.OpenSettings(); window.UpdateLayout(); Capture(window, Path.Combine(output, $"{(dark ? "dark" : "light")}-settings.png"));
             foreach (var button in ((Panel)window.SettingsOverview.Content).Children.OfType<Button>())
             {
@@ -110,18 +117,21 @@ internal static class HomeShellInspection
         Console.WriteLine("PASS: native WPF initial size, resize, light/dark, routed settings navigation and transient tray create/update/dispose (synthetic state; no live monitoring, physical keyboard, Narrator or tray-menu interaction acceptance).");
     }
     private static long valueSequence = 100;
-    private static void Settle(MainWindow window)
+    private static void Settle(Window window)
     {
         // Pump native resize/DPI messages as well as WPF layout before measuring.
         var frame = new DispatcherFrame();
-        window.Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () => frame.Continue = false);
-        Dispatcher.PushFrame(frame);
         window.UpdateLayout();
+        // Allow an actual compositor frame after layout/navigation/DPI changes;
+        // reaching ApplicationIdle once can still print the previous page.
+        var settle = new DispatcherTimer(DispatcherPriority.ApplicationIdle) { Interval = TimeSpan.FromMilliseconds(120) };
+        settle.Tick += (_, _) => { settle.Stop(); frame.Continue = false; };
+        settle.Start(); Dispatcher.PushFrame(frame);
     }
-    private static void Capture(MainWindow window, string path)
+    private static void Capture(Window window, string path)
     {
         Settle(window);
-        foreach (var viewer in new[] { window.HomePage, window.SettingsOverview, window.SettingsDetail }.Where(x => x.IsVisible))
+        foreach (var viewer in (window is MainWindow main ? new[] { main.HomePage, main.SettingsOverview, main.SettingsDetail } : Descendants(window).OfType<ScrollViewer>()).Where(x => x.IsVisible))
         {
             ScrollLayoutChecks.Clearance(viewer);
             var facts = Descendants(viewer).OfType<FrameworkElement>().Where(x => x is ScrollContentPresenter or System.Windows.Controls.Primitives.ScrollBar).Select(x =>
@@ -139,6 +149,14 @@ internal static class HomeShellInspection
             try { if (!PrintWindow(handle, context, 0)) throw new InvalidOperationException("Owned window capture unavailable."); }
             finally { graphics.ReleaseHdc(context); }
         }
+        var renderedSamples = 0;
+        for (var y = 70; y < bitmap.Height - 30; y += 16)
+            for (var x = 30; x < bitmap.Width - 30; x += 16)
+            {
+                var color = bitmap.GetPixel(x, y);
+                if (color.ToArgb() != System.Drawing.Color.White.ToArgb() && color.ToArgb() != System.Drawing.Color.Black.ToArgb()) renderedSamples++;
+            }
+        if (renderedSamples < 20) throw new InvalidOperationException("Native print capture contains no rendered WPF content.");
         bitmap.Save(path, System.Drawing.Imaging.ImageFormat.Png);
     }
     internal static IEnumerable<DependencyObject> Descendants(DependencyObject root)

@@ -22,6 +22,7 @@ public enum AssignmentStatus { Unassigned, Valid, Unavailable, Missing, Invalid 
 
 public sealed record HostCommandResult(bool Succeeded, string Message = "")
 {
+    public bool ConfigurationConflict { get; init; }
     public NudgePresentation? Presentation { get; init; }
     public DesktopFeasibility.SwitchAuthorization? Switching { get; init; }
     public static HostCommandResult Success(string message = "") => new(true, message);
@@ -38,6 +39,7 @@ public enum HostCommandKind
 
 public sealed record HostCommand(HostCommandKind Kind)
 {
+    public ExpectedSettingsValues? Expected { get; init; }
     public bool Confirmed { get; init; }
     public long AllowanceMs { get; init; }
     public long RequiredBreakMs { get; init; }
@@ -49,6 +51,28 @@ public sealed record HostCommand(HostCommandKind Kind)
     public ReminderEvent? Reminder { get; init; }
     public nint NudgeWindow { get; init; }
     public NudgePresentation? Presentation { get; init; }
+}
+
+// Owner-thread preconditions compare only the fields owned by the command.
+// Optional for existing immediate commands (including first-close preference).
+public sealed record ExpectedSettingsValues(long AllowanceMs, long RequiredBreakMs, long IdleThresholdMs,
+    long RepeatMs, AppTheme Theme, bool? CloseToTray, ReminderStyle ReminderStyle, bool SwitchingConsent,
+    string SwitchingBuild, string SwitchingFamily)
+{
+    public static ExpectedSettingsValues From(WindowsSettings settings, MonitoringConfiguration? configuration) => new(
+        configuration?.AllowanceMs ?? 0, configuration?.RequiredBreakMs ?? 0, configuration?.IdleThresholdMs ?? 0,
+        configuration?.InteractiveRepeatNudgeMs ?? 0, settings.Theme, settings.CloseToTray, settings.ReminderStyle,
+        settings.SwitchingConsent, settings.SwitchingConsentBuild, settings.SwitchingConsentFamily);
+
+    public bool Matches(HostCommandKind kind, WindowsSettings settings, MonitoringConfiguration configuration) => kind switch
+    {
+        HostCommandKind.ChangeDurations => AllowanceMs == configuration.AllowanceMs && RequiredBreakMs == configuration.RequiredBreakMs && IdleThresholdMs == configuration.IdleThresholdMs,
+        HostCommandKind.ChangeInteractiveRepeat => RepeatMs == configuration.InteractiveRepeatNudgeMs,
+        HostCommandKind.ChangeAppearance => Theme == settings.Theme && CloseToTray == settings.CloseToTray,
+        HostCommandKind.ChangeBreakReminders => ReminderStyle == settings.ReminderStyle,
+        HostCommandKind.ChangeSwitchingConsent => SwitchingConsent == settings.SwitchingConsent && SwitchingBuild == settings.SwitchingConsentBuild && SwitchingFamily == settings.SwitchingConsentFamily,
+        _ => true
+    };
 }
 
 // Process-local, single-use presentation transaction; never persisted or renewed.

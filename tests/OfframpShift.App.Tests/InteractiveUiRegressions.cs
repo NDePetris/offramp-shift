@@ -505,7 +505,7 @@ internal static class InteractiveUiRegressions
             var window = new MainWindow(command => { commands.Add(command); return Task.FromResult(HostCommandResult.Success()); }, () => Task.CompletedTask, () => Task.CompletedTask);
             window.Apply(snapshot());
             Check(AutomationProperties.GetName(window.RepeatInput) == "Reminder repeat interval in whole minutes");
-            Check((string)window.SaveRepeatButton.Content == "Save reminder repeat interval");
+            Check((string)window.SaveRepeatButton.Content == "Save repeat interval");
             foreach (var bad in new[] { "0", "61", "1.5", "bad" })
             { window.RepeatInput.Text = bad; window.SaveRepeatButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); }
             Check(commands.Count == 0);

@@ -352,5 +352,19 @@ art is hidden in high contrast; the native text heading remains. This provisions
 the family symbol without approving a differentiated Shift icon or the handoff's
 proposed semantic mappings. See the asset README and validation record.
 
+PR B replaces the temporary Settings editors with protected, explicit-save drafts
+and command-owned expected-value checks. These checks run after existing safety
+invalidations on the serialized owner and return a structured conflict without
+mutating configuration/accounting. Back, close-to-tray and Exit protect drafts;
+first-close, exact pending-checkpoint retry and shutdown retain their contracts.
+
+Optional Diagnostics is a separate disposable nonmodal view of the same
+DashboardModel/committed projection and CommandCoordinator. It has no independent
+monitoring state or polling. Its default-off preference uses the separate,
+strictly versioned app-owned `ui-preferences.json`; malformed/future files are
+preserved. Successful opt-in only enables Open Diagnostics; startup never opens
+the companion. Recovery stays available in Advanced with Diagnostics off. See
+[PR B validation and owner checklist](../validation/pr-b-settings-diagnostics.md).
+
 No telemetry, runtime network calls, activity history or automatic diagnostics
-files are added. Licensing/distribution remain undecided.
+logs are added. Licensing/distribution remain undecided.

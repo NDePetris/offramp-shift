@@ -32,6 +32,10 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        // PrintWindow must capture WPF content even when hardware composition is
+        // unavailable to an unattended native inspection. Production is unchanged.
+        if (args is ["--inspect-home-shell", _])
+            RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
         if (args is ["--desktop-worker"]) return OfframpShift.App.Program.Main(args);
         if (args is ["--switch-worker"]) return OfframpShift.App.Program.Main(args);
         if (args is ["--inspect-nudge-lifecycle", var monitor] && monitor is "primary" or "secondary")
@@ -283,7 +287,7 @@ internal static class Program
             var root = (FrameworkElement)window.Content;
             root.Measure(new(820, 760)); root.Arrange(new(0, 0, 820, 760)); root.UpdateLayout();
             Check(window.Model.HeroValue == "28 min"); Check(window.CurrentPage == "Home");
-            Check(AutomationProperties.GetName(window.AllowanceInput) == "Allowance in minutes");
+            Check(AutomationProperties.GetName(window.AllowanceInput) == "Personal allowance in minutes");
             var peer = UIElementAutomationPeer.CreatePeerForElement(window.AllowanceInput);
             Check(peer is not null && peer.GetAutomationControlType() == AutomationControlType.Edit);
             Check(window.AllowanceInput.Focusable && window.SettingsButton.Focusable);
@@ -313,6 +317,7 @@ internal static class Program
             Check(window.ActionResult.Text == window.SettingsResult.Text && window.SettingsResult.Text.Contains("Task View"));
         });
         Pr8UiRegressions.Run(Test, () => Snapshot());
+        SettingsDiagnosticsRegressions.Run(Test, () => Snapshot());
         PresentationRegressions.Views(Test, () => Snapshot());
         Test("switch STA worker watchdog exits with stdin withheld before any native activation", () =>
         {
