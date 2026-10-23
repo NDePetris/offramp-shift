@@ -43,26 +43,27 @@
   <Button x:Name="BackButton" Content="← Back" Click="GoBack" HorizontalAlignment="Left" Visibility="Collapsed" Margin="0,0,0,16" AutomationProperties.Name="Back to Home"/>
   <ScrollViewer x:Name="HomePage" Style="{StaticResource ContentScroll}" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
    <StackPanel MaxWidth="520" HorizontalAlignment="Stretch">
-    <Border x:Name="TimerHero" Background="{DynamicResource ShiftHero}" CornerRadius="20" Padding="16,12" Margin="0,0,0,12"><StackPanel>
-    <TextBlock Text="{Binding HeroLabel}" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,4"/>
-    <Grid>
-     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-     <local:QuietRoad x:Name="HeroRoad" Grid.Column="1" Width="68" Height="84" Margin="8,0,0,0"/>
-     <TextBlock x:Name="HeroTimer" Text="{Binding HeroValue}" FontSize="60" FontWeight="SemiBold" Foreground="{DynamicResource ShiftAccent}" Typography.NumeralAlignment="Tabular"/>
-    </Grid>
-    <TextBlock Text="{Binding RecordedQualifier}" Style="{StaticResource RecordedText}"/>
-    <TextBlock Text="{Binding Arithmetic}" Foreground="{DynamicResource ShiftSupporting}" Margin="0,4,0,8"/>
-    <TextBlock Text="The allowance remains exhausted until a qualifying break or explicit Reset usage." Visibility="{Binding ShowExhaustionExplanation, Converter={StaticResource BooleanToVisibility}}" Margin="0,0,0,12"/>
-    <ProgressBar Style="{StaticResource ThinProgress}" Visibility="{Binding ShowUsageProgress, Converter={StaticResource BooleanToVisibility}}" Value="{Binding UsageProgress, Mode=OneWay}" Maximum="100" Height="4" Foreground="{DynamicResource ShiftAccent}" Background="{DynamicResource ShiftTrack}" AutomationProperties.Name="Recorded allowance usage" AutomationProperties.HelpText="{Binding Arithmetic}" Margin="0,0,0,8"/>
-    <StackPanel Visibility="{Binding ShowReminder, Converter={StaticResource BooleanToVisibility}}" Margin="0,0,0,8">
-     <WrapPanel>
-      <TextBlock Text="{Binding ReminderLabel}" VerticalAlignment="Center"/>
-      <TextBlock Text="{Binding ReminderValue}" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource ShiftAccent}" Margin="12,0,0,0"/>
-     </WrapPanel>
-     <TextBlock Text="{Binding RecordedQualifier}" Style="{StaticResource RecordedText}"/>
-     <TextBlock Text="Advances only during eligible Personal time" FontSize="12" Foreground="{DynamicResource ShiftSupporting}" Margin="0,4,0,0"/>
-    </StackPanel>
-    </StackPanel></Border>
+    <Border x:Name="TimerHero" Background="{DynamicResource ShiftHero}" CornerRadius="20" Margin="0,0,0,12">
+     <Grid>
+      <local:QuietRoad x:Name="HeroRoad" HomeBackground="True"/>
+      <StackPanel x:Name="HeroContent" Margin="16,12">
+       <TextBlock Background="{DynamicResource ShiftHero}" HorizontalAlignment="Left" Text="{Binding HeroLabel}" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,4"/>
+       <TextBlock x:Name="HeroTimer" Text="{Binding HeroValue}" FontSize="60" MinHeight="84" FontWeight="SemiBold" Foreground="{DynamicResource ShiftAccent}" Background="{DynamicResource ShiftHero}" HorizontalAlignment="Left" Typography.NumeralAlignment="Tabular"/>
+       <TextBlock Background="{DynamicResource ShiftHero}" HorizontalAlignment="Left" Text="{Binding RecordedQualifier}" Style="{StaticResource RecordedText}"/>
+       <TextBlock Background="{DynamicResource ShiftHero}" HorizontalAlignment="Left" Text="{Binding Arithmetic}" Foreground="{DynamicResource ShiftSupporting}" Margin="0,4,0,8"/>
+       <TextBlock Background="{DynamicResource ShiftHero}" HorizontalAlignment="Left" Text="The allowance remains exhausted until a qualifying break or explicit Reset usage." Visibility="{Binding ShowExhaustionExplanation, Converter={StaticResource BooleanToVisibility}}" Margin="0,0,0,12"/>
+       <ProgressBar Style="{StaticResource ThinProgress}" Visibility="{Binding ShowUsageProgress, Converter={StaticResource BooleanToVisibility}}" Value="{Binding UsageProgress, Mode=OneWay}" Maximum="100" Height="4" Foreground="{DynamicResource ShiftAccent}" Background="{DynamicResource ShiftTrack}" AutomationProperties.Name="Recorded allowance usage" AutomationProperties.HelpText="{Binding Arithmetic}" Margin="0,0,0,8"/>
+       <StackPanel Visibility="{Binding ShowReminder, Converter={StaticResource BooleanToVisibility}}" Margin="0,0,0,8">
+        <WrapPanel>
+         <TextBlock Background="{DynamicResource ShiftHero}" HorizontalAlignment="Left" Text="{Binding ReminderLabel}" VerticalAlignment="Center"/>
+         <TextBlock Background="{DynamicResource ShiftHero}" HorizontalAlignment="Left" Text="{Binding ReminderValue}" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource ShiftAccent}" Margin="12,0,0,0"/>
+        </WrapPanel>
+        <TextBlock Background="{DynamicResource ShiftHero}" HorizontalAlignment="Left" Text="{Binding RecordedQualifier}" Style="{StaticResource RecordedText}"/>
+        <TextBlock Background="{DynamicResource ShiftHero}" HorizontalAlignment="Left" Text="Advances only during eligible Personal time" FontSize="12" Foreground="{DynamicResource ShiftSupporting}" Margin="0,4,0,0"/>
+       </StackPanel>
+      </StackPanel>
+     </Grid>
+    </Border>
 
     <DockPanel Margin="0,0,0,8">
      <TextBlock DockPanel.Dock="Right" Text="{Binding BreakValue}" Foreground="{DynamicResource ShiftSupporting}" Margin="12,0,0,0"/>

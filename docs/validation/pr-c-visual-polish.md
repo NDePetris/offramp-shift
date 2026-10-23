@@ -20,11 +20,17 @@ Very long timer values wrap and scroll rather than clip or shrink the whole UI.
 
 Light mode uses Warm Paper `#F6F3EC`, sage `#DFEAE4`, Moss `#2E5A4F`, and a
 muted Sky-derived roadway. Dark mode uses Pine and a darker moss hero.
-QuietRoad uses two shared frozen WPF drawings, static landscape/road geometry,
-and a frozen fade mask. Theme changes select a drawing; snapshots do not rebuild
-it or run a decorative clock. Artwork occupies a separate column beside the
-timer/heading, so important text and controls never sit on the detailed scene.
-This deliberately adapts the mobile reference to the compact desktop layout.
+QuietRoad uses shared frozen light/dark WPF drawings and fade masks, with distinct
+Home-background and small-reminder compositions. Theme changes select a drawing;
+snapshots do not rebuild it or run a decorative clock. Home's scene is a background
+layer covering the card; the reminder keeps its original small illustration.
+Home hills extend across roughly the right 60–65%, fading toward the text-heavy
+left. The recognizable road curves in from the lower-right and stays on the right;
+opaque text backings protect every timer/qualifier/explanation from road detail,
+including unusually long values and wrapped labels. A frozen rounded clip matches
+the 20-DIP card corners. The background contributes no desired height, and uniform
+width scaling preserves its proportions as the card resizes. It is bottom anchored;
+wide/shallow layouts can crop the upper scenery instead of stretching it.
 The scene has no input hit-testing, focus or automation peer. Contrast fallback
 hides it and uses system brushes. The canonical logo assets remain unchanged.
 
@@ -70,7 +76,7 @@ below count as passing evidence.
 
 | Required check | Result |
 |---|---|
-| `./run.ps1 test` | PASS — Core 82 / 40,598 assertions; Persistence 84 / 778; Host 300 / 3,039; WPF 100 / 195; zero failures |
+| `./run.ps1 test` | PASS — Core 82 / 40,598 assertions; Persistence 84 / 778; Host 300 / 3,039; WPF 102 / 195; zero failures |
 | `./run.ps1 format` | PASS — warnings-as-errors builds and verify-no-changes |
 | `./spikes/VirtualDesktop/run.ps1 test` | PASS — fake policy and owned non-COM worker isolation |
 | `./spikes/BrowserAttribution/run.ps1 test` | PASS — synthetic and process/transport evidence |
@@ -86,15 +92,13 @@ and hero), switch visibility, callback wiring, navigation during pending extra
 time, retained reminder identity and no navigation command/replay. These are
 synthetic tests, not live accounting or shell validation.
 
-After the full checks, an additional actual-hero-binding regression was added
-for the operational-state matrix. The focused WPF rebuild, **101 tests / 195
-counted assertions, zero failures**, and verify-no-changes format check passed.
-Presentation helper assertions throw directly rather than incrementing Program's
-legacy assertion counter. The native capture run passed its then-current 100
-tests and captured **62 images per monitor**; application visuals did not change
-after those captures.
+The initial PR C revision `852a7f87124d3325bb531da556396baadf66e3f2` passed 101
+focused WPF tests. The enlargement follow-up adds a layout regression for full-card
+background sizing, height independence at several widths, frozen rounded clipping,
+text backings and the unchanged 48 × 60 DIP reminder scene. Presentation helper
+assertions throw directly rather than incrementing Program's legacy assertion counter.
 
-The Impeccable mechanical detector returned `[]` on the changed XAML; its source
+The initial PR C Impeccable mechanical detector returned `[]` on XAML; its source
 coverage does not establish WPF layout or accessibility correctness.
 
 ## Native WPF layout evidence
@@ -121,10 +125,30 @@ scrollbar with the prior extent. The inspection now explicitly remeasures the
 final extent before clearance assertions. Reduced hero vertical padding also
 keeps the common states compact. Production receives no polling/layout retry.
 
-Compared with the supplied Fade light reference and existing PR A captures, the
-result preserves warm paper, soft sage grouping and moss typography; the small
-road remains secondary. The reminder shares those roles without copying mobile
-dimensions. Settings remains familiar and technical content stays disclosed.
+Compared with the supplied Fade light reference and the original PR C captures,
+Home now has a continuous landscape and a substantially larger winding road,
+instead of a 68 × 84 DIP image beside the timer. Paper/sage/Moss roles and the
+dominant 60-DIP timer remain. Normal-state hero height and window dimensions are
+unchanged. The reminder, Settings, their content and all transactions are unchanged
+by this follow-up. Actual contrast-theme and screen-reader checks remain NOT RUN.
+
+### Enlargement follow-up on PR #25
+
+The owner requested this composition-only update on `codex/pr-c-visual-polish`.
+Changes are limited to QuietRoad's static Home composition, the Home hero layering,
+focused regression coverage and this validation/screenshot record. The original
+reminder drawing, fade, dimensions and behavior remain intact. No new PR is created.
+
+The first enlarged native pass completed on both displays with 101 existing tests
+and 62 captures per display. It showed continuous hills, a recognizable road,
+clear text, rounded clipping, unchanged common-state height and scrollable degraded
+states. No additional visual changes followed that review. The final pass passed
+**102 WPF tests**, including the new composition regression, and again produced
+**62 captures per display** at 144 and 96 DPI. All seven repository checks passed
+for this follow-up; results are in the table above. At 150%, normal Home content
+height remains **329.72 DIP** before and after enlargement; exhausted/extra-time
+content remains **369.62 DIP** within a **386.71 DIP** viewport. The enlarged
+scene creates no additional scroll range in common healthy states.
 
 ### Captures
 
@@ -150,9 +174,16 @@ The following are 150% captures unless labeled 100%:
 |---|---|
 | ![Home at 100%](images/pr-c/light-normal-100.png) | ![Reminder at 100%](images/pr-c/light-reminder-100.png) |
 
+[Previous PR C Home at 100%](images/pr-c/light-normal-before-enlargement-100.png)
+preserves the original small-scene capture for direct comparison.
+
+[Unavailable observations with retained visible values](images/pr-c/light-unavailable.png)
+is a fresh synthetic host snapshot with unavailable observations; it is distinct
+from the stale-publication capture above.
+
 [Constrained reminder with synthetic errors](images/pr-c/light-reminder-constrained.png)
 shows the scrollable overflow treatment. The full local capture matrix and layout
-logs remain ignored under `artifacts/prc-captures-verified/`.
+logs for the enlargement remain ignored under `artifacts/prc-large-final/`.
 
 ## Focused owner checklist — NOT RUN
 

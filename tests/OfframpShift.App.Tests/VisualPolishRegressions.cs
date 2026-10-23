@@ -11,6 +11,24 @@ internal static class VisualPolishRegressions
     internal static void Run(Action<string, Action> test, Func<HostSnapshot> snapshot)
     {
         void Check(bool value) { if (!value) throw new InvalidOperationException("Visual polish assertion failed."); }
+        test("Home scene fills and clips the existing hero without owning its height or reminder composition", () =>
+        {
+            var main = new MainWindow(_ => Task.FromResult(HostCommandResult.Success()), () => Task.CompletedTask, () => Task.CompletedTask);
+            main.Apply(snapshot()); main.ApplyBrand(false, false);
+            var root = (FrameworkElement)main.Content;
+            foreach (var width in new[] { 320d, 360, 480 })
+            {
+                root.Measure(new(width, 440)); root.Arrange(new(0, 0, width, 440)); root.UpdateLayout();
+                Check(main.HeroRoad.HomeBackground && main.HeroRoad.ActualWidth > 240);
+                Check(Math.Abs(main.HeroRoad.ActualWidth - main.TimerHero.ActualWidth) < 0.5);
+                Check(main.HeroRoad.ActualHeight < 200 && Math.Abs(main.HeroRoad.ActualHeight - main.TimerHero.ActualHeight) < 0.5);
+                Check(main.HeroRoad.Clip is RectangleGeometry { IsFrozen: true, RadiusX: 20, RadiusY: 20 } clip && clip.Rect.Size == main.HeroRoad.RenderSize);
+                Check(ReferenceEquals(main.HeroTimer.Background, main.Resources["ShiftHero"]));
+            }
+            var reminder = new NudgeWindow(_ => Task.FromResult(HostCommandResult.Success()));
+            Check(!reminder.ReminderRoad.HomeBackground && reminder.ReminderRoad.Width == 48 && reminder.ReminderRoad.Height == 60);
+            reminder.CloseAutomatically();
+        });
         test("scenic hero retains authoritative labels values and qualifiers across operational states", () =>
         {
             var main = new MainWindow(_ => Task.FromResult(HostCommandResult.Success()), () => Task.CompletedTask, () => Task.CompletedTask);

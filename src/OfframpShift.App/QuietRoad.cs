@@ -8,22 +8,78 @@ namespace OfframpShift.App;
 public sealed class QuietRoad : FrameworkElement
 {
     private static readonly DrawingGroup light = Create(false), dark = Create(true);
+    private static readonly DrawingGroup homeLight = CreateHome(false), homeDark = CreateHome(true);
     private static readonly Brush fade = CreateFade();
+    private static readonly Brush homeFade = CreateHomeFade();
     private DrawingGroup scene = light;
+    private bool isDark, homeBackground;
+    public bool HomeBackground
+    {
+        get => homeBackground;
+        set
+        {
+            homeBackground = value;
+            scene = value ? isDark ? homeDark : homeLight : isDark ? dark : light;
+            OpacityMask = value ? homeFade : fade;
+            InvalidateVisual();
+        }
+    }
     public QuietRoad() { Focusable = false; IsHitTestVisible = false; ClipToBounds = true; OpacityMask = fade; }
     internal void ApplyTheme(bool isDark, bool highContrast)
     {
+        this.isDark = isDark;
         Visibility = highContrast ? Visibility.Collapsed : Visibility.Visible;
-        var next = isDark ? dark : light;
+        var next = HomeBackground ? isDark ? homeDark : homeLight : isDark ? dark : light;
         if (ReferenceEquals(scene, next)) return;
         scene = next; InvalidateVisual();
     }
     protected override void OnRender(DrawingContext context)
     {
         base.OnRender(context);
-        context.PushTransform(new ScaleTransform(ActualWidth / 100, ActualHeight / 120));
+        // Home uses uniform width scaling, bottom anchored within the card. Its
+        // height is owned by content, never by the illustration's desired size.
+        var scale = ActualWidth / 400;
+        if (HomeBackground) context.PushTransform(new TranslateTransform(0, ActualHeight - 180 * scale));
+        context.PushTransform(HomeBackground ? new ScaleTransform(scale, scale) : new ScaleTransform(ActualWidth / 100, ActualHeight / 120));
         context.DrawDrawing(scene);
         context.Pop();
+        if (HomeBackground) context.Pop();
+    }
+    protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
+    {
+        base.OnRenderSizeChanged(sizeInfo);
+        if (!HomeBackground) return;
+        // Border's CornerRadius does not clip children. Match its outer curve;
+        // only layout-size changes replace this small frozen clip, not snapshots.
+        var clip = new RectangleGeometry(new Rect(sizeInfo.NewSize), 20, 20);
+        clip.Freeze(); Clip = clip;
+    }
+    private static Brush CreateHomeFade()
+    {
+        var brush = new LinearGradientBrush { StartPoint = new(0, 0), EndPoint = new(1, 0) };
+        brush.GradientStops = new GradientStopCollection
+        { new(Colors.Transparent, 0), new(Colors.Transparent, 0.34), new(Color.FromArgb(75, 255, 255, 255), 0.55), new(Colors.White, 0.83) };
+        brush.Freeze(); return brush;
+    }
+    private static DrawingGroup CreateHome(bool isDark)
+    {
+        Brush Color(string value) => new SolidColorBrush((System.Windows.Media.Color)ColorConverter.ConvertFromString(value));
+        var drawing = new DrawingGroup();
+        using (var context = drawing.Open())
+        {
+            void Shape(string path, string color) => context.DrawGeometry(Color(color), null, Geometry.Parse(path));
+            Shape("M 125,130 C 200,106 244,55 290,53 C 340,50 364,71 400,32 L 400,180 L 125,180 Z", isDark ? "#2D4B40" : "#D0E0D3");
+            Shape("M 140,167 C 219,139 247,121 283,91 C 328,54 361,97 400,74 L 400,180 L 140,180 Z", isDark ? "#36564A" : "#BED3C6");
+            Shape("M 175,180 C 249,148 327,166 400,130 L 400,180 Z", isDark ? "#29463C" : "#CBDBCD");
+            var road = Geometry.Parse("M 350,197 C 274,148 317,112 418,84");
+            context.DrawGeometry(null, new Pen(Color(isDark ? "#6D9298" : "#F6F3EC"), 37), road);
+            context.DrawGeometry(null, new Pen(Color(isDark ? "#406574" : "#A9CCDD"), 32), road);
+            context.DrawGeometry(null, new Pen(Color(isDark ? "#88ACB4" : "#F6F3EC"), 1.6)
+            { DashStyle = new DashStyle([5, 6], 0), StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round }, road);
+            Shape("M 250,113 L 255,89 L 260,113 Z M 263,117 L 269,86 L 274,117 Z M 277,120 L 282,97 L 287,120 Z", isDark ? "#486858" : "#AFC7B8");
+            Shape("M 305,33 C 316,23 321,24 327,27 C 335,10 353,13 357,26 C 371,22 380,27 384,34 Z", isDark ? "#345448" : "#D1E0D3");
+        }
+        drawing.Freeze(); return drawing;
     }
     private static Brush CreateFade()
     {
