@@ -23,7 +23,7 @@ internal static class VisualPolishRegressions
                 Check(Math.Abs(main.HeroRoad.ActualWidth - main.TimerHero.ActualWidth) < 0.5);
                 Check(main.HeroRoad.ActualHeight < 200 && Math.Abs(main.HeroRoad.ActualHeight - main.TimerHero.ActualHeight) < 0.5);
                 Check(main.HeroRoad.Clip is RectangleGeometry { IsFrozen: true, RadiusX: 20, RadiusY: 20 } clip && clip.Rect.Size == main.HeroRoad.RenderSize);
-                Check(ReferenceEquals(main.HeroTimer.Background, main.Resources["ShiftHero"]));
+                Check(ReferenceEquals(main.HeroTimer.Background, main.Resources["ShiftHomeHero"]) && main.HeroRoad.OpacityMask is null);
             }
             var reminder = new NudgeWindow(_ => Task.FromResult(HostCommandResult.Success()));
             Check(!reminder.ReminderRoad.HomeBackground && reminder.ReminderRoad.Width == 48 && reminder.ReminderRoad.Height == 60);
@@ -74,7 +74,7 @@ internal static class VisualPolishRegressions
                     else
                     {
                         Check(((SolidColorBrush)main.Resources["ShiftCanvas"]).Color == (Color)ColorConverter.ConvertFromString(dark ? "#1F2B28" : "#F6F3EC"));
-                        foreach (var surface in new[] { "ShiftCanvas", "ShiftHero" })
+                        foreach (var surface in new[] { "ShiftCanvas", "ShiftHero", "ShiftHomeHero" })
                             foreach (var text in new[] { "ShiftText", "ShiftSupporting", "ShiftAccent" })
                                 Check(Contrast(((SolidColorBrush)main.Resources[surface]).Color, ((SolidColorBrush)main.Resources[text]).Color) >= 4.5);
                     }
