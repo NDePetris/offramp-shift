@@ -26,13 +26,15 @@ QuietRoad uses shared frozen light/dark WPF drawings and brushes, with distinct
 Home-background and small-reminder compositions. Theme changes select a drawing;
 snapshots do not rebuild it or run a decorative clock. Home's scene is a background
 layer covering the card; the reminder keeps its original small illustration.
-Home fits Fade's complete illustration plane into roughly the right 60% at normal
-size, fading toward the text-heavy left. The original tapered road stays on the right;
+Home now uses a Shift-specific wide landscape matching the owner's final approved
+mockup, with a broad S-shaped road and layered hills on the right. This final
+composition request supersedes the earlier exact-Fade-geometry requirement.
+The timer area stays quiet through a stronger left veil;
 opaque text backings protect every timer/qualifier/explanation from road detail,
 including unusually long values and wrapped labels. A frozen rounded clip matches
 the 20-DIP card corners. The background contributes no desired height, and uniform
 scaling preserves its proportions as the card resizes. It is bottom/right aligned;
-the complete source plane fits without independently stretching either axis.
+the complete wide scene fits without independently stretching either axis.
 The scene has no input hit-testing, focus or automation peer. Contrast fallback
 hides it and uses system brushes. The canonical logo assets remain unchanged.
 
@@ -100,10 +102,12 @@ background sizing, height independence at several widths, frozen rounded clippin
 text backings and the unchanged 48 × 60 DIP reminder scene. Presentation helper
 assertions throw directly rather than incrementing Program's legacy assertion counter.
 
-The subsequent direct-source port adds two pinned artwork-contract tests covering
-all source paths/colors/paint order, shoulder/fill geometry identity, dash-unit
-conversion, gradient stops and uniform viewport bounds. Its new Home paper role
-also participates in the solid text-contrast checks.
+The direct-source port added two pinned artwork-contract tests. The final approved
+composition pass replaces those exact-path requirements with checks for a frozen
+broad road ribbon, separate shoulder/fill/lane geometry, subtle dash lengths,
+readability veils and a proportional wide viewport. The Home paper role still
+participates in solid text-contrast checks. Earlier source-fidelity results are
+historical evidence, not claims about the final Shift-specific paths.
 
 The initial PR C Impeccable mechanical detector returned `[]` on XAML; its source
 coverage does not establish WPF layout or accessibility correctness.
@@ -134,8 +138,9 @@ keeps the common states compact. Production receives no polling/layout retry.
 
 Compared with the supplied Fade light reference and the original PR C captures,
 Home has a continuous landscape instead of a 68 × 84 DIP image beside the timer.
-The direct-source follow-up replaces the enlarged approximation with Fade's
-original tapered ribbon, tree placements, hill silhouettes and veils. The dominant
+The final composition pass uses the approved generated mockup for the broad
+road sweep, hill depth and scene placement; Fade remains the palette/mood reference.
+It supersedes the intermediate exact source port described below. The dominant
 60-DIP timer, normal-state hero height and window dimensions remain unchanged.
 The reminder, Settings, their content and all transactions are unchanged by these
 artwork follow-ups. Actual contrast-theme and screen-reader checks remain NOT RUN.
@@ -158,14 +163,18 @@ height remains **329.72 DIP** before and after enlargement; exhausted/extra-time
 content remains **369.62 DIP** within a **386.71 DIP** viewport. The enlarged
 scene creates no additional scroll range in common healthy states.
 
-### Direct Fade source port — October 23, 2026
+### Historical direct Fade source port — October 23, 2026
+
+This section records revision `1d2b46624a867cf85a9ef2b29e1e26010ccb97fd`.
+Its exact-path constraint was subsequently superseded by the owner's final mockup
+composition request. The final implementation is described in the next section.
 
 Source authority: [`QuietRoadLandscape.kt`](https://github.com/NDePetris/phone-fade/blob/e873280d492c4aa8e02c0fbaae56e887ecf16931/app/src/main/java/app/ndplabs/phonefade/QuietRoadLandscape.kt)
 at commit **e873280d492c4aa8e02c0fbaae56e887ecf16931**, Git blob
 `d22739693dcd8eba77504e56c49f40dfd9b34a56`. Container colors were verified in
 [`FadeTheme.kt` at the same commit](https://github.com/NDePetris/phone-fade/blob/e873280d492c4aa8e02c0fbaae56e887ecf16931/app/src/main/java/app/ndplabs/phonefade/FadeTheme.kt).
 Both were read through GitHub at that exact ref. There is no runtime Android
-repository access. `FadeLandscape.cs` records the repository/file/commit and
+repository access. That revision's `FadeLandscape.cs` recorded the repository/file/commit and
 the original **360 × 280** coordinate system beside the port.
 
 The prior Shift implementation used a 400 × 180 approximation, a thick stroked
@@ -234,6 +243,65 @@ Shift captures. The final dark capture confirms the pale gradient band is gone.
 No layout, scroll-clearance, common-state fit or synthetic contrast-role regression
 was found. Tests and captures remain separate from manual owner acceptance.
 
+### Final Home composition — October 23, 2026
+
+The owner supplied the approved generated mockup after the final composition brief.
+Its original attachment is `codex-clipboard-bbe2ed1d-3cd0-4a06-aab9-8bc7b3aa38c4.png`,
+SHA-256 `DC9D35586ACD6EDCBFE1FA287D240F2BD5DE7CF2E7E6CA116F52A96CF6D7F963`.
+An unchanged local reference remains ignored at
+`artifacts/prc-composition-approved-mockup.png`; it is not a production asset.
+
+`HomeLandscape.cs` replaces the exact source-port class with a **400 × 184**
+Shift-specific vector composition. A broad, tapered S-bend enters from the lower
+right, turns inward through the middle-right and returns toward the horizon.
+Four hill layers, a soft cloud and small conifer clusters supply scenic depth.
+The colors retain Fade's subdued greens and sky blue. The shoulder is 2 logical
+units; the centerline is 1.25 units with round caps and absolute 8/11-unit dashes.
+The outer curve stays just inside the right edge rather than cutting off the bend.
+
+The left veil stays opaque through 55% of the card, then falls to 18% opacity at
+74%, 5% at 86% and 2% at the right edge. This keeps ordinary timer/usage backings
+from showing a hard edge while exposing the larger sweep. A foreground fade starts
+at 72% of card height and reaches opaque paper at the bottom, keeping the usage
+progress strip visually clear. Existing text backings still protect verbose states.
+Transparent stops retain paper RGB to avoid the previously identified dark fringe.
+
+The viewport uses `s = min(W/400, H/184)` with offset
+`(W - 400s, H - 184s)`. It scales uniformly and adds no desired height.
+The scene clip is 400 × 184, followed by the existing rounded card clip. The entire
+road bend remains visible in normal/minimum layouts; only the foreground ribbon's
+off-plane continuation is trimmed. Wider/taller states preserve proportions.
+
+**Scope check:** MainWindow.xaml, hero dimensions, timer/progress placement, section
+order, reminder rendering/content/transactions, Settings, Diagnostics, accounting,
+commands, navigation, switching and recovery were not changed in this pass.
+Only Home artwork/resources, their focused regressions and this evidence record
+changed. The former source-contract tests were replaced because their geometry
+requirement is explicitly no longer applicable; operational/layout/theme/focus
+regressions remain in place. No dependency, animation or decorative timer was added.
+
+The initial native comparison showed the intended broader sweep and hill depth,
+but exposed an edge at the timer backing. The final batch strengthened the left
+veil, softened the cloud and inset the outer curve. Bottom alignment also keeps
+the scene clip at the card edge in verbose states, avoiding an internal cutoff.
+Native WPF cannot reproduce
+every organic detail/texture of a generated image; the deliberate result uses
+simple, restrained vectors. Pixel-perfect mockup equality is not claimed.
+
+**Final results:** all seven established checks passed. The full application run
+passed Core 82 / 40,598 assertions, Persistence 84 / 778, Host 300 / 3,039 and
+WPF 104 / 195, with zero failures. After the final bottom-alignment adjustment,
+the focused WPF rebuild, verify-no-changes format check and **104 tests** also
+passed. The final native matrix captured **62 images per monitor** on Windows
+**26300.9711/x64**, at **144 DPI / 150%** and **96 DPI / 100%**. Normal, exhausted,
+extra-time, dark, minimum, stale and unavailable captures were updated from that
+matrix. The broad road sweep and layered depth are visibly closer to the approved
+mockup than the prior source port. Text remains readable, the normal hero has the
+same height, healthy states fit and degraded/long states retain scrolling.
+
+Physical keyboard, Narrator, actual Windows contrast themes and Windows text enlargement remain
+**NOT RUN**, and all previous operational safety gates/deferrals remain in force.
+
 ### Captures
 
 The following are 150% captures unless labeled 100%:
@@ -261,9 +329,13 @@ The following are 150% captures unless labeled 100%:
 [Previous PR C Home at 100%](images/pr-c/light-normal-before-enlargement-100.png)
 preserves the original small-scene capture for direct comparison.
 
-| Enlarged approximation before the source port (`8432070`) | Direct Fade source port |
+| Enlarged approximation before the source port (`8432070`) | Current final composition |
 |---|---|
-| ![Before source port](images/pr-c/light-normal-before-fade-port-100.png) | ![After source port](images/pr-c/light-normal-100.png) |
+| ![Before source port](images/pr-c/light-normal-before-fade-port-100.png) | ![Current composition](images/pr-c/light-normal-100.png) |
+
+| Exact source port before the final pass (`1d2b466`) | Approved-mockup composition |
+|---|---|
+| ![Before final composition](images/pr-c/light-normal-before-final-composition-100.png) | ![Final composition](images/pr-c/light-normal-100.png) |
 
 [Unavailable observations with retained visible values](images/pr-c/light-unavailable.png)
 is a fresh synthetic host snapshot with unavailable observations; it is distinct
@@ -272,7 +344,8 @@ from the stale-publication capture above.
 [Constrained reminder with synthetic errors](images/pr-c/light-reminder-constrained.png)
 shows the scrollable overflow treatment. The full local capture matrix and layout
 logs for the enlargement remain ignored under `artifacts/prc-large-final/`;
-the direct-port matrix is under `artifacts/prc-port-final/`.
+the direct-port matrix is under `artifacts/prc-port-final/`; the final composition
+verified matrix is under `artifacts/prc-composition-verified/`.
 
 ## Focused owner checklist — NOT RUN
 

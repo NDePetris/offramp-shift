@@ -19,7 +19,7 @@ public sealed class QuietRoad : FrameworkElement
         set
         {
             homeBackground = value;
-            scene = value ? isDark ? FadeLandscape.Dark : FadeLandscape.Light : isDark ? dark : light;
+            scene = value ? isDark ? HomeLandscape.Dark : HomeLandscape.Light : isDark ? dark : light;
             OpacityMask = value ? null : fade;
             InvalidateVisual();
         }
@@ -29,7 +29,7 @@ public sealed class QuietRoad : FrameworkElement
     {
         this.isDark = isDark;
         Visibility = highContrast ? Visibility.Collapsed : Visibility.Visible;
-        var next = HomeBackground ? isDark ? FadeLandscape.Dark : FadeLandscape.Light : isDark ? dark : light;
+        var next = HomeBackground ? isDark ? HomeLandscape.Dark : HomeLandscape.Light : isDark ? dark : light;
         if (ReferenceEquals(scene, next)) return;
         scene = next; InvalidateVisual();
     }
@@ -42,13 +42,12 @@ public sealed class QuietRoad : FrameworkElement
             context.DrawDrawing(scene); context.Pop(); return;
         }
         var bounds = new Rect(RenderSize);
-        context.DrawRectangle(isDark ? FadeLandscape.DarkPaper : FadeLandscape.LightPaper, null, bounds);
-        context.PushTransform(new MatrixTransform(FadeLandscape.Viewport(RenderSize)));
+        context.DrawRectangle(isDark ? HomeLandscape.DarkPaper : HomeLandscape.LightPaper, null, bounds);
+        context.PushTransform(new MatrixTransform(HomeLandscape.Viewport(RenderSize)));
         context.DrawDrawing(scene); context.Pop();
-        // Compose draws these in Canvas/viewport coordinates after the clipped
-        // source geometry. They affect decoration only, below all hero content.
-        context.DrawRectangle(isDark ? FadeLandscape.DarkReadingVeil : FadeLandscape.LightReadingVeil, null, bounds);
-        context.DrawRectangle(isDark ? FadeLandscape.DarkVerticalFade : FadeLandscape.LightVerticalFade, null, bounds);
+        // Reading veils affect decoration only, below all hero content.
+        context.DrawRectangle(isDark ? HomeLandscape.DarkReadingVeil : HomeLandscape.LightReadingVeil, null, bounds);
+        context.DrawRectangle(isDark ? HomeLandscape.DarkVerticalFade : HomeLandscape.LightVerticalFade, null, bounds);
     }
     protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
     {
@@ -102,7 +101,7 @@ internal static class QuietRoadPalette
         target.Resources["ShiftAccent"] = highContrast ? SystemColors.WindowTextBrush : Color(dark ? "#79AFC9" : "#2E5A4F");
         target.Resources["ShiftTrack"] = highContrast ? SystemColors.ControlBrush : Color(dark ? "#50675D" : "#C4D1C9");
         target.Resources["ShiftDivider"] = highContrast ? SystemColors.WindowTextBrush : Color(dark ? "#50675D" : "#C8BCA7");
-        target.Resources["ShiftHomeHero"] = highContrast ? SystemColors.WindowBrush : dark ? FadeLandscape.DarkPaper : FadeLandscape.LightPaper;
+        target.Resources["ShiftHomeHero"] = highContrast ? SystemColors.WindowBrush : dark ? HomeLandscape.DarkPaper : HomeLandscape.LightPaper;
         target.Resources["ShiftHero"] = highContrast ? SystemColors.WindowBrush : Color(dark ? "#243E34" : "#DFEAE4");
     }
 }
