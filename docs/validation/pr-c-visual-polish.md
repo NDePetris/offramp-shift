@@ -20,12 +20,9 @@ Very long timer values wrap and scroll rather than clip or shrink the whole UI.
 
 Light mode uses Warm Paper `#F6F3EC`, Moss `#2E5A4F`, and Fade's source Home
 container `#DFE9E3`; dark Home uses its source container `#263F35`. The reminder
-retains its previously approved `#DFEAE4` / `#243E34` surfaces. The source port
-uses a Home-only brush role, leaving Settings/Diagnostics/reminder colors unchanged.
-QuietRoad uses shared frozen light/dark WPF drawings and brushes, with distinct
-Home-background and small-reminder compositions. Theme changes select a drawing;
-snapshots do not rebuild it or run a decorative clock. Home's scene is a background
-layer covering the card; the reminder keeps its original small illustration.
+uses the shared Warm Paper / dark canvas and coordinated accent roles, without
+scenic artwork. Home's frozen drawings are selected on theme changes; accounting
+snapshots do not rebuild geometry or run a decorative clock.
 Home now uses a Shift-specific wide landscape matching the owner's final approved
 mockup, with a broad S-shaped road and layered hills on the right. This final
 composition request supersedes the earlier exact-Fade-geometry requirement.
@@ -46,13 +43,25 @@ column. Native Fluent control templates and focus behavior are retained.
 
 ## Reminder contract
 
-The reminder uses the same paper/sage/road vocabulary, concise default copy,
-existing one/five-minute actions, and a native How this works disclosure. The
-switch action is visible only when the existing availability gate permits it;
-it stays disabled during pending operations. Experimental-switch warnings,
-unavailability reasons, and command errors remain visible outside the disclosure.
-Win+Tab fallback and existing dismissal/eligibility explanations are in it.
-The visible availability warning remains the polite live region.
+The reminder is an action surface: small canonical icon, heading, full-width
+primary Switch to Work when eligible, paired one/five-minute secondary actions,
+and lightweight native Button navigation. Ordinary explanatory paragraphs and
+the scenic panel are removed. How this works opens a dedicated view in the same
+400 × 300 DIP window, with Back and scrollable sections. Returning restores
+logical focus to How this works; entering focuses Back. Collapsed views leave
+the keyboard/accessibility tree. Navigation invokes no host command.
+
+The existing switch availability/consent gate still controls visibility and
+pending state. Ordinary experimental-switching copy moves to help; actionable
+availability reasons and polite command failure feedback stay in the action view.
+A newly unavailable switch or failed operation while help is open returns to the
+actions. Help retains the experimental one-attempt explanation, manual Win+Tab
+alternative, eligible unlocked Personal use even without input, Work/locked
+exclusions, dismissal deferral and Open Offramp Shift behavior. Help and long
+operational messages scroll internally; placement clamps the same outer geometry
+to the monitor work area without changing nonactivation or foreground safeguards.
+Time-action labels wrap under enlarged text. System contrast uses system brushes
+and suppresses the decorative family symbol; native control/focus templates remain.
 
 Open Offramp Shift calls the application's existing `Open(false)` route through
 the active NudgePresenter. It shows/restores/activates the same main window,
@@ -80,7 +89,7 @@ below count as passing evidence.
 
 | Required check | Result |
 |---|---|
-| `./run.ps1 test` | PASS — Core 82 / 40,598 assertions; Persistence 84 / 778; Host 300 / 3,039; WPF 104 / 195; zero failures |
+| `./run.ps1 test` | PASS — Core 82 / 40,598 assertions; Persistence 84 / 778; Host 300 / 3,039; WPF 117 / 195; zero failures |
 | `./run.ps1 format` | PASS — warnings-as-errors builds and verify-no-changes |
 | `./spikes/VirtualDesktop/run.ps1 test` | PASS — fake policy and owned non-COM worker isolation |
 | `./spikes/BrowserAttribution/run.ps1 test` | PASS — synthetic and process/transport evidence |
@@ -365,3 +374,59 @@ PR 5 Tests 8–12 remain deferred / NOT RUN. Issues #8, #9, #22 and #23 remain
 unresolved. Automatic switching and production browser attribution remain
 **NO-GO**. No unattended-use, recovery, sustained accuracy or accessibility
 certification follows from these tests or screenshots. No merge/release is authorized.
+
+## Minimal reminder redesign — October 23, 2026
+
+The owner's latest reminder brief and action/help mockup supersede the earlier
+small scenic reminder treatment. The approved Home implementation and artwork
+are unchanged in this follow-up. Settings and Diagnostics also remain unchanged.
+A future consistent lightweight disclosure treatment across Settings/Diagnostics
+is recorded as **deferred design feedback**, not implementation scope.
+
+All seven required repository checks passed (table above). WPF now has **117
+passing tests**, including minimal content, routing without commands, logical
+focus restoration, exact Add 1/5 and close/Escape durations in both views, pending
+and failed actions, availability changes, automatic invalidation while help is
+open, and system-brush fallback. Existing presenter transaction, authorization,
+expiry, native-close and switching outcome regressions remain passing. The 195
+central assertions do not count helper-local assertions.
+
+Native shown-HWND evidence: Windows **26300.9711/x64**, connected displays at
+**144 DPI / 150%** and **96 DPI / 100%**, pinned SDK 10.0.401, software rendering
+in the opt-in test harness only. The final matrix contains **76 captures per
+display**, including 18 reminder captures (light/dark action, unavailable, help,
+help end, pending, failed-save, constrained action/end and constrained help).
+The harness asserts stable help bounds and position, normal action fit, scroll
+access and reserved scrollbar clearance. It uses synthetic callbacks, no host,
+owner storage, monitoring, providers, actual switching or global input.
+Local matrix and logs: `artifacts/prc-reminder-verified/` and
+`artifacts/reminder-native-verified.log` (ignored).
+
+Compared directly with the supplied mockup, the default removes the scenic panel
+and ordinary paragraphs, gives Switch to Work the full action width, pairs Add
+1/5 below it, and separates subdued navigation. Help has Back and short sections
+within identical geometry, rather than an expanding disclosure. Native Fluent
+chrome is retained. Long errors and enlarged/constrained layouts deliberately
+scroll; screenshot pairs include the end position to show recovery/actions can
+be reached. Text enlargement here is a synthetic WPF font-size stress case,
+not actual Windows text-setting acceptance.
+
+| Reminder state | 100% | 150% |
+|---|---|---|
+| Available | [Capture](images/pr-c/light-reminder-100.png) | [Capture](images/pr-c/light-reminder.png) |
+| Unavailable | [Capture](images/pr-c/light-reminder-unavailable-100.png) | [Capture](images/pr-c/light-reminder-unavailable.png) |
+| Help | [Capture](images/pr-c/light-reminder-help-100.png) | [Capture](images/pr-c/light-reminder-help.png) |
+| Help end | [Capture](images/pr-c/light-reminder-help-end-100.png) | [Capture](images/pr-c/light-reminder-help-end.png) |
+| Pending | [Capture](images/pr-c/light-reminder-pending-100.png) | [Capture](images/pr-c/light-reminder-pending.png) |
+| Failed save | [Capture](images/pr-c/light-reminder-error-100.png) | [Capture](images/pr-c/light-reminder-error.png) |
+| Dark | [Capture](images/pr-c/dark-reminder-100.png) | [Capture](images/pr-c/dark-reminder.png) |
+| Enlarged / constrained | [Capture](images/pr-c/light-reminder-constrained-100.png) | [Capture](images/pr-c/light-reminder-constrained.png) |
+| Constrained end | [Capture](images/pr-c/light-reminder-constrained-end-100.png) | [Capture](images/pr-c/light-reminder-constrained-end.png) |
+| Constrained help | [Capture](images/pr-c/light-reminder-constrained-help-100.png) | [Capture](images/pr-c/light-reminder-constrained-help.png) |
+
+The earlier [scenic reminder](images/pr-c/light-reminder-before-minimal-100.png)
+is preserved for comparison. Physical keyboard/Tab order/focus, Narrator, actual
+Windows contrast themes and text settings, mixed-DPI transitions and a naturally
+authorized owner reminder remain **NOT RUN**. Those owner checks, PR 5 deferrals,
+issue #22 and all existing NO-GO gates are unchanged. Native synthetic captures
+and system-brush regressions are not live owner/accessibility acceptance.

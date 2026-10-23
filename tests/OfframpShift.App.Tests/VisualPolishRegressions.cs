@@ -26,7 +26,7 @@ internal static class VisualPolishRegressions
                 Check(ReferenceEquals(main.HeroTimer.Background, main.Resources["ShiftHomeHero"]) && main.HeroRoad.OpacityMask is null);
             }
             var reminder = new NudgeWindow(_ => Task.FromResult(HostCommandResult.Success()));
-            Check(!reminder.ReminderRoad.HomeBackground && reminder.ReminderRoad.Width == 48 && reminder.ReminderRoad.Height == 60);
+            Check(!HomeShellInspection.Descendants(reminder).OfType<QuietRoad>().Any());
             reminder.CloseAutomatically();
         });
         test("scenic hero retains authoritative labels values and qualifiers across operational states", () =>
@@ -68,7 +68,7 @@ internal static class VisualPolishRegressions
                     foreach (var role in new[] { "ShiftCanvas", "ShiftText", "ShiftHero", "ShiftSupporting", "ShiftAccent" })
                         Check(((SolidColorBrush)main.Resources[role]).Color == ((SolidColorBrush)reminder.Resources[role]).Color);
                     Check(main.HeroRoad.Visibility == (contrast ? Visibility.Collapsed : Visibility.Visible));
-                    Check(reminder.ReminderRoad.Visibility == main.HeroRoad.Visibility);
+                    Check(reminder.FamilySymbol.Visibility == (contrast ? Visibility.Collapsed : Visibility.Visible));
                     Check(!main.HeroRoad.Focusable && !main.HeroRoad.IsHitTestVisible && UIElementAutomationPeer.CreatePeerForElement(main.HeroRoad) is null);
                     if (contrast) Check(ReferenceEquals(main.Resources["ShiftHero"], SystemColors.WindowBrush));
                     else
@@ -97,7 +97,7 @@ internal static class VisualPolishRegressions
             Check(reminder.SwitchWork.Visibility == Visibility.Collapsed && !reminder.SwitchWork.IsEnabled);
             reminder.SetSwitchAvailability("");
             Check(reminder.SwitchWork.Visibility == Visibility.Visible && reminder.SwitchWork.IsEnabled);
-            Check(reminder.SwitchWarning.Text.Contains("Experimental"));
+            Check(reminder.SwitchWarning.Text.Length == 0 && reminder.SwitchAvailability.Text.Contains("experimental"));
             reminder.CloseAutomatically();
             reminder.OpenMainButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Check(opens == 2 && deferrals == 0 && switches == 0);

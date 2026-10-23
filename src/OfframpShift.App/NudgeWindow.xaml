@@ -2,38 +2,66 @@
  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
  xmlns:local="clr-namespace:OfframpShift.App"
- Title="Offramp Shift — time for a break" Width="400" MinWidth="320" SizeToContent="Height"
+ Title="Offramp Shift — time for a break" Width="400" MinWidth="320" Height="300"
  ResizeMode="NoResize" ShowActivated="False" WindowStartupLocation="Manual"
  FontFamily="Segoe UI" FontSize="14"
  Background="{DynamicResource ShiftCanvas}" Foreground="{DynamicResource ShiftText}">
- <ScrollViewer Style="{StaticResource ContentScroll}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-  <StackPanel Margin="20">
-   <Border Background="{DynamicResource ShiftHero}" CornerRadius="16" Padding="12" Margin="0,0,0,12">
-    <Grid>
-     <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-     <local:FamilySymbolImage x:Name="FamilySymbol" Width="24" Height="24" Margin="0,0,12,0" Focusable="False" />
-     <TextBlock x:Name="NudgeHeading" Grid.Column="1" Text="Time for a break" FontSize="24" FontWeight="SemiBold" VerticalAlignment="Center" Focusable="True" KeyboardNavigation.IsTabStop="False" />
-     <local:QuietRoad x:Name="ReminderRoad" Grid.Column="2" Width="48" Height="60" Margin="8,0,0,0"/>
+ <Window.Resources>
+  <DataTemplate x:Key="TimeActionContent">
+   <AccessText Text="{Binding}" TextWrapping="Wrap" TextAlignment="Center"/>
+  </DataTemplate>
+  <Style x:Key="NavigationAction" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+   <Setter Property="Background" Value="Transparent"/>
+   <Setter Property="BorderThickness" Value="0"/>
+   <Setter Property="Foreground" Value="{DynamicResource ShiftAccent}"/>
+   <Setter Property="Padding" Value="4,6"/>
+   <Setter Property="Margin" Value="0"/>
+  </Style>
+  <Style x:Key="Feedback" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+   <Setter Property="Margin" Value="0,8,0,0"/>
+   <Style.Triggers><Trigger Property="Text" Value=""><Setter Property="Visibility" Value="Collapsed"/></Trigger></Style.Triggers>
+  </Style>
+ </Window.Resources>
+ <Grid Margin="20,16">
+  <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+  <ScrollViewer x:Name="ActionScroll" Style="{StaticResource ContentScroll}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+   <StackPanel x:Name="ActionView">
+    <Grid Margin="8,4,0,16">
+     <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+     <local:FamilySymbolImage x:Name="FamilySymbol" Width="36" Height="36" Margin="0,0,16,0" Focusable="False"/>
+     <TextBlock x:Name="NudgeHeading" Grid.Column="1" Text="Time for a break" FontSize="24" FontWeight="SemiBold" VerticalAlignment="Center" Focusable="True" KeyboardNavigation.IsTabStop="False"/>
     </Grid>
-   </Border>
-   <TextBlock Text="You've used your Personal time for now." Margin="0,0,0,12" />
-   <Button x:Name="SwitchWork" Content="Switch to _Work" Click="SwitchToWork" IsEnabled="False" FontWeight="SemiBold" HorizontalAlignment="Left"
-           IsDefault="False" Foreground="{DynamicResource ShiftAccent}" AutomationProperties.Name="Switch to Work" />
-   <TextBlock x:Name="SwitchWarning" Foreground="{DynamicResource ShiftSupporting}" AutomationProperties.LiveSetting="Polite" Margin="0,4,0,8" />
-   <WrapPanel>
-    <Button x:Name="OneMinute" Content="Add _1 minute" Click="AddOne" AutomationProperties.Name="Add 1 minute" />
-    <Button x:Name="FiveMinutes" Content="Add _5 minutes" Click="AddFive" AutomationProperties.Name="Add 5 minutes" />
-   </WrapPanel>
-   <TextBlock Text="Extra time counts only during eligible Personal use." Foreground="{DynamicResource ShiftSupporting}" Margin="0,8,0,8" />
-   <Expander Header="How this works" Margin="0,0,0,8">
-    <StackPanel Margin="0,8,0,0">
-     <TextBlock x:Name="SwitchAvailability" Text="Checking switching availability. Press Win+Tab and select Work manually." Margin="0,0,0,8" />
-     <TextBlock Text="Time on Work or while locked doesn't count. Unlocked Personal time counts even without input." Margin="0,0,0,8" />
-     <TextBlock Text="Closing this window reminds you again after 1 minute of Personal use. Opening Offramp Shift leaves this reminder open." />
+    <Button x:Name="SwitchWork" Content="Switch to _Work" Click="SwitchToWork" IsEnabled="False" FontWeight="SemiBold" Margin="0,0,0,8" HorizontalAlignment="Stretch"
+            IsDefault="False" Background="{DynamicResource ShiftAccent}" Foreground="{DynamicResource ShiftCanvas}" AutomationProperties.Name="Switch to Work"/>
+    <Grid>
+     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+     <Button x:Name="OneMinute" Content="Add _1 minute" ContentTemplate="{StaticResource TimeActionContent}" Click="AddOne" Margin="0,0,6,0" HorizontalAlignment="Stretch" AutomationProperties.Name="Add 1 minute"/>
+     <Button x:Name="FiveMinutes" Grid.Column="1" Content="Add _5 minutes" ContentTemplate="{StaticResource TimeActionContent}" Click="AddFive" Margin="6,0,0,0" HorizontalAlignment="Stretch" AutomationProperties.Name="Add 5 minutes"/>
+    </Grid>
+    <TextBlock x:Name="SwitchWarning" Style="{StaticResource Feedback}" Foreground="{DynamicResource ShiftSupporting}" AutomationProperties.LiveSetting="Polite"/>
+    <TextBlock x:Name="Result" Style="{StaticResource Feedback}" AutomationProperties.LiveSetting="Polite"/>
+   </StackPanel>
+  </ScrollViewer>
+  <Grid x:Name="HelpView" Visibility="Collapsed" AutomationProperties.Name="How this works">
+   <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+   <Button x:Name="BackButton" Content="Back to reminder" Click="BackToReminder" Style="{StaticResource NavigationAction}" HorizontalAlignment="Left"/>
+   <TextBlock Grid.Row="1" Text="How this works" FontSize="24" FontWeight="SemiBold" Margin="0,8,0,16"/>
+   <ScrollViewer x:Name="HelpScroll" Grid.Row="2" Style="{StaticResource ContentScroll}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+    <StackPanel>
+     <TextBlock Text="Switching desktops" FontWeight="SemiBold" Margin="0,0,0,4"/>
+     <TextBlock x:Name="SwitchAvailability" Margin="0,0,0,16"/>
+     <TextBlock Text="Extra Personal time" FontWeight="SemiBold" Margin="0,0,0,4"/>
+     <TextBlock Text="Extra time counts only during eligible unlocked Personal use, including when you're not typing. Time on Work or while locked doesn't count." Margin="0,0,0,16"/>
+     <TextBlock Text="Closing this reminder" FontWeight="SemiBold" Margin="0,0,0,4"/>
+     <TextBlock Text="Closing this window reminds you again after 1 minute of Personal use. Opening Offramp Shift leaves this reminder open."/>
     </StackPanel>
-   </Expander>
-   <Button x:Name="OpenMainButton" Content="Open Offramp Shift" Click="OpenMain" HorizontalAlignment="Left" Foreground="{DynamicResource ShiftAccent}" AutomationProperties.Name="Open Offramp Shift" />
-   <TextBlock x:Name="Result" AutomationProperties.LiveSetting="Polite" Margin="0,12,0,0" />
-  </StackPanel>
- </ScrollViewer>
+   </ScrollViewer>
+  </Grid>
+  <Border Grid.Row="1" BorderBrush="{DynamicResource ShiftDivider}" BorderThickness="0,1,0,0" Margin="0,12,0,0" Padding="0,8,0,0">
+   <WrapPanel>
+    <Button x:Name="HelpButton" Content="How this works" Click="ShowHelp" Style="{StaticResource NavigationAction}" Margin="0,0,16,0"/>
+    <Button x:Name="OpenMainButton" Content="Open Offramp Shift" Click="OpenMain" Style="{StaticResource NavigationAction}" AutomationProperties.Name="Open Offramp Shift"/>
+   </WrapPanel>
+  </Border>
+ </Grid>
 </Window>

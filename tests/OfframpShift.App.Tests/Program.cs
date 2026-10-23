@@ -348,6 +348,7 @@ internal static class Program
         });
         InteractiveUiRegressions.Run(Test, () => Snapshot());
         VisualPolishRegressions.Run(Test, () => Snapshot());
+        ReminderPresentationRegressions.Run(Test);
         HomeLandscapeRegressions.Run(Test);
         if (args is ["--inspect-home-shell", var inspectionOutput]) HomeShellInspection.Run(Snapshot(), inspectionOutput);
         if (args is ["--render", var output])

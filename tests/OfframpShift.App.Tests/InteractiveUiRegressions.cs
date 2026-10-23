@@ -228,6 +228,7 @@ internal static class InteractiveUiRegressions
             value = value with { ReminderEpoch = Guid.NewGuid() };
             presenter.PresentAsync(Event(value)).GetAwaiter().GetResult();
             Check(presenter.Window == window && platform.Activations == 3);
+            window!.HelpButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             value = value with { CanKeepNudgeOpen = false }; presenter.Refresh();
             Check(presenter.Window is null && commands.All(x => x.Kind != HostCommandKind.DeferInteractive));
         });
@@ -366,7 +367,9 @@ internal static class InteractiveUiRegressions
                     return command.Kind == HostCommandKind.DeferInteractive ? pending.Task : Task.FromResult(Accept(command, ref value));
                 }, () => value, failures.Add, new Platform());
                 presenter.PresentAsync(Event(value)).GetAwaiter().GetResult();
-                var window = presenter.Window!; window.Close(); ui.Drain();
+                var window = presenter.Window!;
+                window.HelpButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                window.Close(); ui.Drain();
                 value = value with { CanKeepNudgeOpen = false };
                 if (invalidation == "Work") value = value with { Context = DesktopScope.Work };
                 if (invalidation == "pause") value = value with { State = value.State! with { Paused = true } };

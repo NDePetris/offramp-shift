@@ -87,6 +87,9 @@ internal sealed class NudgePlatform : INudgePlatform
         var frameHeight = frame.Bottom - frame.Top;
         var clientWidth = window.Width - frameWidth / scale;
         var clientHeight = window.MaxHeight - frameHeight / scale;
+        // Both reminder views share the same bounded outer geometry. Only their
+        // content scrolls; changing views never repositions or activates the HWND.
+        clientHeight = Math.Min(clientHeight, window.Height - frameHeight / scale);
         PlacementStatus = "ContentMeasurement";
         var contentHeight = MeasureContentHeight(window, clientWidth, clientHeight);
         if (contentHeight <= 0 || !double.IsFinite(contentHeight)) return false;
@@ -107,7 +110,7 @@ internal sealed class NudgePlatform : INudgePlatform
         // A never-shown Window is collapsed: Window.Measure returns DesiredSize=0.
         // Its visible content can be measured without Show or activation.
         content.Measure(new(width, height));
-        return content.DesiredSize.Height;
+        return height;
     }
     internal static bool TryCenter(int left, int top, int right, int bottom, int width, int height,
         out (int X, int Y, int Width, int Height) area)
