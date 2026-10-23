@@ -10,16 +10,20 @@ public partial class NudgeWindow : Window
 {
     private readonly Func<long, Task<HostCommandResult>> defer;
     private readonly Func<Task<SwitchCompletion>> switchToWork;
+    private readonly Action? openMain;
+    private (bool Dark, bool HighContrast)? artwork;
     private bool switchingDisabled;
     private string switchingUnavailableReason = "Switching availability is unknown.";
     private enum Closure { None, ContextInvalidated, CommandCompleted }
     private Closure closure;
     private bool submitted, closed;
     internal bool CanReportFailure => !closed && closure == Closure.None;
-    internal NudgeWindow(Func<long, Task<HostCommandResult>> defer, Func<Task<SwitchCompletion>>? switchToWork = null)
+    internal NudgeWindow(Func<long, Task<HostCommandResult>> defer, Func<Task<SwitchCompletion>>? switchToWork = null, Action? openMain = null)
     {
         InitializeComponent();
         this.defer = defer;
+        this.openMain = openMain;
+        OpenMainButton.IsEnabled = openMain is not null;
         this.switchToWork = switchToWork ?? (() => Task.FromResult(SwitchCompletion.Reject("Switching is unavailable.")));
         // Establish logical focus before an HWND is shown. Enter is not an extension.
         FocusManager.SetFocusedElement(this, NudgeHeading);
@@ -27,25 +31,65 @@ public partial class NudgeWindow : Window
         Closed += (_, _) => closed = true;
         PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) { e.Handled = true; Close(); } };
         ApplyBrand();
+        SetSwitchAvailability(switchingUnavailableReason);
     }
     internal void ApplyBrand()
     {
-        var dark = BrandAssets.IsDark(Background);
+        var dark = BrandAssets.IsDark(TryFindResource("WindowBackground") as System.Windows.Media.Brush);
+        ApplyBrand(dark, SystemParameters.HighContrast);
+    }
+    internal void ApplyBrand(bool dark, bool highContrast)
+    {
+        if (artwork == (dark, highContrast)) return;
+        artwork = (dark, highContrast);
+        QuietRoadPalette.Apply(this, dark, highContrast);
         Icon = BrandAssets.WindowIcon(dark);
         FamilySymbol.Source = BrandAssets.Symbol(dark);
-        FamilySymbol.Visibility = SystemParameters.HighContrast ? Visibility.Collapsed : Visibility.Visible;
+        FamilySymbol.Visibility = highContrast ? Visibility.Collapsed : Visibility.Visible;
+    }
+    private void OpenMain(object sender, RoutedEventArgs e)
+    {
+        if (closed || closure != Closure.None) return;
+        // Navigation deliberately leaves the authorized reminder HWND alive.
+        // Closing here would invoke the existing durable one-minute deferral.
+        openMain?.Invoke();
+    }
+    private void ShowHelp(object sender, RoutedEventArgs e)
+    {
+        if (closed || closure != Closure.None) return;
+        ActionScroll.Visibility = Visibility.Collapsed;
+        HelpButton.Visibility = Visibility.Collapsed;
+        HelpView.Visibility = Visibility.Visible;
+        HelpScroll.ScrollToHome();
+        if (IsVisible) BackButton.Focus();
+        FocusManager.SetFocusedElement(this, BackButton);
+    }
+    private void BackToReminder(object sender, RoutedEventArgs e) => ShowActions(true);
+    private void ShowActions(bool restoreFocus)
+    {
+        if (closed || closure != Closure.None) return;
+        HelpView.Visibility = Visibility.Collapsed;
+        ActionScroll.Visibility = HelpButton.Visibility = Visibility.Visible;
+        if (restoreFocus)
+        {
+            if (IsVisible) HelpButton.Focus();
+            FocusManager.SetFocusedElement(this, HelpButton);
+        }
     }
     internal void SetSwitchAvailability(string reason)
     {
+        var changed = switchingUnavailableReason != reason;
         switchingUnavailableReason = reason;
-        var message = (reason.Length == 0 ? "Experimental switching uses one explicit attempt." : reason) +
-            " Press Win+Tab and select Work manually at any time.";
+        var message = "Switching is experimental and uses one explicit attempt. Press Win+Tab and select Work manually at any time." +
+            (reason.Length == 0 ? "" : " " + reason);
         if (SwitchAvailability.Text != message)
         {
             SwitchAvailability.Text = message;
-            System.Windows.Automation.Peers.UIElementAutomationPeer.FromElement(SwitchAvailability)?.RaiseAutomationEvent(
+            SwitchWarning.Text = reason;
+            System.Windows.Automation.Peers.UIElementAutomationPeer.FromElement(SwitchWarning)?.RaiseAutomationEvent(
                 System.Windows.Automation.Peers.AutomationEvents.LiveRegionChanged);
         }
+        if (changed && reason.Length > 0) ShowActions(HelpView.Visibility == Visibility.Visible);
         Controls(!submitted && !closed);
     }
     internal void CloseAutomatically()
@@ -61,10 +105,13 @@ public partial class NudgeWindow : Window
     {
         OneMinute.IsEnabled = FiveMinutes.IsEnabled = enabled;
         SwitchWork.IsEnabled = enabled && !switchingDisabled && switchingUnavailableReason.Length == 0;
+        SwitchWork.Visibility = switchingUnavailableReason.Length == 0 && !switchingDisabled ? Visibility.Visible : Visibility.Collapsed;
     }
     private void Announce(string message)
     {
+        ShowActions(HelpView.Visibility == Visibility.Visible);
         Result.Text = message;
+        Result.BringIntoView();
         System.Windows.Automation.Peers.UIElementAutomationPeer.FromElement(Result)?.RaiseAutomationEvent(
             System.Windows.Automation.Peers.AutomationEvents.LiveRegionChanged);
     }
@@ -86,7 +133,7 @@ public partial class NudgeWindow : Window
     {
         if (submitted || closed || closure != Closure.None) return;
         submitted = true; Controls(false);
-        Result.Text = "Saving extra time…";
+        Announce("Saving extra time…");
         // Closing must unwind before even an immediately completed command can
         // call Close again. Reserve submission before yielding to prevent duplicates.
         if (fromClosing) await Task.Yield();
@@ -103,9 +150,7 @@ public partial class NudgeWindow : Window
         else
         {
             submitted = false; Controls(true);
-            Result.Text = "Extra time was not saved. " + result.Message;
-            System.Windows.Automation.Peers.UIElementAutomationPeer.FromElement(Result)?.RaiseAutomationEvent(
-                System.Windows.Automation.Peers.AutomationEvents.LiveRegionChanged);
+            Announce("Extra time was not saved. " + result.Message);
         }
     }
     private void OnClosing(object? sender, CancelEventArgs e)

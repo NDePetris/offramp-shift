@@ -69,6 +69,7 @@ internal static class HomeShellInspection
                     throw new InvalidOperationException("Common healthy Home state should fit at the starting size.");
             }
             window.Model.SetCommandPending(false); window.ReportAction("");
+            InspectReminder(output, area, dark);
             var diagnostics = new DiagnosticsWindow(window, new CommandCoordinator(), () => { }) { ShowActivated = false, ShowInTaskbar = false };
             diagnostics.Show();
             SetWindowPos(new System.Windows.Interop.WindowInteropHelper(diagnostics).Handle, 0, area.X + 40, area.Y + 40, 0, 0, 0x0015);
@@ -92,6 +93,11 @@ internal static class HomeShellInspection
             window.NavigateBack(); window.Apply(value with { Sequence = ++valueSequence, PublishedTick = Environment.TickCount64 });
             window.Width = 400; window.Height = 500; window.UpdateLayout();
             Capture(window, Path.Combine(output, $"{(dark ? "dark" : "light")}-minimum.png"));
+            window.Apply(value with { Sequence = ++valueSequence, PublishedTick = Environment.TickCount64, State = value.State! with { UsageMs = long.MaxValue, Exhausted = true } });
+            Capture(window, Path.Combine(output, $"{(dark ? "dark" : "light")}-long-timer.png"));
+            window.ApplyBrand(dark, true);
+            Capture(window, Path.Combine(output, $"{(dark ? "dark" : "light")}-system-brush-simulation.png"));
+            window.ApplyBrand(dark, false);
             window.Width = 700; window.Height = 700; window.UpdateLayout();
             Capture(window, Path.Combine(output, $"{(dark ? "dark" : "light")}-wide.png"));
             window.Width = 440; window.Height = 540;
@@ -116,6 +122,46 @@ internal static class HomeShellInspection
         window.Hide();
         Console.WriteLine("PASS: native WPF initial size, resize, light/dark, routed settings navigation and transient tray create/update/dispose (synthetic state; no live monitoring, physical keyboard, Narrator or tray-menu interaction acceptance).");
     }
+    private static void InspectReminder(string output, System.Drawing.Rectangle area, bool dark)
+    {
+        var previous = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext());
+        try
+        {
+            var pending = new TaskCompletionSource<HostCommandResult>();
+            var reminder = new NudgeWindow(_ => pending.Task, openMain: () => { })
+            { ShowActivated = false, ShowInTaskbar = false };
+            reminder.ApplyBrand(dark, false); reminder.SetSwitchAvailability("");
+            reminder.Show();
+            SetWindowPos(new System.Windows.Interop.WindowInteropHelper(reminder).Handle, 0, area.X + 40, area.Y + 40, 0, 0, 0x0015);
+            var prefix = dark ? "dark" : "light";
+            void Shot(string name) => Capture(reminder, Path.Combine(output, $"{prefix}-reminder{name}.png"));
+            Shot("");
+            if (reminder.ActionScroll.ScrollableHeight > 0.5) throw new InvalidOperationException("Default reminder actions must fit.");
+            var bounds = (reminder.ActualWidth, reminder.ActualHeight, reminder.Left, reminder.Top);
+            reminder.HelpButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Shot("-help");
+            if (bounds != (reminder.ActualWidth, reminder.ActualHeight, reminder.Left, reminder.Top)) throw new InvalidOperationException("Help resized/repositioned reminder.");
+            reminder.HelpScroll.ScrollToEnd(); Settle(reminder);
+            if (reminder.HelpScroll.VerticalOffset <= 0) throw new InvalidOperationException("Help must scroll within bounded geometry.");
+            Shot("-help-end"); reminder.BackButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            reminder.SetSwitchAvailability("Enable experimental switching in Settings to use Switch to Work."); Shot("-unavailable");
+            reminder.SetSwitchAvailability("");
+            var operation = reminder.Submit(300_000); Shot("-pending");
+            reminder.HelpButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            pending.SetResult(HostCommandResult.Failure("Local storage is unavailable. Review recovery in Offramp Shift."));
+            Settle(reminder); Shot("-error");
+            if (!operation.IsCompleted || reminder.HelpView.Visibility != Visibility.Collapsed) throw new InvalidOperationException("Failure must return to actions.");
+            reminder.Width = 320; reminder.Height = 260; reminder.FontSize = 21;
+            reminder.NudgeHeading.FontSize = 30;
+            reminder.SetSwitchAvailability("Switching unavailable. Select Work manually with Win+Tab.");
+            Shot("-constrained"); reminder.ActionScroll.ScrollToEnd(); Settle(reminder);
+            if (reminder.ActionScroll.VerticalOffset <= 0) throw new InvalidOperationException("Enlarged reminder errors/actions must scroll.");
+            Shot("-constrained-end");
+            reminder.HelpButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Shot("-constrained-help");
+            reminder.CloseAutomatically();
+        }
+        finally { SynchronizationContext.SetSynchronizationContext(previous); }
+    }
     private static long valueSequence = 100;
     private static void Settle(Window window)
     {
@@ -131,12 +177,15 @@ internal static class HomeShellInspection
     private static void Capture(Window window, string path)
     {
         Settle(window);
+        // Settle the final extent after a sequence of bound content changes.
+        foreach (var viewer in Descendants(window).OfType<ScrollViewer>().Where(x => x.IsVisible)) viewer.InvalidateMeasure();
+        Settle(window);
         foreach (var viewer in (window is MainWindow main ? new[] { main.HomePage, main.SettingsOverview, main.SettingsDetail } : Descendants(window).OfType<ScrollViewer>()).Where(x => x.IsVisible))
         {
-            ScrollLayoutChecks.Clearance(viewer);
             var facts = Descendants(viewer).OfType<FrameworkElement>().Where(x => x is ScrollContentPresenter or System.Windows.Controls.Primitives.ScrollBar).Select(x =>
                 $"{x.GetType().Name} {x.Name}: {x.TransformToAncestor(viewer).TransformBounds(new Rect(x.RenderSize))}; visibility={x.Visibility}");
             File.AppendAllText(Path.Combine(Path.GetDirectoryName(path)!, "layout.txt"), $"{Path.GetFileName(path)} {viewer.Name}: viewport={viewer.ViewportWidth}x{viewer.ViewportHeight}; extent={viewer.ExtentWidth}x{viewer.ExtentHeight}\n{string.Join("\n", facts)}\n");
+            ScrollLayoutChecks.Clearance(viewer);
         }
         // Capture only this harness-owned HWND, including native chrome. A
         // VisualBrush of the margined root can shift/crop the right/bottom edge.

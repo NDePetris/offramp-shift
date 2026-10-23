@@ -1,23 +1,6 @@
 <?xml version="1.0" ?>
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="clr-namespace:OfframpShift.App" x:Class="OfframpShift.App.MainWindow" Title="Offramp Shift" Width="440" Height="540" MinWidth="400" MinHeight="500" FontFamily="Segoe UI" FontSize="14" WindowStartupLocation="CenterScreen" Background="{DynamicResource ShiftCanvas}" Foreground="{DynamicResource ShiftText}">
  <Window.Resources>
-  <!-- Fluent's content spans the scrollbar column. Keep page content in its
-       own column while retaining native ScrollBar styling and behavior. -->
-  <Style x:Key="ContentScroll" TargetType="ScrollViewer" BasedOn="{StaticResource {x:Type ScrollViewer}}">
-   <Setter Property="Template">
-    <Setter.Value>
-     <ControlTemplate TargetType="ScrollViewer">
-      <Grid Background="{TemplateBinding Background}">
-       <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-       <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-       <ScrollContentPresenter x:Name="PART_ScrollContentPresenter" Grid.Column="0" Grid.Row="0" Margin="{TemplateBinding Padding}" Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}" ContentStringFormat="{TemplateBinding ContentStringFormat}" CanContentScroll="{TemplateBinding CanContentScroll}"/>
-       <ScrollBar x:Name="PART_VerticalScrollBar" Grid.Column="1" Grid.Row="0" Margin="8,0,0,0" Maximum="{TemplateBinding ScrollableHeight}" ViewportSize="{TemplateBinding ViewportHeight}" Value="{TemplateBinding VerticalOffset}" Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}"/>
-       <ScrollBar x:Name="PART_HorizontalScrollBar" Grid.Column="0" Grid.Row="1" Orientation="Horizontal" Maximum="{TemplateBinding ScrollableWidth}" ViewportSize="{TemplateBinding ViewportWidth}" Value="{TemplateBinding HorizontalOffset}" Visibility="{TemplateBinding ComputedHorizontalScrollBarVisibility}"/>
-      </Grid>
-     </ControlTemplate>
-    </Setter.Value>
-   </Setter>
-  </Style>
   <Style x:Key="RecordedText" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
    <Setter Property="Foreground" Value="{DynamicResource ShiftSupporting}"/>
    <Style.Triggers>
@@ -45,7 +28,7 @@
    <RowDefinition Height="Auto"/>
    <RowDefinition Height="Auto"/>
   </Grid.RowDefinitions>
-  <Grid x:Name="HomeHeader" Margin="0,0,0,20">
+  <Grid x:Name="HomeHeader" Margin="0,0,0,12">
    <Grid.ColumnDefinitions>
     <ColumnDefinition Width="Auto"/>
     <ColumnDefinition Width="*"/>
@@ -60,21 +43,28 @@
   <Button x:Name="BackButton" Content="← Back" Click="GoBack" HorizontalAlignment="Left" Visibility="Collapsed" Margin="0,0,0,16" AutomationProperties.Name="Back to Home"/>
   <ScrollViewer x:Name="HomePage" Style="{StaticResource ContentScroll}" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
    <StackPanel MaxWidth="520" HorizontalAlignment="Stretch">
-    <TextBlock Text="{Binding HeroLabel}" FontSize="18" FontWeight="SemiBold" Margin="0,4,0,4"/>
-    <TextBlock Text="{Binding HeroValue}" FontSize="60" FontWeight="SemiBold" Foreground="{DynamicResource ShiftAccent}" Typography.NumeralAlignment="Tabular"/>
-    <TextBlock Text="{Binding RecordedQualifier}" Style="{StaticResource RecordedText}"/>
-    <TextBlock Text="{Binding Arithmetic}" Foreground="{DynamicResource ShiftSupporting}" Margin="0,8,0,16"/>
-    <TextBlock Text="The allowance remains exhausted until a qualifying break or explicit Reset usage." Visibility="{Binding ShowExhaustionExplanation, Converter={StaticResource BooleanToVisibility}}" Margin="0,0,0,12"/>
-    <ProgressBar Style="{StaticResource ThinProgress}" Visibility="{Binding ShowUsageProgress, Converter={StaticResource BooleanToVisibility}}" Value="{Binding UsageProgress, Mode=OneWay}" Maximum="100" Height="4" Foreground="{DynamicResource ShiftAccent}" Background="{DynamicResource ShiftTrack}" AutomationProperties.Name="Recorded allowance usage" AutomationProperties.HelpText="{Binding Arithmetic}" Margin="0,0,0,16"/>
-    <StackPanel Visibility="{Binding ShowReminder, Converter={StaticResource BooleanToVisibility}}" Margin="0,0,0,8">
-     <WrapPanel>
-      <TextBlock Text="{Binding ReminderLabel}" VerticalAlignment="Center"/>
-      <TextBlock Text="{Binding ReminderValue}" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource ShiftAccent}" Margin="12,0,0,0"/>
-     </WrapPanel>
-     <TextBlock Text="{Binding RecordedQualifier}" Style="{StaticResource RecordedText}"/>
-     <TextBlock Text="Advances only during eligible Personal time" FontSize="12" Foreground="{DynamicResource ShiftSupporting}" Margin="0,4,0,0"/>
-    </StackPanel>
-    <Border Height="1" Background="{DynamicResource ShiftDivider}" Margin="0,8,0,16"/>
+    <Border x:Name="TimerHero" Background="{DynamicResource ShiftHomeHero}" CornerRadius="20" Margin="0,0,0,12">
+     <Grid>
+      <local:QuietRoad x:Name="HeroRoad" HomeBackground="True"/>
+      <StackPanel x:Name="HeroContent" Margin="16,12">
+       <TextBlock Background="{DynamicResource ShiftHomeHero}" HorizontalAlignment="Left" Text="{Binding HeroLabel}" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,4"/>
+       <TextBlock x:Name="HeroTimer" Text="{Binding HeroValue}" FontSize="60" MinHeight="84" FontWeight="SemiBold" Foreground="{DynamicResource ShiftAccent}" Background="{DynamicResource ShiftHomeHero}" HorizontalAlignment="Left" Typography.NumeralAlignment="Tabular"/>
+       <TextBlock Background="{DynamicResource ShiftHomeHero}" HorizontalAlignment="Left" Text="{Binding RecordedQualifier}" Style="{StaticResource RecordedText}"/>
+       <TextBlock Background="{DynamicResource ShiftHomeHero}" HorizontalAlignment="Left" Text="{Binding Arithmetic}" Foreground="{DynamicResource ShiftSupporting}" Margin="0,4,0,8"/>
+       <TextBlock Background="{DynamicResource ShiftHomeHero}" HorizontalAlignment="Left" Text="The allowance remains exhausted until a qualifying break or explicit Reset usage." Visibility="{Binding ShowExhaustionExplanation, Converter={StaticResource BooleanToVisibility}}" Margin="0,0,0,12"/>
+       <ProgressBar Style="{StaticResource ThinProgress}" Visibility="{Binding ShowUsageProgress, Converter={StaticResource BooleanToVisibility}}" Value="{Binding UsageProgress, Mode=OneWay}" Maximum="100" Height="4" Foreground="{DynamicResource ShiftAccent}" Background="{DynamicResource ShiftTrack}" AutomationProperties.Name="Recorded allowance usage" AutomationProperties.HelpText="{Binding Arithmetic}" Margin="0,0,0,8"/>
+       <StackPanel Visibility="{Binding ShowReminder, Converter={StaticResource BooleanToVisibility}}" Margin="0,0,0,8">
+        <WrapPanel>
+         <TextBlock Background="{DynamicResource ShiftHomeHero}" HorizontalAlignment="Left" Text="{Binding ReminderLabel}" VerticalAlignment="Center"/>
+         <TextBlock Background="{DynamicResource ShiftHomeHero}" HorizontalAlignment="Left" Text="{Binding ReminderValue}" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource ShiftAccent}" Margin="12,0,0,0"/>
+        </WrapPanel>
+        <TextBlock Background="{DynamicResource ShiftHomeHero}" HorizontalAlignment="Left" Text="{Binding RecordedQualifier}" Style="{StaticResource RecordedText}"/>
+        <TextBlock Background="{DynamicResource ShiftHomeHero}" HorizontalAlignment="Left" Text="Advances only during eligible Personal time" FontSize="12" Foreground="{DynamicResource ShiftSupporting}" Margin="0,4,0,0"/>
+       </StackPanel>
+      </StackPanel>
+     </Grid>
+    </Border>
+
     <DockPanel Margin="0,0,0,8">
      <TextBlock DockPanel.Dock="Right" Text="{Binding BreakValue}" Foreground="{DynamicResource ShiftSupporting}" Margin="12,0,0,0"/>
      <TextBlock Text="Qualifying break" FontWeight="SemiBold"/>

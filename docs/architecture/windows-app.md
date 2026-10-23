@@ -30,9 +30,17 @@ accounting replacement/reset/reassignment/reopen/retry boundaries. Only Ready
 state/configuration pairs populate the cache; epoch changes and terminal ownership
 invalidate obsolete values. The ordinary UI command coordinator provides pending,
 delayed and explicit-result feedback without replacing host or nudge transactions.
-Existing settings editors remain temporary; protected drafts/conflicts and optional
-Diagnostics are PR B, reminder visual changes PR C. See
+PR B supplies protected Settings drafts/conflicts and optional Diagnostics. See
 [the PR A contract and validation](../validation/pr-a-timer-first-home.md).
+
+PR C groups the existing committed timer presentation in a sage hero, with a
+static frozen QuietRoad drawing also used by the separate interactive reminder.
+The shared palette follows light/dark themes; contrast fallback uses system
+brushes and removes the scene. No decorative clock or accounting state is added.
+The reminder's Open Offramp Shift action invokes the existing main-window open
+route and leaves the authorized reminder open, avoiding a dismissal deferral.
+Existing authorization, add-time, closing and focus safeguards are unchanged.
+See [PR C validation and screenshots](../validation/pr-c-visual-polish.md).
 
 `OfframpShift.ApplicationHost` references ActivityMonitoring, WindowsObservation
 and Persistence. PR 8 adds an explicit durable Core usage-reset operation; the

@@ -62,6 +62,23 @@ internal static class InteractiveUiRegressions
             }
             return HostCommandResult.Success() with { Presentation = command.Presentation };
         }
+        test("authorized reminder navigation reuses the callback without closing replaying or submitting", () =>
+        {
+            var value = Eligible(); var opens = 0; var requests = new List<HostCommandKind>();
+            var platform = new Platform();
+            var presenter = new NudgePresenter(command =>
+            { requests.Add(command.Kind); return Task.FromResult(Accept(command, ref value)); }, () => value,
+                _ => { }, platform, openMain: () => opens++);
+            presenter.PresentAsync(Event(value)).GetAwaiter().GetResult();
+            var target = presenter.Window!; var count = requests.Count;
+            target.OpenMainButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            target.OpenMainButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            presenter.Refresh();
+            Check(opens == 2 && requests.Count == count && presenter.Window == target && target.CanReportFailure);
+            Check(platform.Shows == 1 && platform.Activations == 1);
+            Check(!requests.Contains(HostCommandKind.DeferInteractive));
+            presenter.Close();
+        });
         test("inactive owned WPF HWND permits client mouse activation without eating the click", () =>
         {
             var window = new NudgeWindow(_ => Task.FromResult(HostCommandResult.Success()));
@@ -156,7 +173,8 @@ internal static class InteractiveUiRegressions
                 Check(!((Button)window.FindName("SwitchWork")).IsEnabled);
                 var explanation = (TextBlock)window.FindName("SwitchAvailability");
                 Check(explanation.Text.Contains(reason) && explanation.Text.Contains("Win+Tab"));
-                Check(AutomationProperties.GetLiveSetting(explanation) == System.Windows.Automation.AutomationLiveSetting.Polite);
+                Check(window.SwitchWarning.Text.Contains(reason) && AutomationProperties.GetLiveSetting(window.SwitchWarning) == System.Windows.Automation.AutomationLiveSetting.Polite);
+                Check(window.SwitchWork.Visibility == Visibility.Collapsed);
                 var before = ((TextBlock)window.FindName("Result")).Text;
                 window.SubmitSwitch().GetAwaiter().GetResult();
                 Check(calls == 0 && ((TextBlock)window.FindName("Result")).Text == before);
@@ -210,6 +228,7 @@ internal static class InteractiveUiRegressions
             value = value with { ReminderEpoch = Guid.NewGuid() };
             presenter.PresentAsync(Event(value)).GetAwaiter().GetResult();
             Check(presenter.Window == window && platform.Activations == 3);
+            window!.HelpButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             value = value with { CanKeepNudgeOpen = false }; presenter.Refresh();
             Check(presenter.Window is null && commands.All(x => x.Kind != HostCommandKind.DeferInteractive));
         });
@@ -348,7 +367,9 @@ internal static class InteractiveUiRegressions
                     return command.Kind == HostCommandKind.DeferInteractive ? pending.Task : Task.FromResult(Accept(command, ref value));
                 }, () => value, failures.Add, new Platform());
                 presenter.PresentAsync(Event(value)).GetAwaiter().GetResult();
-                var window = presenter.Window!; window.Close(); ui.Drain();
+                var window = presenter.Window!;
+                window.HelpButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                window.Close(); ui.Drain();
                 value = value with { CanKeepNudgeOpen = false };
                 if (invalidation == "Work") value = value with { Context = DesktopScope.Work };
                 if (invalidation == "pause") value = value with { State = value.State! with { Paused = true } };

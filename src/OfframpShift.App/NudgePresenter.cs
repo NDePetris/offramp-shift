@@ -17,7 +17,7 @@ internal interface INudgePlatform
 // Dispatcher-owned. Only an accepted event may show/activate; Refresh only closes.
 internal sealed class NudgePresenter(Func<HostCommand, Task<HostCommandResult>> execute,
     Func<HostSnapshot?> latest, Action<string> reportFailure, INudgePlatform platform,
-    Func<nint, CancellationToken, Task<SwitchCompletion>>? switchToWork = null)
+    Func<nint, CancellationToken, Task<SwitchCompletion>>? switchToWork = null, Action? openMain = null)
 {
     internal NudgeWindow? Window { get; private set; }
     internal string Status { get; private set; } = "No interactive reminder consumed yet.";
@@ -68,7 +68,7 @@ internal sealed class NudgePresenter(Func<HostCommand, Task<HostCommandResult>> 
             if (Window is null)
             {
                 NudgeWindow? candidate = null;
-                candidate = new(duration => DeferAsync(candidate!, duration), () => SwitchAsync(candidate!));
+                candidate = new(duration => DeferAsync(candidate!, duration), () => SwitchAsync(candidate!), openMain);
                 Window = candidate;
                 candidate.Closed += (_, _) => { if (Window == candidate) Window = null; };
             }
