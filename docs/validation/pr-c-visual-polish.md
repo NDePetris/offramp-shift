@@ -430,3 +430,34 @@ Windows contrast themes and text settings, mixed-DPI transitions and a naturally
 authorized owner reminder remain **NOT RUN**. Those owner checks, PR 5 deferrals,
 issue #22 and all existing NO-GO gates are unchanged. Native synthetic captures
 and system-brush regressions are not live owner/accessibility acceptance.
+
+## Reminder footer polish — October 23, 2026
+
+Footer-only refinement: a two-column grid places How this works at the left edge
+and Open Offramp Shift at the right edge. A leading Info glyph (Segoe MDL2 Assets
+E946) and trailing Open-in-new-window glyph (E8A7) reuse the app's decorative
+ContextIcon pattern, with no automation peers, focus or hit testing. Explicit
+Button names retain the existing text labels. Divider, palette, native button
+focus templates, window dimensions and click handlers are unchanged. Text wraps
+within its column at constrained widths/enlarged font sizes instead of colliding.
+
+All seven repository checks passed again; WPF remains **117 tests / zero
+failures**. The existing minimal-layout regression now also checks both footer
+edges, separation at default/constrained widths, accessible names and decorative
+icon exclusion. Existing help/Back focus, no-command navigation and Open-main
+regressions pass unchanged. An initial WindowsObservation build failed with a
+missing shared reference during concurrent builds; rerunning its checks in a
+separate artifacts directory passed without source changes.
+
+The opt-in native harness passed at 100% and 150% on the same 26300.9711/x64
+machine, with 76 captures per display. Refreshed default light/dark, help and
+constrained action/help screenshots above show the final footer; other state
+captures retain the preceding reminder-design evidence. Default footer height
+remains unchanged. Narrow/enlarged text wraps within the two columns. Native
+light/dark inspection confirms both glyphs render and inherit the accent color.
+Local captures/log: `artifacts/prc-footer-native/`, `artifacts/footer-native.log`.
+
+Keyboard navigation and focus restoration are covered by synthetic routed/logical
+focus regressions; physical keyboard, Narrator and actual Windows accessibility
+settings remain owner checks, not certified by this pass. No reminder behavior,
+help content, Home, Settings, Diagnostics or safety policy changed.

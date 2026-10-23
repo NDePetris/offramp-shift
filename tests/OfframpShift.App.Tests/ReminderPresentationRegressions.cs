@@ -28,6 +28,17 @@ internal static class ReminderPresentationRegressions
             Check(!HomeShellInspection.Descendants(root).Any(x => x is QuietRoad or Expander));
             Check(window.SwitchWork.Visibility == Visibility.Visible && window.SwitchWork.IsEnabled && !window.SwitchWork.IsDefault);
             Check(window.ActionScroll.ScrollableHeight <= 0.5);
+            foreach (var width in new[] { 384d, 304d })
+            {
+                root.Measure(new(width, 264)); root.Arrange(new(0, 0, width, 264)); root.UpdateLayout();
+                var left = window.HelpButton.TransformToAncestor(window.FooterNavigation).TransformBounds(new Rect(window.HelpButton.RenderSize));
+                var right = window.OpenMainButton.TransformToAncestor(window.FooterNavigation).TransformBounds(new Rect(window.OpenMainButton.RenderSize));
+                Check(Math.Abs(left.Left) < 0.5 && Math.Abs(right.Right - window.FooterNavigation.ActualWidth) < 0.5 && left.Right < right.Left);
+                foreach (var icon in HomeShellInspection.Descendants(window.FooterNavigation).OfType<ContextIcon>())
+                    Check(!icon.Focusable && !icon.IsHitTestVisible && System.Windows.Automation.Peers.UIElementAutomationPeer.CreatePeerForElement(icon) is null);
+            }
+            Check(System.Windows.Automation.AutomationProperties.GetName(window.HelpButton) == "How this works" &&
+                System.Windows.Automation.AutomationProperties.GetName(window.OpenMainButton) == "Open Offramp Shift");
             window.CloseAutomatically();
         });
         test("help and Back preserve geometry and commands and restore logical focus", () =>

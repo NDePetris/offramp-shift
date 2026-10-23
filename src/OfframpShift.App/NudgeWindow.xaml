@@ -58,10 +58,23 @@
    </ScrollViewer>
   </Grid>
   <Border Grid.Row="1" BorderBrush="{DynamicResource ShiftDivider}" BorderThickness="0,1,0,0" Margin="0,12,0,0" Padding="0,8,0,0">
-   <WrapPanel>
-    <Button x:Name="HelpButton" Content="How this works" Click="ShowHelp" Style="{StaticResource NavigationAction}" Margin="0,0,16,0"/>
-    <Button x:Name="OpenMainButton" Content="Open Offramp Shift" Click="OpenMain" Style="{StaticResource NavigationAction}" AutomationProperties.Name="Open Offramp Shift"/>
-   </WrapPanel>
+   <Grid x:Name="FooterNavigation">
+    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+    <Button x:Name="HelpButton" Click="ShowHelp" Style="{StaticResource NavigationAction}" HorizontalAlignment="Left" Margin="0,0,4,0" AutomationProperties.Name="How this works">
+     <Grid>
+      <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+      <local:ContextIcon Text="&#xE946;" FontFamily="Segoe MDL2 Assets" FontSize="14" TextWrapping="NoWrap" VerticalAlignment="Center" Margin="0,0,6,0" Focusable="False" IsHitTestVisible="False"/>
+      <TextBlock Grid.Column="1" Text="How this works" VerticalAlignment="Center"/>
+     </Grid>
+    </Button>
+    <Button x:Name="OpenMainButton" Grid.Column="1" Click="OpenMain" Style="{StaticResource NavigationAction}" HorizontalAlignment="Right" Margin="4,0,0,0" AutomationProperties.Name="Open Offramp Shift">
+     <Grid>
+      <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+      <TextBlock Text="Open Offramp Shift" VerticalAlignment="Center" TextAlignment="Right"/>
+      <local:ContextIcon Grid.Column="1" Text="&#xE8A7;" FontFamily="Segoe MDL2 Assets" FontSize="14" TextWrapping="NoWrap" VerticalAlignment="Center" Margin="6,0,0,0" Focusable="False" IsHitTestVisible="False"/>
+     </Grid>
+    </Button>
+   </Grid>
   </Border>
  </Grid>
 </Window>
