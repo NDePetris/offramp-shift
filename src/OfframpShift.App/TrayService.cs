@@ -6,6 +6,10 @@ namespace OfframpShift.App;
 internal sealed class TrayService : IDisposable
 {
     private readonly Forms.NotifyIcon icon;
+    private readonly Forms.ToolStripMenuItem reminderHint = CreateReminderHint();
+    internal static Forms.ToolStripMenuItem CreateReminderHint() => new("Reminder open — select its taskbar button") { Enabled = false, Visible = false };
+    internal static void SetReminderOpen(Forms.ToolStripMenuItem hint, bool open) => hint.Visible = open;
+    internal void SetReminderOpen(bool open) { if (!disposed) SetReminderOpen(reminderHint, open); }
     private readonly Forms.ToolStripMenuItem status = new("Starting") { Enabled = false };
     private readonly Forms.ToolStripMenuItem context = new(TraySummary.Starting.Context) { Enabled = false };
     private readonly Forms.ToolStripMenuItem allowance = new(TraySummary.Starting.Allowance) { Enabled = false };
@@ -44,6 +48,7 @@ internal sealed class TrayService : IDisposable
         menu.Items.Add(allowance);
         menu.Items.Add(qualifyingBreak);
         menu.Items.Add(new Forms.ToolStripSeparator());
+        menu.Items.Add(reminderHint);
         menu.Items.Add(feedbackItem);
         feedbackItem.Click += (_, _) => ShowFeedback();
         menu.Items.Add("Open Offramp Shift", null, (_, _) => open());
@@ -136,11 +141,13 @@ internal sealed class TrayService : IDisposable
     public void Dispose()
     {
         if (disposed) return;
+        reminderHint.Visible = false;
         disposed = true; icon.Visible = false; icon.ContextMenuStrip?.Dispose(); icon.Dispose();
         lightIcon.Dispose(); darkIcon.Dispose();
     }
     public void MarkUnavailable()
     {
+        SetReminderOpen(false);
         ApplySummary(summary.Unavailable());
         pause.Enabled = retry.Enabled = save.Enabled = personal.Enabled = work.Enabled = false;
     }

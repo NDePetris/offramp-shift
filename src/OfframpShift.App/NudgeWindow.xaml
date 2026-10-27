@@ -3,7 +3,7 @@
  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
  xmlns:local="clr-namespace:OfframpShift.App"
  Title="Offramp Shift — time for a break" Width="400" MinWidth="320" Height="300"
- ResizeMode="NoResize" ShowActivated="False" WindowStartupLocation="Manual"
+ ResizeMode="NoResize" ShowInTaskbar="True" ShowActivated="False" WindowStartupLocation="Manual"
  FontFamily="Segoe UI" FontSize="14"
  Background="{DynamicResource ShiftCanvas}" Foreground="{DynamicResource ShiftText}">
  <Window.Resources>

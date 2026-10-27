@@ -182,6 +182,25 @@ submission owns dismissal; automatic context closure/shutdown never submits one.
 Eligible failures leave actionable inline feedback and one local failure report;
 obsolete context-cancellation failures are suppressed, storage failures stay explicit.
 
+Issue #22 adds one best-effort `HWND_TOP` raise with `SWP_NOMOVE | SWP_NOSIZE |
+SWP_NOACTIVATE`, only after strict completion and the UI's final transaction check.
+The UI rechecks the same HWND, transaction, expiry, context and actual foreground
+again before its single foreground request; no dispatcher yield separates these
+operations. No topmost band, activation retry or refresh-triggered raise is used.
+Raise failure alone leaves an otherwise eligible reminder available. A passive
+tray hint points to the explicitly enabled taskbar button only while an eligible
+reminder is actually open; closure immediately clears it and refresh rechecks
+eligibility. The hint has no action and sends no notification.
+
+The latest presentation result retains Show/layout, authorization, raise and
+foreground-request outcomes, with identity-free native observations after Show
+and immediately after the request (foreground role, visible/minimized/topmost
+state, original-monitor match and DPI). Diagnostic exceptions become Unknown;
+these observations never authorize presentation or affect accounting. There is
+no activity history, HWND/process identity output, deactivation tracking or polling.
+Successful native calls and native visibility do not prove unobscured pixels or
+lasting focus. See [issue #22 validation](../validation/issue22-reminder-visibility.md).
+
 See [PR 9 behavior, boundaries and owner checklist](../validation/pr9-interactive-nudges.md).
 Real-host nonactivating placement/confirmation passed on the owner's portrait
 2160-pixel-wide secondary monitor at 150%, build 26200.9711/x64. Actual focus and

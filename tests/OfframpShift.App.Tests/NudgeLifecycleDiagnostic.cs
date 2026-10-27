@@ -56,6 +56,7 @@ internal static class NudgeLifecycleDiagnostic
             AfterShow = Foreground(window, foreground); DpiChanged = native.DpiChangedDuringPlacement;
             return result;
         }
+        public bool RaiseWithoutActivation(NudgeWindow window) => false; // Keep this diagnostic nonintrusive.
         // Diagnostic observes nonactivating Show and authorization only, never requests focus.
         public bool Activate(NudgeWindow window) { ActivationAuthorized = true; return false; }
     }

@@ -30,10 +30,18 @@ internal static class InteractiveUiRegressions
         public bool Activation { get; set; } = true;
         public string PlacementStatus => "ContentMeasurement";
         public Action<NudgeWindow>? DuringPresentation { get; set; }
-        public int Shows, Activations;
+        public int Shows, Raises, Activations;
+        public bool Raise { get; set; } = true;
+        public bool RaiseThrows { get; set; }
+        public bool IsVisible(NudgeWindow window) => Shows > 0;
+        public Action<NudgeWindow>? DuringRaise { get; set; }
+        public Action? DuringActivation { get; set; }
+        public bool ObservationThrows { get; set; }
+        public NudgeObservation Observe(NudgeWindow window, nint original) => ObservationThrows ? throw new InvalidOperationException("diagnostic unavailable") : new("Original", false, false, false, true, 144);
+        public bool RaiseWithoutActivation(NudgeWindow window) { Raises++; DuringRaise?.Invoke(window); if (RaiseThrows) throw new System.ComponentModel.Win32Exception(); return Raise; }
         public Task<bool> PresentAsync(NudgeWindow window, nint foreground)
         { if (Placement) Shows++; DuringPresentation?.Invoke(window); return Task.FromResult(Placement); }
-        public bool Activate(NudgeWindow window) { Activations++; return Activation; }
+        public bool Activate(NudgeWindow window) { Activations++; DuringActivation?.Invoke(); return Activation; }
     }
     internal static void Run(Action<string, Action> test, Func<HostSnapshot> snapshot)
     {
@@ -62,6 +70,180 @@ internal static class InteractiveUiRegressions
             }
             return HostCommandResult.Success() with { Presentation = command.Presentation };
         }
+        test("strict completion precedes one raise and fresh revalidation precedes focus", () =>
+        {
+            var value = Eligible(); var steps = new List<string>(); var platform = new Platform();
+            platform.DuringPresentation = _ => steps.Add("show");
+            platform.DuringRaise = _ => steps.Add("raise");
+            platform.DuringActivation = () => steps.Add("activate");
+            var afterRaiseRead = false;
+            var presenter = new NudgePresenter(command =>
+            {
+                steps.Add(command.Kind == HostCommandKind.BeginNudgePresentation ? "begin" : "complete");
+                return Task.FromResult(Accept(command, ref value));
+            }, () =>
+            {
+                if (platform.Raises == 1 && platform.Activations == 0) { afterRaiseRead = true; steps.Add("revalidate"); }
+                return value;
+            }, _ => { }, platform);
+            var reminder = Event(value);
+            presenter.PresentAsync(reminder).GetAwaiter().GetResult();
+            Check(steps.SequenceEqual(new[] { "begin", "show", "complete", "raise", "revalidate", "activate" }) && afterRaiseRead);
+            Check(platform.Raises == 1 && platform.Activations == 1 && presenter.LastPresentation.Raise == "Succeeded");
+            presenter.Refresh(); presenter.PresentAsync(reminder).GetAwaiter().GetResult();
+            SendMessageW(new System.Windows.Interop.WindowInteropHelper(presenter.Window!).Handle, 0x0006, 0, 0); // Owned HWND deactivation only.
+            presenter.Refresh();
+            Check(platform.Raises == 1 && platform.Activations == 1);
+            Check(presenter.Window!.ShowInTaskbar && !presenter.Window.Topmost && !presenter.Window.ShowActivated);
+            presenter.Close();
+        });
+        foreach (var phase in new[] { "completion", "raise" })
+            foreach (var fault in new[] { "revoked", "expired", "closed", "external", "context", "paused", "stale", "wrong-desktop" })
+                test($"{fault} during {phase} prevents subsequent native effects", () =>
+                {
+                    var value = Eligible(); var platform = new Platform(); NudgePresenter? presenter = null;
+                    var now = Environment.TickCount64; var expiry = long.MaxValue;
+                    void Invalidate(NudgeWindow? target)
+                    {
+                        switch (fault)
+                        {
+                            case "expired": now = expiry + 1; break;
+                            case "revoked": value = value with { PresentationId = Guid.Empty }; break;
+                            case "closed": target!.CloseAutomatically(); break;
+                            case "external": platform.ForegroundWindow = 99; break;
+                            case "context": value = value with { CanKeepNudgeOpen = false }; break;
+                            case "paused": value = value with { State = value.State! with { Paused = true } }; break;
+                            case "stale": value = value with { PublishedTick = now - 2_001 }; break;
+                            case "wrong-desktop": value = value with { Settings = value.Settings with { Personal = Guid.NewGuid() } }; break;
+                        }
+                    }
+                    platform.DuringRaise = window => { if (phase == "raise") Invalidate(window); };
+                    var deferrals = 0;
+                    presenter = new(command =>
+                    {
+                        if (command.Kind == HostCommandKind.DeferInteractive) deferrals++;
+                        var result = Accept(command, ref value);
+                        if (result.Presentation is { } ticket) expiry = ticket.ExpiresTick;
+                        if (command.Kind == HostCommandKind.CompleteNudgePresentation && phase == "completion")
+                        {
+                            if (fault == "wrong-desktop") return Task.FromResult(HostCommandResult.Failure("CandidateWrongDesktop"));
+                            Invalidate(presenter!.Window);
+                        }
+                        return Task.FromResult(result);
+                    }, () => value, _ => { }, platform, tickCount: () => now);
+                    presenter.PresentAsync(Event(value)).GetAwaiter().GetResult();
+                    Check(platform.Raises == (phase == "raise" ? 1 : 0) && platform.Activations == 0);
+                    Check(presenter.Window is null && deferrals == 0 && !presenter.HasOpenReminder);
+                });
+        foreach (var raised in new[] { false, true })
+            foreach (var focused in new[] { false, true })
+                foreach (var diagnosticFailure in new[] { false, true })
+                    test($"raise={raised} focus={focused} diagnosticsFail={diagnosticFailure} retains eligible reminder", () =>
+                    {
+                        var value = Eligible(); var platform = new Platform { Raise = raised, Activation = focused, ObservationThrows = diagnosticFailure };
+                        var presenter = new NudgePresenter(command => Task.FromResult(Accept(command, ref value)), () => value, _ => { }, platform);
+                        presenter.PresentAsync(Event(value)).GetAwaiter().GetResult();
+                        var result = presenter.LastPresentation;
+                        Check(presenter.Window is not null && platform.Raises == 1 && platform.Activations == 1);
+                        Check(result.ShowLayout && result.Authorization == "Allowed" && result.Raise == (raised ? "Succeeded" : "Failed"));
+                        Check(result.ForegroundRequest == (focused ? "Accepted" : "Refused"));
+                        Check(result.AfterRequest!.ForegroundRole == (diagnosticFailure ? "Unavailable" : "Original"));
+                        presenter.Refresh(); Check(platform.Raises == 1 && platform.Activations == 1);
+                        presenter.Close();
+                    });
+        test("native raise exception remains a failed raise and permits one authorized foreground request", () =>
+        {
+            var value = Eligible(); var platform = new Platform { RaiseThrows = true };
+            var presenter = new NudgePresenter(command => Task.FromResult(Accept(command, ref value)), () => value,
+                _ => throw new InvalidOperationException("Raise failure must not report a durable-command failure."), platform);
+            presenter.PresentAsync(Event(value)).GetAwaiter().GetResult();
+            Check(presenter.LastPresentation.Raise == "Failed" && platform.Raises == 1 && platform.Activations == 1);
+            Check(presenter.Window is not null); presenter.Close();
+            Check(presenter.DiagnosticStatus.Contains("raise=Failed"));
+        });
+        test("native raise on owned hidden HWND neither shows activates moves nor leaves topmost", () =>
+        {
+            var platform = new NudgePlatform();
+            var window = new NudgeWindow(_ => Task.FromResult(HostCommandResult.Success()));
+            new System.Windows.Interop.WindowInteropHelper(window).EnsureHandle();
+            var foreground = platform.ForegroundWindow;
+            var before = new Rect(window.Left, window.Top, window.Width, window.Height);
+            Check(platform.RaiseWithoutActivation(window));
+            var observed = platform.Observe(window, foreground);
+            Check(observed.Topmost == false && observed.Visible == false && !window.Topmost && !window.IsActive);
+            Check(platform.ForegroundWindow == foreground && before == new Rect(window.Left, window.Top, window.Width, window.Height));
+            window.CloseAutomatically();
+        });
+        foreach (var end in new[] { "automatic", "extra-time", "dismissal", "context", "shutdown", "stale", "style" })
+            test("passive tray hint follows reminder lifecycle: " + end, () =>
+            {
+                using var ui = new UiContinuations();
+                var value = Eligible(); var platform = new Platform(); var deferrals = 0;
+                using var hint = TrayService.CreateReminderHint();
+                var presenter = new NudgePresenter(command =>
+                {
+                    if (command.Kind == HostCommandKind.DeferInteractive) deferrals++;
+                    return Task.FromResult(Accept(command, ref value));
+                }, () => value, _ => { }, platform);
+                presenter.OpenStateChanged += () => TrayService.SetReminderOpen(hint, presenter.HasOpenReminder);
+                presenter.PresentAsync(Event(value)).GetAwaiter().GetResult();
+                Check(hint.Available && !hint.Enabled && presenter.HasOpenReminder);
+                hint.PerformClick(); Check(platform.Raises == 1 && platform.Activations == 1);
+                if (end == "extra-time") presenter.Window!.Submit(60_000).GetAwaiter().GetResult();
+                else if (end == "dismissal") { presenter.Window!.Close(); ui.Drain(); }
+                else if (end == "automatic") presenter.Close();
+                else
+                {
+                    if (end == "context") value = value with { CanKeepNudgeOpen = false };
+                    if (end == "stale") value = value with { PublishedTick = Environment.TickCount64 - 2_001 };
+                    if (end == "style") value = value with { Settings = value.Settings with { ReminderStyle = ReminderStyle.Off } };
+                    presenter.Refresh(end == "shutdown");
+                }
+                Check(!hint.Available && !presenter.HasOpenReminder && presenter.Window is null);
+                Check(deferrals == (end is "extra-time" or "dismissal" ? 1 : 0));
+                Check(platform.Raises == 1 && platform.Activations == 1);
+            });
+        test("context loss clears the tray hint even while reused-window confirmation is pending", () =>
+        {
+            using var ui = new UiContinuations(); var value = Eligible(); var platform = new Platform();
+            var pending = new TaskCompletionSource<HostCommandResult>(); var confirmations = 0;
+            using var hint = TrayService.CreateReminderHint();
+            var presenter = new NudgePresenter(command =>
+            {
+                var accepted = Accept(command, ref value);
+                return command.Kind == HostCommandKind.CompleteNudgePresentation && ++confirmations > 1 ? pending.Task : Task.FromResult(accepted);
+            }, () => value, _ => { }, platform);
+            presenter.OpenStateChanged += () => TrayService.SetReminderOpen(hint, presenter.HasOpenReminder);
+            presenter.PresentAsync(Event(value)).GetAwaiter().GetResult();
+            Check(hint.Available);
+            var next = presenter.PresentAsync(Event(value, 2));
+            Check(!next.IsCompleted && hint.Available);
+            value = value with { CanKeepNudgeOpen = false }; presenter.Refresh();
+            Check(!hint.Available && platform.Raises == 1 && platform.Activations == 1);
+            pending.SetResult(HostCommandResult.Success()); ui.Drain(); next.GetAwaiter().GetResult();
+            Check(presenter.Window is null && !hint.Available && platform.Raises == 1 && platform.Activations == 1);
+        });
+        test("latest presentation replaces outcomes and closed windows immediately notify passive discoverability", () =>
+        {
+            var value = Eligible(); var platform = new Platform(); var changes = 0;
+            var presenter = new NudgePresenter(command => Task.FromResult(Accept(command, ref value)), () => value, _ => { }, platform);
+            presenter.OpenStateChanged += () => changes++;
+            presenter.PresentAsync(Event(value)).GetAwaiter().GetResult();
+            Check(changes == 1 && presenter.HasOpenReminder); // Synthetic platform visibility; no native Show.
+            platform.Activation = false;
+            presenter.PresentAsync(Event(value, 2)).GetAwaiter().GetResult();
+            Check(presenter.LastPresentation.ForegroundRequest == "Refused" && platform.Raises == 2);
+            presenter.Window!.CloseAutomatically();
+            Check(changes == 3 && presenter.Window is null && !presenter.HasOpenReminder);
+            using var hint = TrayService.CreateReminderHint();
+            Check(!hint.Available && !hint.Enabled && hint.Text == "Reminder open — select its taskbar button");
+            TrayService.SetReminderOpen(hint, true); Check(hint.Available && !hint.Enabled);
+            hint.PerformClick(); Check(platform.Raises == 2 && platform.Activations == 2);
+            TrayService.SetReminderOpen(hint, false); Check(!hint.Available);
+            Check(NudgePlatform.HwndTop == 0 && (NudgePlatform.RaiseFlags & NudgePlatform.SwpNoActivate) != 0 &&
+                (NudgePlatform.RaiseFlags & NudgePlatform.SwpNoZOrder) == 0 &&
+                (NudgePlatform.RaiseFlags & (NudgePlatform.SwpNoMove | NudgePlatform.SwpNoSize)) == (NudgePlatform.SwpNoMove | NudgePlatform.SwpNoSize));
+        });
         test("authorized reminder navigation reuses the callback without closing replaying or submitting", () =>
         {
             var value = Eligible(); var opens = 0; var requests = new List<HostCommandKind>();
@@ -250,6 +432,7 @@ internal static class InteractiveUiRegressions
                     () => value, _ => { }, platform);
                 presenter.PresentAsync(reminder).GetAwaiter().GetResult(); presenter.Refresh();
                 Check(platform.Activations == (failure == "focus-denied" ? 1 : 0));
+                Check(platform.Raises == (failure == "focus-denied" ? 1 : 0));
                 if (failure == "focus-denied") Check(presenter.Window is not null);
                 else Check(presenter.Window is null);
                 if (failure == "placement") Check(presenter.Status.StartsWith("Positioning failed: ContentMeasurement.", StringComparison.Ordinal));
