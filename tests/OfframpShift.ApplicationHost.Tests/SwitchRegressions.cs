@@ -92,11 +92,18 @@ internal static class SwitchRegressions
         Test("fresh single-use authorization leaves Core configuration state and estimator unchanged", () =>
         {
             using var f = new Fixture(); using var app = Active(f);
-            var before = app.Snapshot(); var diagnostics = JsonSerializer.Serialize(app.ObservationDiagnostics);
+            // Authorization now measures its drain work; accounting aggregates must
+            // still remain unchanged even though execution timing advances.
+            string AccountingDiagnostics()
+            {
+                var node = System.Text.Json.Nodes.JsonNode.Parse(JsonSerializer.Serialize(app.ObservationDiagnostics))!.AsObject();
+                node.Remove("execution"); return node.ToJsonString();
+            }
+            var before = app.Snapshot(); var diagnostics = AccountingDiagnostics();
             var reads = f.Source!.Reads;
             var granted = app.Execute(Authorize()); Check(granted.Succeeded && granted.Switching is not null);
             var after = app.Snapshot(); Check(after.State == before.State && after.Configuration == before.Configuration && after.Settings == before.Settings);
-            Check(reads == f.Source.Reads && diagnostics == JsonSerializer.Serialize(app.ObservationDiagnostics));
+            Check(reads == f.Source.Reads && diagnostics == AccountingDiagnostics());
             var request = granted.Switching!.Consume(Environment.TickCount64); Check(request is { Valid: true });
             Check(request!.Personal == f.Personal && request.Work == f.Work && request.Request.Expected.ForegroundWindow == 2);
             Check(granted.Switching.Consume(Environment.TickCount64) is null);

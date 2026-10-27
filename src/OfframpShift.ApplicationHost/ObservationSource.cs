@@ -34,6 +34,7 @@ public sealed class WindowsObservationSource : IObservationSource
     private readonly ResourceTotals resources = new();
     private readonly Stopwatch lifetime = Stopwatch.StartNew();
     private long nextResourceSample;
+    private readonly OfframpShift.Persistence.LatencyHistogram resourceSampling = new();
     public static bool Supported => DesktopWorker.IsSupported(DesktopWorker.Build, RuntimeInformation.ProcessArchitecture);
     public static string Build => DesktopWorker.Build;
     public Capability Hooks => loop.Hooks;
@@ -56,7 +57,7 @@ public sealed class WindowsObservationSource : IObservationSource
     {
         var point = sampler.Read();
         if (lifetime.ElapsedMilliseconds >= nextResourceSample)
-        { resources.Sample(worker?.OwnedProcess); nextResourceSample = lifetime.ElapsedMilliseconds + 10_000; }
+        { using var measurement = resourceSampling.Measure(); resources.Sample(worker?.OwnedProcess); nextResourceSample = lifetime.ElapsedMilliseconds + 10_000; }
         return point;
     }
     public object Diagnostics => new
@@ -65,6 +66,7 @@ public sealed class WindowsObservationSource : IObservationSource
         foregroundIdentity = sampler.ForegroundLatency.Snapshot(),
         sessionQueries = sampler.SessionLatency.Snapshot(),
         inputQueries = sampler.InputLatency.Snapshot(),
+        resourceSampling = resourceSampling.Snapshot(),
         resources = resources.Snapshot(lifetime.Elapsed.TotalSeconds)
     };
     public bool TryTake(out NativeSignal? signal) => loop.TryTake(out signal, 0);

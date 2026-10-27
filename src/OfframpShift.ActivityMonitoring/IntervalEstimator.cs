@@ -16,7 +16,17 @@ public sealed class IntervalEstimator
         ArgumentNullException.ThrowIfNull(configuration); configuration.Validate();
         this.personal = personal; this.work = work; this.configuration = configuration;
     }
-    private sealed record Pending(MonitoringObservation Observation, long Generation);
+    private enum UnknownCause { None, EndpointDiscontinuity, ObservedTransition, UnavailableEndpoint, SignalInvalidation, PendingOverflow, StaleGap, FinalizationHealthOrFreshness }
+    private sealed record Pending(MonitoringObservation Observation, long Generation, UnknownCause Cause);
+    private readonly long[] unknownCounts = new long[Enum.GetValues<UnknownCause>().Length], unknownDurations = new long[Enum.GetValues<UnknownCause>().Length];
+    private long rejectedDurationMs, discardedPendingIntervals;
+    public object CoverageDiagnostics => new
+    {
+        unknown = Enum.GetValues<UnknownCause>().Where(x => x != UnknownCause.None)
+            .ToDictionary(x => x.ToString(), x => new { count = unknownCounts[(int)x], durationMs = unknownDurations[(int)x] }),
+        rejectedDurationMs,
+        discardedPendingIntervals
+    };
     private readonly Queue<Pending> pending = new();
     private EvidencePoint? previous;
     private ProviderHealth? previousHealth;
@@ -41,6 +51,7 @@ public sealed class IntervalEstimator
         if (result.Reason is "Invalid, overlapping, delayed or out-of-order interval." or "Monotonic clock discontinuity.")
         {
             CoreRejectedIntervals++;
+            rejectedDurationMs += observation.End.Milliseconds - observation.Start.Milliseconds;
             Reset();
             Reason = "CoreRejectedFreshBaselineRequired";
             return false;
@@ -140,7 +151,8 @@ public sealed class IntervalEstimator
         {
             Enqueue(new(start, end, DesktopScope.Unknown, SessionState.Unknown, null, InputState.Unknown,
                 MonitoringAvailability.Unavailable, EvidenceConfidence.Unknown)
-            { Continuity = hard || interrupted ? ContinuityDisposition.Invalidate : ContinuityDisposition.PreserveTransient });
+            { Continuity = hard || interrupted ? ContinuityDisposition.Invalidate : ContinuityDisposition.PreserveTransient },
+                hard ? UnknownCause.EndpointDiscontinuity : interrupted ? UnknownCause.ObservedTransition : UnknownCause.UnavailableEndpoint);
             Reason = hard ? "Discontinuity" : interrupted ? "ObservedTransition" : "TransientUnavailable";
         }
         previous = point; previousHealth = health; interrupted = hardInterruption = false;
@@ -148,7 +160,7 @@ public sealed class IntervalEstimator
         {
             var entries = pending.ToArray(); pending.Clear();
             pending.Enqueue(Invalidate(entries[0] with
-            { Observation = entries[0].Observation with { End = entries[^1].Observation.End } }));
+            { Observation = entries[0].Observation with { End = entries[^1].Observation.End } }, UnknownCause.PendingOverflow));
         }
 
         MonitoringObservation Estimate(MonotonicTime s, MonotonicTime e, InputState input) =>
@@ -167,10 +179,11 @@ public sealed class IntervalEstimator
                 // Deliver the gap at a fresh receipt boundary, never an old estimate.
                 // Core rejects stale endings and advances its boundary to receipt time;
                 // replaying the held-back queue afterwards would perpetuate overlap.
-                o = Invalidate(first with { Observation = o with { End = now } }).Observation;
+                o = Invalidate(first with { Observation = o with { End = now } }, UnknownCause.StaleGap).Observation;
                 Reset();
                 Reason = "StaleGapFreshBaselineRequired";
                 UnknownMs += o.End.Milliseconds - o.Start.Milliseconds;
+                RecordUnknown(UnknownCause.StaleGap, o);
                 result.Add(o); lastCommittedEnd = o.End.Milliseconds; committedEpoch = o.End.Epoch;
                 break;
             }
@@ -179,9 +192,12 @@ public sealed class IntervalEstimator
             if (!health.Healthy || first.Generation != health.Generation || previousHealth?.Generation != health.Generation ||
                 now.Milliseconds - o.End.Milliseconds > EstimationPolicy.MaximumAgeMs ||
                 previous is null || now.Milliseconds - previous.Time.Milliseconds + previous.CollectionMs > EstimationPolicy.MaximumAgeMs)
-                o = Invalidate(first).Observation;
+            {
+                first = Invalidate(first, UnknownCause.FinalizationHealthOrFreshness);
+                o = first.Observation;
+            }
             if (o.Confidence == EvidenceConfidence.Estimated) EstimatedMs += o.End.Milliseconds - o.Start.Milliseconds;
-            else UnknownMs += o.End.Milliseconds - o.Start.Milliseconds;
+            else { UnknownMs += o.End.Milliseconds - o.Start.Milliseconds; RecordUnknown(first.Cause, o); }
             result.Add(o); lastCommittedEnd = o.End.Milliseconds; committedEpoch = o.End.Epoch;
         }
         return result;
@@ -189,6 +205,7 @@ public sealed class IntervalEstimator
 
     public void Reset()
     {
+        discardedPendingIntervals += pending.Count;
         pending.Clear(); previous = null; previousHealth = null;
         interrupted = hardInterruption = false;
         Reason = "AwaitingBaseline";
@@ -200,9 +217,11 @@ public sealed class IntervalEstimator
         point.Desktop.Desktops.Contains(personal) && point.Desktop.Desktops.Contains(work)
         ? point.Desktop.Current == personal ? DesktopScope.Personal : point.Desktop.Current == work ? DesktopScope.Work : DesktopScope.Other
         : DesktopScope.Unknown;
-    private void Enqueue(MonitoringObservation observation)
-    { if (observation.End.Milliseconds > observation.Start.Milliseconds) pending.Enqueue(new(observation, currentGeneration)); }
-    private Pending Invalidate(Pending entry)
+    private void RecordUnknown(UnknownCause cause, MonitoringObservation observation)
+    { unknownCounts[(int)cause]++; unknownDurations[(int)cause] += observation.End.Milliseconds - observation.Start.Milliseconds; }
+    private void Enqueue(MonitoringObservation observation, UnknownCause cause = UnknownCause.None)
+    { if (observation.End.Milliseconds > observation.Start.Milliseconds) pending.Enqueue(new(observation, currentGeneration, cause)); }
+    private Pending Invalidate(Pending entry, UnknownCause cause = UnknownCause.SignalInvalidation)
     {
         InvalidatedIntervals++;
         return new(entry.Observation with
@@ -214,6 +233,6 @@ public sealed class IntervalEstimator
             Availability = MonitoringAvailability.Unavailable,
             Confidence = EvidenceConfidence.Unknown,
             Continuity = ContinuityDisposition.Invalidate
-        }, entry.Generation);
+        }, entry.Generation, cause);
     }
 }

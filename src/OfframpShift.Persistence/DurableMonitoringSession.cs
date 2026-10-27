@@ -33,7 +33,8 @@ public sealed class DurableMonitoringSession : IDisposable
                 commitFailures,
                 noOpTransitions,
                 preparedPayloadBytes = store?.PreparedPayloadBytes ?? 0,
-                latency = commitLatency.Snapshot()
+                latency = commitLatency.Snapshot(),
+                phases = store?.SaveDiagnostics
             };
         }
     }
