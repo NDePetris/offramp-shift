@@ -1,9 +1,18 @@
+using System.Diagnostics;
+
 namespace OfframpShift.Persistence;
 
 // Fixed power-of-two microsecond buckets. Percentiles are upper bucket bounds.
 // Owners serialize updates and snapshots. No raw samples are retained.
 public sealed class LatencyHistogram
 {
+    public Measurement Measure() => new(this);
+    public readonly struct Measurement(LatencyHistogram histogram) : IDisposable
+    {
+        private readonly long started = Stopwatch.GetTimestamp();
+        public void Dispose() => histogram.Record(Stopwatch.GetElapsedTime(started).Ticks / 10);
+    }
+
     private readonly long[] buckets = new long[32];
     private long count, totalUs, maximumUs;
     public void Record(long microseconds)

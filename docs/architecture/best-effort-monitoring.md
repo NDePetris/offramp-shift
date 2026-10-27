@@ -143,6 +143,12 @@ suppress obsolete advisory effects. Restart/retry does not replay effects or dow
 
 ## Aggregate instrumentation and limitations
 
+Issue #9 adds complete owner/Step/delivery timing, established Save phases,
+operation/deadline overlap and bounded Unknown pipeline categories. Queued Tick
+health now uses the original monotonic receipt/epoch, never drain time. See the
+[diagnostic schema, deterministic evidence and bounded owner procedure](../validation/issue9-monitoring-diagnostics.md).
+These diagnostics neither explain every historical miss nor certify live coverage.
+
 Final foreground diagnostics count anonymous failed-read categories and show the
 last category plus a numeric application-identity API return code when available.
 No identity, window/process identifier, path, title, AUMID or event history is

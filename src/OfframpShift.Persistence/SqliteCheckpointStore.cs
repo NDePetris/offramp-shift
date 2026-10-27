@@ -27,6 +27,23 @@ public sealed class SqliteCheckpointStore : ICheckpointStore, IDisposable
     private bool disposed;
     internal Action<StorageFault>? Fault { get; set; }
     public long PreparedPayloadBytes { get; private set; }
+    private readonly LatencyHistogram steadyState = new(), setup = new(), begin = new(), validation = new(), replacement = new(), commit = new(), disposal = new();
+    // Serialized by the durable session. Initialization/recovery are excluded.
+    internal object SaveDiagnostics => new
+    {
+        steadyState = steadyState.Snapshot(),
+        connectionSetup = setup.Snapshot(),
+        transactionBegin = begin.Snapshot(),
+        existingStateValidation = validation.Snapshot(),
+        replacement = replacement.Snapshot(),
+        commit = commit.Snapshot(),
+        disposal = disposal.Snapshot()
+    };
+
+    private readonly struct TimedDisposal(IDisposable resource, LatencyHistogram latency) : IDisposable
+    {
+        public void Dispose() { using var measurement = latency.Measure(); resource.Dispose(); }
+    }
 
     public static string DefaultDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Offramp", "Shift");
 
@@ -106,31 +123,45 @@ public sealed class SqliteCheckpointStore : ICheckpointStore, IDisposable
                     Initialize(payload);
                     return;
                 }
+                using var steadyMeasurement = steadyState.Measure();
                 CheckMarker();
                 if (!Present(PathFor(DatabaseName))) throw new CheckpointStorageException(StorageFailure.MissingEstablishedState);
                 long revision;
-                using (var connection = Open(false))
-                using (var transaction = connection.BeginTransaction(deferred: false))
                 {
-                    var row = Read(connection, transaction);
-                    if (pendingPayload is not null && expectedRevision < long.MaxValue && row.Revision == expectedRevision + 1 && row.Payload == pendingPayload)
+                    SqliteConnection connection;
+                    using (setup.Measure()) connection = Open(false);
+                    using var closeConnection = new TimedDisposal(connection, disposal);
+                    SqliteTransaction transaction;
+                    using (begin.Measure()) transaction = connection.BeginTransaction(deferred: false);
+                    using var closeTransaction = new TimedDisposal(transaction, disposal);
+                    (long Revision, string Payload) row;
+                    bool alreadyCommitted;
+                    using (validation.Measure())
+                    {
+                        row = Read(connection, transaction);
+                        alreadyCommitted = pendingPayload is not null && expectedRevision < long.MaxValue && row.Revision == expectedRevision + 1 && row.Payload == pendingPayload;
+                        if (!alreadyCommitted)
+                        {
+                            if (row.Revision != expectedRevision || row.Payload != committedPayload || row.Revision == long.MaxValue)
+                                throw new CheckpointStorageException(StorageFailure.StaleRevision);
+                            CheckpointCodec.Decode(row.Payload, utcNow());
+                        }
+                    }
+                    if (alreadyCommitted)
                     {
                         // The acknowledgment was lost, but the exact replacement committed.
                         revision = row.Revision;
-                        transaction.Commit();
+                        using (commit.Measure()) transaction.Commit();
                     }
                     else
                     {
-                        if (row.Revision != expectedRevision || row.Payload != committedPayload || row.Revision == long.MaxValue)
-                            throw new CheckpointStorageException(StorageFailure.StaleRevision);
-                        CheckpointCodec.Decode(row.Payload, utcNow());
                         revision = checked(row.Revision + 1);
                         pendingPayload = payload;
                         Fault?.Invoke(StorageFault.BeforeUpdate);
-                        Replace(connection, transaction, revision, payload, false);
+                        using (replacement.Measure()) Replace(connection, transaction, revision, payload, false);
                         Fault?.Invoke(StorageFault.AfterUpdate);
                         commitStarted = true;
-                        transaction.Commit();
+                        using (commit.Measure()) transaction.Commit();
                         Fault?.Invoke(StorageFault.AfterCommit);
                     }
                 }

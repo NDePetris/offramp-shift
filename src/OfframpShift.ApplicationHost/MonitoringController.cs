@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 
 namespace OfframpShift.ApplicationHost;
 
@@ -8,6 +9,9 @@ public sealed class MonitoringController
     private readonly TaskCompletionSource stopped = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly object submissionGate = new();
     private HostSnapshot? latest;
+    private object? finalDiagnostics;
+    // Published once after a graceful owner-loop stop; never polls a live owner.
+    public object? FinalDiagnostics => Volatile.Read(ref finalDiagnostics);
     private BreakReminderMailbox? reminders;
     private volatile bool stopping;
     private bool commandInProgress;
@@ -29,9 +33,9 @@ public sealed class MonitoringController
         }
     }
 
-    internal MonitoringController(Func<MonitoringApplication> create)
+    internal MonitoringController(Func<MonitoringApplication> create, Action? prepareTurn = null)
     {
-        var thread = new Thread(() => Run(create)) { IsBackground = true, Name = "Offramp monitoring owner" };
+        var thread = new Thread(() => Run(create, prepareTurn)) { IsBackground = true, Name = "Offramp monitoring owner" };
         thread.Start();
     }
 
@@ -102,33 +106,54 @@ public sealed class MonitoringController
         }
     }
 
-    private void Run(Func<MonitoringApplication> create)
+    private void Run(Func<MonitoringApplication> create, Action? prepareTurn)
     {
         Exception? failure = null;
         try
         {
             using var application = create();
             Volatile.Write(ref reminders, application.Reminders);
+            var turns = new OperationTiming(); var commandTiming = new OperationTiming(); var publicationTiming = new OperationTiming();
+            void Publish()
+            {
+                var started = Stopwatch.GetTimestamp(); var from = application.Elapsed; var deadline = application.NextSamplingDeadline;
+                try { Volatile.Write(ref latest, application.Snapshot()); }
+                finally { publicationTiming.Record(started, from, application.Elapsed, deadline); }
+            }
             long nextPublication = 0;
             while (!stopping)
             {
-                // One command per turn: a burst cannot starve observation indefinitely.
-                if (commands.TryTake(out var request, 10))
-                {
-                    if (stopping) { request.Completion.TrySetResult(HostCommandResult.Failure("The monitoring owner is stopping.")); break; }
-                    lock (submissionGate) commandInProgress = true;
-                    try { var result = application.Execute(request.Command); Volatile.Write(ref latest, application.Snapshot()); request.Completion.TrySetResult(result); }
-                    catch { request.Completion.TrySetResult(HostCommandResult.Failure("Application action failed. Accounting stopped; restart the app.")); throw; }
-                    finally { lock (submissionGate) commandInProgress = false; }
-                }
+                // Internal deterministic-test boundary. Production supplies no callback.
+                prepareTurn?.Invoke();
                 if (stopping) break;
-                application.Step();
-                if (Environment.TickCount64 >= nextPublication)
+                var turnStarted = Stopwatch.GetTimestamp(); var turnFrom = application.Elapsed; var turnDeadline = application.NextSamplingDeadline;
+                try
                 {
-                    Volatile.Write(ref latest, application.Snapshot());
-                    nextPublication = Environment.TickCount64 + 250;
+                    // One command per turn: a burst cannot starve observation indefinitely.
+                    if (commands.TryTake(out var request, 10))
+                    {
+                        if (stopping) { request.Completion.TrySetResult(HostCommandResult.Failure("The monitoring owner is stopping.")); break; }
+                        lock (submissionGate) commandInProgress = true;
+                        var commandStarted = Stopwatch.GetTimestamp(); var commandFrom = application.Elapsed; var commandDeadline = application.NextSamplingDeadline;
+                        try { var result = application.Execute(request.Command); Publish(); request.Completion.TrySetResult(result); }
+                        catch { request.Completion.TrySetResult(HostCommandResult.Failure("Application action failed. Accounting stopped; restart the app.")); throw; }
+                        finally { commandTiming.Record(commandStarted, commandFrom, application.Elapsed, commandDeadline); lock (submissionGate) commandInProgress = false; }
+                    }
+                    if (stopping) break;
+                    application.Step();
+                    if (Environment.TickCount64 >= nextPublication)
+                    {
+                        Publish();
+                        nextPublication = Environment.TickCount64 + 250;
+                    }
                 }
+                finally { turns.Record(turnStarted, turnFrom, application.Elapsed, turnDeadline); }
             }
+            Volatile.Write(ref finalDiagnostics, new
+            {
+                owner = new { turns = turns.Snapshot(), commands = commandTiming.Snapshot(), publication = publicationTiming.Snapshot() },
+                monitoring = application.ObservationDiagnostics
+            });
         }
         catch (Exception e) { failure = e; }
         finally

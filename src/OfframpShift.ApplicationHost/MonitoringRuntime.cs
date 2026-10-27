@@ -20,7 +20,21 @@ public sealed class MonitoringRuntime : IDisposable
     private IObservationSource source;
     private IntervalEstimator estimator;
     private MonitoringConfiguration configuration;
-    private long next, lastTick = -1, generation, drops, errors;
+    private long next, generation, drops, errors;
+    private MonotonicTime? lastHeartbeat;
+    private long HeartbeatAge
+    {
+        get
+        {
+            var now = clock.Now;
+            return lastHeartbeat is { } tick && tick.Epoch == now.Epoch && tick.Milliseconds <= now.Milliseconds
+                ? now.Milliseconds - tick.Milliseconds : long.MaxValue;
+        }
+    }
+    internal long NextSamplingDeadline => next;
+    private readonly OperationTiming stepTiming = new(), samplingTiming = new(), drainTiming = new(), deliveryTiming = new(), observeTiming = new();
+    private readonly LatencyHistogram periodicDelay = new(), queueResidence = new(), endpointSpacing = new(), receiptAge = new(), acknowledgmentAge = new();
+    private long invalidSignalReceipts, staleHeartbeats;
     private long lastRecovery = -10_000, eventSampleAt = long.MaxValue, lastSampleAt = -100;
     private uint shellGeneration, helperShellGeneration;
     private readonly LatencyHistogram cycles = new(), scheduleDelay = new(), activeCycles = new(), idleCycles = new(), lockedCycles = new();
@@ -261,7 +275,7 @@ public sealed class MonitoringRuntime : IDisposable
         var remaining = Latest is { } p ? 2_000 - (clock.Now.Milliseconds - p.Time.Milliseconds) : 0;
         remaining = Math.Min(remaining, maximumAge - age);
         // Health also has a two-second tick boundary; publication must not renew it.
-        remaining = Math.Min(remaining, 2_000 - (elapsed() - lastTick));
+        remaining = Math.Min(remaining, 2_000 - HeartbeatAge);
         Reminders?.Update(eligible, Environment.TickCount64, remaining);
     }
 
@@ -310,7 +324,7 @@ public sealed class MonitoringRuntime : IDisposable
         source = factory();
         estimator.ResetSignals(); Latest = null; Health = new(false, ++generation);
         reminderSignalSequence = 0;
-        lastTick = -1; drops = errors = 0;
+        lastHeartbeat = null; drops = errors = 0;
         helperShellGeneration = shellGeneration = source.ShellGeneration;
         return true;
     }
@@ -326,16 +340,25 @@ public sealed class MonitoringRuntime : IDisposable
 
     public void Step(bool accounting = true, bool breakReminders = false, bool interactive = false)
     {
+        var started = Stopwatch.GetTimestamp(); var from = elapsed(); var deadline = next;
+        try { StepCore(accounting, breakReminders, interactive); }
+        finally { stepTiming.Record(started, from, elapsed(), deadline); }
+    }
+
+    private void StepCore(bool accounting, bool breakReminders, bool interactive)
+    {
         Drain();
         if (elapsed() >= next || elapsed() >= eventSampleAt && elapsed() - lastSampleAt >= 100)
         {
             var periodic = elapsed() >= next;
             var lateness = periodic ? elapsed() - next : 0;
             scheduleDelay.Record(lateness * 1_000);
+            if (periodic) periodicDelay.Record(lateness * 1_000);
             if (lateness >= 1_000) MissedDeadlines += lateness / 1_000;
             if (periodic) next = (elapsed() / 1_000 + 1) * 1_000;
             lastSampleAt = elapsed(); eventSampleAt = long.MaxValue;
             var started = Stopwatch.GetTimestamp();
+            var sampleFrom = elapsed(); var sampleDeadline = next;
             var shell = source.ShellGeneration;
             if (shellGeneration != 0 && shell != shellGeneration) { InvalidateReminder(); generation++; }
             if (shell != 0 && shell != helperShellGeneration && elapsed() - lastRecovery >= 10_000)
@@ -345,7 +368,10 @@ public sealed class MonitoringRuntime : IDisposable
                 source.ReplaceDesktopWorker();
             }
             shellGeneration = shell;
+            var prior = Latest;
             Latest = source.Read(); Samples++;
+            if (prior is not null && prior.Time.Epoch == Latest.Time.Epoch && Latest.Time.Milliseconds >= prior.Time.Milliseconds)
+                endpointSpacing.Record((Latest.Time.Milliseconds - prior.Time.Milliseconds) * 1_000);
             if (Latest.Foreground == Capability.Unavailable)
             {
                 foregroundFailures.TryGetValue(Latest.ForegroundFailure, out var count);
@@ -361,11 +387,20 @@ public sealed class MonitoringRuntime : IDisposable
             if (Latest.Session == SessionState.Locked) lockedCycles.Record(cycleUs);
             else if (Latest.IdleAgeMs >= configuration.IdleThresholdMs) idleCycles.Record(cycleUs);
             else activeCycles.Record(cycleUs);
+            samplingTiming.Record(started, sampleFrom, elapsed(), sampleDeadline);
         }
         Drain(); RefreshHealth();
         UpdateReminderEligibility(accounting, breakReminders);
         if (!accounting || session.Status != PersistenceStatus.Ready || session.State.Paused)
         { estimator.Reset(); return; }
+        if (Latest is null) return;
+        var deliveryStarted = Stopwatch.GetTimestamp(); var deliveryFrom = elapsed(); var deliveryDeadline = next;
+        try { FinalizeAndDeliver(breakReminders, interactive, accounting); }
+        finally { deliveryTiming.Record(deliveryStarted, deliveryFrom, elapsed(), deliveryDeadline); }
+    }
+
+    private void FinalizeAndDeliver(bool breakReminders, bool interactive, bool accounting)
+    {
         if (Latest is null) return;
         // Finalization does not wait for the next polling tick.
         foreach (var observation in estimator.Finalize(clock.Now, Health))
@@ -378,7 +413,12 @@ public sealed class MonitoringRuntime : IDisposable
                 var before = session.State;
                 // Both enabled styles share immediate exhaustion and the same
                 // Personal-only cadence. Off still accounts without delivering.
-                var result = session.Observe(observation, true);
+                RecordAge(receiptAge, observation.End);
+                var observeStarted = Stopwatch.GetTimestamp(); var observeFrom = elapsed(); var observeDeadline = next;
+                TransitionResult result;
+                try { result = session.Observe(observation, true); }
+                finally { observeTiming.Record(observeStarted, observeFrom, elapsed(), observeDeadline); }
+                RecordAge(acknowledgmentAge, observation.End);
                 if (result.Effects.Any(x => x.Kind == EffectKind.Nudge))
                     ReminderStatus = "Nudge committed; delivery eligibility checked next.";
                 if (!before.BreakCompleted) maximumIncompleteBreakMs = Math.Max(maximumIncompleteBreakMs, before.BreakProgressMs);
@@ -442,11 +482,18 @@ public sealed class MonitoringRuntime : IDisposable
         { InvalidateReminder(); generation++; drops = source.Dropped; errors = source.CallbackErrors; }
         Health = new(source.Hooks == Capability.Available && source.LoopHealth == Capability.Available &&
             source.SessionNotifications == Capability.Available && source.PowerNotifications == Capability.Available &&
-            lastTick >= 0 && elapsed() - lastTick <= 2_000, generation);
+            HeartbeatAge <= 2_000, generation);
         RevalidateSwitchAuthorization();
     }
 
     private void Drain()
+    {
+        var started = Stopwatch.GetTimestamp(); var from = elapsed(); var deadline = next;
+        try { DrainCore(); }
+        finally { drainTiming.Record(started, from, elapsed(), deadline); }
+    }
+
+    private void DrainCore()
     {
         if (presentation is { } expired && (Environment.TickCount64 > expired.ExpiresTick || elapsed() - presentationStartedAt > 2_000))
         { presentation = null; presentationWindow = observedPresentationForeground = 0; }
@@ -491,12 +538,27 @@ public sealed class MonitoringRuntime : IDisposable
             { if (signal.Detail is 4 or 7 or 18) suspendResumeSignals++; else otherPowerSignals++; }
             if (signal.Kind is SignalKind.Foreground or SignalKind.InputDesktopChanged or SignalKind.Session or SignalKind.Power)
                 eventSampleAt = Math.Min(eventSampleAt, elapsed() + 50);
-            if (signal.Kind == SignalKind.Tick) lastTick = elapsed();
+            var now = clock.Now;
+            var validReceipt = signal.Receipt.Epoch == now.Epoch && signal.Receipt.Milliseconds >= 0 && signal.Receipt.Milliseconds <= now.Milliseconds;
+            if (validReceipt) queueResidence.Record((now.Milliseconds - signal.Receipt.Milliseconds) * 1_000);
+            else invalidSignalReceipts++;
+            if (signal.Kind == SignalKind.Tick)
+            {
+                lastHeartbeat = validReceipt ? signal.Receipt : null;
+                if (HeartbeatAge > 2_000) staleHeartbeats++;
+            }
             if (signal.GeneratedTick is { } tick && TickMath.Age(tick, signal.ReceiptUptimeMs) is { } age)
                 maximumDeliveryAgeMs = Math.Max(maximumDeliveryAgeMs, age);
             if (signal.Kind == SignalKind.Power && signal.Detail is 4 or 7 or 18)
-            { newEpoch(); estimator.Reset(); generation++; }
+            { newEpoch(); lastHeartbeat = null; estimator.Reset(); generation++; }
         }
+    }
+
+    private void RecordAge(LatencyHistogram histogram, MonotonicTime end)
+    {
+        var now = clock.Now;
+        if (now.Epoch == end.Epoch && now.Milliseconds >= end.Milliseconds)
+            histogram.Record((now.Milliseconds - end.Milliseconds) * 1_000);
     }
 
     // Anonymous aggregate diagnostics only; no sample or application history.
@@ -512,6 +574,7 @@ public sealed class MonitoringRuntime : IDisposable
         estimator.UnknownMs,
         estimator.InvalidatedIntervals,
         estimator.LateContradictions,
+        coverage = estimator.CoverageDiagnostics,
         accountingDelivery = new
         {
             estimator.CoreRejectedIntervals,
@@ -526,6 +589,24 @@ public sealed class MonitoringRuntime : IDisposable
         slowCycles,
         observationCycles = cycles.Snapshot(),
         schedulingDelay = scheduleDelay.Snapshot(),
+        periodicSchedulingDelay = periodicDelay.Snapshot(),
+        execution = new
+        {
+            step = stepTiming.Snapshot(),
+            sampling = samplingTiming.Snapshot(),
+            drain = drainTiming.Snapshot(),
+            finalizationAndDelivery = deliveryTiming.Snapshot(),
+            observe = observeTiming.Snapshot()
+        },
+        freshness = new
+        {
+            queueResidence = queueResidence.Snapshot(),
+            endpointSpacing = endpointSpacing.Snapshot(),
+            coreReceiptAge = receiptAge.Snapshot(),
+            acknowledgmentAge = acknowledgmentAge.Snapshot(),
+            invalidSignalReceipts,
+            staleHeartbeats
+        },
         active = activeCycles.Snapshot(),
         idle = idleCycles.Snapshot(),
         locked = lockedCycles.Snapshot(),

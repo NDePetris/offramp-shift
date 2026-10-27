@@ -27,6 +27,8 @@ internal sealed class MonitoringApplication : IDisposable
     private SwitchAuthorization? pendingSwitch;
     internal BreakReminderMailbox Reminders { get; } = new();
     internal object? ObservationDiagnostics => runtime?.Diagnostics;
+    internal long Elapsed => elapsed();
+    internal long NextSamplingDeadline => runtime?.NextSamplingDeadline ?? long.MaxValue;
 
     public MonitoringApplication(IMonitoringClock clock, Action newEpoch, Func<long> elapsed,
         Func<IObservationSource> providers, Func<DurableMonitoringSession> openSession,
