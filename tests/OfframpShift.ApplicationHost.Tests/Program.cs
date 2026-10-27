@@ -315,6 +315,7 @@ internal static class Program
             Check(app.Execute(new(HostCommandKind.RepairSettings) { Confirmed = true }).Message.Length > 0);
             Check(File.ReadAllText(path) == "{\"Version\":999}"); Check(f.ProviderCreates == 0);
         });
+        TimedPauseRegressions.Run();
         MonitoringReliabilityRegressions.Run();
         Pr8Regressions.Run();
         SettingsConflictRegressions.Run();

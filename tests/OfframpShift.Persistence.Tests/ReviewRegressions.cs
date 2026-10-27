@@ -139,7 +139,7 @@ internal static class ReviewRegressions
         {
             using var f = new Fixture();
             f.Initialize();
-            f.Payload("{\"Version\":4,\"FutureLayout\":true}");
+            f.Payload("{\"Version\":5,\"FutureLayout\":true}");
             File.WriteAllText(f.FilePath("initialized"), "bad");
             File.WriteAllText(f.FilePath("checkpoint.db-journal"), "companion");
             var original = File.ReadAllBytes(f.FilePath("checkpoint.db"));

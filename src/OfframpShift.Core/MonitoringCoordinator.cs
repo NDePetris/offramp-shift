@@ -172,16 +172,30 @@ public sealed class MonitoringCoordinator
         }
     }
 
-    public TransitionResult SetPaused(bool paused)
+    public TransitionResult SetPaused(bool paused, DateTimeOffset? pauseUntilUtc = null)
     {
         lock (gate)
         {
             if (state.Recovery == RecoveryStatus.Required) return Result(ActivityKind.Uncertain, "Recovery required.", [], false);
-            if (state.Paused == paused) return Result(ActivityKind.Uncertain, "Pause unchanged.", [], false);
+            if (pauseUntilUtc is { } deadline && (!paused || deadline == default || deadline.Offset != TimeSpan.Zero || deadline <= clock.UtcNow))
+                throw new ArgumentException("Choose a future UTC pause end time.", nameof(pauseUntilUtc));
+            if (state.Paused == paused && state.PauseUntilUtc == pauseUntilUtc) return Result(ActivityKind.Uncertain, "Pause unchanged.", [], false);
             CommandBoundary();
             ClearContinuity();
-            state = state with { Paused = paused };
+            state = state with { Paused = paused, PauseUntilUtc = pauseUntilUtc };
             return Result(ActivityKind.Uncertain, paused ? "Tracking paused." : "Tracking resumed.", [], true);
+        }
+    }
+
+    public TransitionResult ResumeIfPauseExpired()
+    {
+        lock (gate)
+        {
+            if (state.Recovery != RecoveryStatus.Ready || !state.Paused || state.PauseUntilUtc is not { } deadline || clock.UtcNow < deadline)
+                return Result(ActivityKind.Uncertain, "No expired pause.", [], false);
+            // UTC decides eligibility; the ordinary command boundary still rejects
+            // invalid monotonic time and never accounts for an unsupplied interval.
+            return SetPaused(false);
         }
     }
 
@@ -192,7 +206,7 @@ public sealed class MonitoringCoordinator
             if (state.Recovery != RecoveryStatus.Ready)
                 throw new InvalidOperationException("Usage reset requires ready accounting storage.");
             CommandBoundary();
-            state = Fresh() with { Paused = state.Paused, EffectSequence = state.EffectSequence };
+            state = Fresh() with { Paused = state.Paused, PauseUntilUtc = state.PauseUntilUtc, EffectSequence = state.EffectSequence };
             return Result(ActivityKind.Uncertain, "Usage and break progress reset.", [], true);
         }
     }

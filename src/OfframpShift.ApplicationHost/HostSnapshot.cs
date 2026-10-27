@@ -16,6 +16,7 @@ public sealed record HostSnapshot(long Sequence, long PublishedTick, Persistence
     // Process-local presentation boundary; never persisted or used for eligibility.
     public Guid AccountingPresentationEpoch { get; init; }
     public string SwitchingUnavailableReason { get; init; } = "Switching availability is unknown.";
+    public string PauseRecoveryDetail { get; init; } = "";
 }
 
 public enum AssignmentStatus { Unassigned, Valid, Unavailable, Missing, Invalid }
@@ -39,6 +40,7 @@ public enum HostCommandKind
 
 public sealed record HostCommand(HostCommandKind Kind)
 {
+    public DateTimeOffset? PauseUntilUtc { get; init; }
     public ExpectedSettingsValues? Expected { get; init; }
     public bool Confirmed { get; init; }
     public long AllowanceMs { get; init; }

@@ -74,7 +74,7 @@ public sealed class DurableMonitoringSession : IDisposable
             }
             else if (checkpoint.Version < MonitoringCheckpoint.CurrentVersion)
             {
-                // Validate the original before producing a version-3 replacement.
+                // Validate the original before producing a current-version replacement.
                 // The existing store revision and exact pending payload protect migration.
                 coordinator = MonitoringCoordinator.Restore(clock, fallback, checkpoint);
                 if (coordinator.State.Recovery != RecoveryStatus.Ready)
@@ -110,7 +110,8 @@ public sealed class DurableMonitoringSession : IDisposable
         configuration.Validate();
         return Apply(() => coordinator.ChangeConfiguration(configuration));
     }
-    public TransitionResult SetPaused(bool paused) => Apply(() => coordinator.SetPaused(paused));
+    public TransitionResult SetPaused(bool paused, DateTimeOffset? pauseUntilUtc = null) => Apply(() => coordinator.SetPaused(paused, pauseUntilUtc));
+    public TransitionResult ResumeIfPauseExpired() => Apply(coordinator.ResumeIfPauseExpired);
     public TransitionResult Snooze() => Apply(() => coordinator.Snooze());
     public TransitionResult DeferInteractive(long durationMs)
     {

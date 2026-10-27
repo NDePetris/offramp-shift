@@ -21,7 +21,7 @@ public static class CheckpointCodec
             var versions = document.RootElement.EnumerateObject().Where(x => x.Name == "Version").ToArray();
             if (versions.Length != 1) throw Invalid();
             var version = versions[0].Value.GetInt32();
-            if (version is not (1 or 2 or MonitoringCheckpoint.CurrentVersion)) throw new CheckpointStorageException(StorageFailure.UnsupportedVersion);
+            if (version is not (1 or 2 or 3 or MonitoringCheckpoint.CurrentVersion)) throw new CheckpointStorageException(StorageFailure.UnsupportedVersion);
             var root = Object(document.RootElement, "Version", "SavedUtc", "Configuration", "State");
             string[] configurationFields = ["AllowanceMs", "RequiredBreakMs", "IdleThresholdMs", "GraceMs",
                 "RepeatNudgeMs", "SnoozeMs", "MaximumEvidenceAgeMs", "Mode", "Applications"];
@@ -30,8 +30,9 @@ public static class CheckpointCodec
             var c = Object(root["Configuration"], version == 1 ? configurationFields : version == 2 ?
                 [.. configurationFields, "Accounting", "EstimationPolicyVersion"] :
                 [.. configurationFields, "Accounting", "EstimationPolicyVersion", "InteractiveRepeatNudgeMs"]);
-            var s = Object(root["State"], version == 1 ? stateFields :
-                [.. stateFields, "EstimatedUsageMs", "BreakUncertaintyMs", "ConsecutiveUncertaintyMs"]);
+            string[] estimatedFields = [.. stateFields, "EstimatedUsageMs", "BreakUncertaintyMs", "ConsecutiveUncertaintyMs"];
+            var s = Object(root["State"], version == 1 ? stateFields : version < 4 ? estimatedFields :
+                [.. estimatedFields, "PauseUntilUtc"]);
             if (version >= 2 && c["EstimationPolicyVersion"].GetInt32() > EstimationPolicy.Version)
                 throw new CheckpointStorageException(StorageFailure.UnsupportedVersion);
             var configuration = new MonitoringConfiguration
@@ -54,6 +55,7 @@ public static class CheckpointCodec
                 (InterventionState)s["Intervention"].GetInt32(), s["ReminderRemainingMs"].GetInt64(),
                 s["SnoozeRemainingMs"].GetInt64(), s["EffectSequence"].GetInt64(), (RecoveryStatus)s["Recovery"].GetInt32())
             {
+                PauseUntilUtc = version < 4 || s["PauseUntilUtc"].ValueKind == JsonValueKind.Null ? null : s["PauseUntilUtc"].GetDateTimeOffset(),
                 EstimatedUsageMs = version == 1 ? 0 : s["EstimatedUsageMs"].GetInt64(),
                 BreakUncertaintyMs = version == 1 ? 0 : s["BreakUncertaintyMs"].GetInt64(),
                 ConsecutiveUncertaintyMs = version == 1 ? 0 : s["ConsecutiveUncertaintyMs"].GetInt64()

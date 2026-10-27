@@ -13,7 +13,7 @@ internal sealed record TraySummary(string Status, string Context, string Allowan
         var tooltip = model.Recorded is null ? "Usage unavailable" : qualifier + (model.ShowExhaustionExplanation ? "Allowance exhausted" : model.HeroValue + (model.HeroLabel == "Over allowance" ? " over" : " remaining"));
         // NotifyIcon's limit is 63 characters; menu rows retain the full facts.
         if (tooltip.Length > 63) tooltip = tooltip[..60] + "…";
-        return new(model.Health, model.ContextLabel, allowance, progress, tooltip);
+        return new(model.PauseStatus.Length > 0 ? model.PauseStatus : model.Health, model.ContextLabel, allowance, progress, tooltip);
     }
     internal static string Duration(long milliseconds) => CommittedPresentation.Duration(milliseconds);
 }

@@ -26,6 +26,7 @@ public partial class ShiftApplication : Application
         base.OnStartup(e);
         controller = WindowsApplication.Start();
         window = new(Execute, ExitAsync, CloseAsync); MainWindow = window;
+        window.RequestPause = ChoosePauseAsync;
         uiPreferences = new(SqliteCheckpointStore.DefaultDirectory); uiPreferences.Load();
         diagnostics = new(uiPreferences, () => new DiagnosticsWindow(window, commands, () => Open(false)));
         window.ShowDiagnosticsPreference(uiPreferences.ShowDiagnostics, uiPreferences.Error);
@@ -46,7 +47,7 @@ public partial class ShiftApplication : Application
             () => controller.Completion.IsCompleted || exiting ? null : controller.Latest,
             detail => { window.ReportAction(detail); tray?.ReportNudgeFailure(detail); }, new NudgePlatform(),
             (handle, cancellation) => controller.SwitchToWorkAsync(handle, cancellationToken: cancellation), () => Open(false));
-        try { tray = new(() => Open(false), () => Open(true), Execute, ExitAsync); }
+        try { tray = new(() => Open(false), () => Open(true), Execute, ExitAsync, ChoosePauseAsync); }
         catch { MessageBox.Show("The tray icon could not be created. Keep this window open; closing will exit.", "Offramp Shift"); }
         nudges.OpenStateChanged += () => tray?.SetReminderOpen(nudges.HasOpenReminder);
         RefreshBrand();
@@ -58,6 +59,19 @@ public partial class ShiftApplication : Application
         SessionEnding += (_, _) => controller.StopAsync();
     }
     private void DisplaySettingsChanged(object? sender, EventArgs e) => Dispatcher.BeginInvoke(() => nudges?.Close());
+    private PauseDialog? pauseDialog;
+    private async Task ChoosePauseAsync()
+    {
+        if (window is null || exiting || commands.IsPending) return;
+        if (pauseDialog is not null) { pauseDialog.Activate(); return; }
+        if (!window.Model.CanPause && !window.Model.CanChangePause) return;
+        var dialog = pauseDialog = new(window);
+        try
+        {
+            if (dialog.ShowDialog() == true && dialog.Selection is { } selection) await Execute(selection);
+        }
+        finally { pauseDialog = null; }
+    }
     private void Open(bool settings)
     {
         if (window is null || exiting) return;
@@ -173,7 +187,7 @@ public partial class ShiftApplication : Application
             if (answer == MessageBoxResult.Cancel) return;
             if (answer == MessageBoxResult.Yes) { await Execute(new(HostCommandKind.RetrySave)); return; }
         }
-        exiting = true; diagnostics?.Dispose(); nudges?.Close(); window.ActionResult.Text = "Stopping monitoring and disposing providers…";
+        exiting = true; pauseDialog?.Close(); diagnostics?.Dispose(); nudges?.Close(); window.ActionResult.Text = "Stopping monitoring and disposing providers…";
         var stopped = controller.StopAsync();
         if (await Task.WhenAny(stopped, Task.Delay(12_000)) != stopped)
         {

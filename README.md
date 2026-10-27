@@ -36,6 +36,11 @@ The [PR 6 setup and feedback checklist](docs/validation/pr6-setup-feedback.md)
 tracks the focused setup, tray-error and first-close changes separately from the
 deferred PR 5 acceptance exercises.
 
+
+Issue #26 adds timed Pause with one saved UTC deadline, a shared Home/tray dialog,
+and automatic owner-loop expiration. Accounting still requires fresh evidence.
+See [timed Pause behavior and minimal owner smoke](docs/validation/issue26-timed-pause.md).
+
 PR 9 adds explicitly selected **Interactive window** reminders, with immediate
 exhaustion prompts, durable one/five-minute Personal-only extensions, and a
 shared repeat interval. Both enabled styles now prompt immediately at accepted

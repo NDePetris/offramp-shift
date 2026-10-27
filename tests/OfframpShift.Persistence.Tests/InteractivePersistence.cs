@@ -31,6 +31,7 @@ internal static class InteractivePersistence
                     using (var initial = f.Session()) initial.Observe(f.Clock.Interval(grace ? 30 : 36));
                     var node = JsonNode.Parse(f.Row().Payload)!;
                     node["Version"] = version;
+                    node["State"]!.AsObject().Remove("PauseUntilUtc");
                     if (version < 3) node["Configuration"]!.AsObject().Remove("InteractiveRepeatNudgeMs");
                     if (version == 1)
                     {
@@ -49,7 +50,7 @@ internal static class InteractivePersistence
                     Equal(60_000L, restored.State.ReminderRemainingMs);
                     Equal(before.UsageMs + (grace ? 1 : 10), restored.State.UsageMs);
                     var saved = JsonNode.Parse(f.Row().Payload)!;
-                    Equal(3, saved["Version"]!.GetValue<int>());
+                    Equal(4, saved["Version"]!.GetValue<int>());
                     True(saved["Configuration"]!["InteractiveRepeatNudgeMs"] is not null);
                     True(saved["Configuration"]!["ReminderRepeatNudgeMs"] is null);
                 });
@@ -57,7 +58,7 @@ internal static class InteractivePersistence
         {
             using var f = new Fixture();
             using (var session = f.Session()) { session.Observe(f.Clock.Interval(36)); session.Snooze(); }
-            var node = JsonNode.Parse(f.Row().Payload)!; node["Version"] = 2;
+            var node = JsonNode.Parse(f.Row().Payload)!; node["Version"] = 2; node["State"]!.AsObject().Remove("PauseUntilUtc");
             node["Configuration"]!.AsObject().Remove("InteractiveRepeatNudgeMs");
             f.Payload(node.ToJsonString()); var old = f.Row();
             using var migrated = f.Session();
@@ -101,8 +102,8 @@ internal static class InteractivePersistence
                 var node = JsonNode.Parse(valid)!;
                 if (mode == "missing") node["Configuration"]!.AsObject().Remove("InteractiveRepeatNudgeMs");
                 if (mode == "fractional") node["Configuration"]!["InteractiveRepeatNudgeMs"] = 60_001;
-                if (mode == "future") node["Version"] = 4;
-                if (mode == "old-state") { node["Version"] = 2; node["Configuration"]!.AsObject().Remove("InteractiveRepeatNudgeMs"); node["State"]!["Intervention"] = 4; }
+                if (mode == "future") node["Version"] = 5;
+                if (mode == "old-state") { node["Version"] = 2; node["State"]!.AsObject().Remove("PauseUntilUtc"); node["Configuration"]!.AsObject().Remove("InteractiveRepeatNudgeMs"); node["State"]!["Intervention"] = 4; }
                 Fails(mode == "future" ? StorageFailure.UnsupportedVersion : StorageFailure.InvalidPayload,
                     () => CheckpointCodec.Decode(node.ToJsonString(), f.Clock.UtcNow));
             }
