@@ -48,6 +48,7 @@ public partial class ShiftApplication : Application
             (handle, cancellation) => controller.SwitchToWorkAsync(handle, cancellationToken: cancellation), () => Open(false));
         try { tray = new(() => Open(false), () => Open(true), Execute, ExitAsync); }
         catch { MessageBox.Show("The tray icon could not be created. Keep this window open; closing will exit.", "Offramp Shift"); }
+        nudges.OpenStateChanged += () => tray?.SetReminderOpen(nudges.HasOpenReminder);
         RefreshBrand();
         instance.Listen(() => Dispatcher.BeginInvoke(() => Open(false)));
         timer = new(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(250) };
@@ -82,7 +83,7 @@ public partial class ShiftApplication : Application
         window.Apply(value, controller.Completion.IsCompleted); tray?.Apply(value, window.Model);
         nudges?.Refresh(controller.Completion.IsCompleted || exiting);
         window.NudgeStatus.Visibility = value.Settings.ReminderStyle == ReminderStyle.InteractiveWindow ? Visibility.Visible : Visibility.Collapsed;
-        window.NudgeStatus.Text = "Last reminder: " + value.ReminderStatus + " " + nudges?.Status;
+        window.NudgeStatus.Text = "Last reminder: " + value.ReminderStatus + " " + nudges?.DiagnosticStatus;
         diagnostics?.Window?.Refresh();
         if (controller.TryTakeReminder(out var reminder) && actionsInFlight == 0 && Environment.TickCount64 - value.PublishedTick is >= 0 and <= 2_000)
         {

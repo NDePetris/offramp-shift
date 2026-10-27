@@ -7,6 +7,10 @@ namespace OfframpShift.App;
 
 internal sealed class NudgePlatform : INudgePlatform
 {
+    internal const int GwlExStyle = -20, GwlStyle = -16, WsExNoActivate = 0x08000000, WsExTopmost = 0x00000008;
+    internal const uint SwpNoSize = 0x0001, SwpNoMove = 0x0002, SwpNoZOrder = 0x0004, SwpNoActivate = 0x0010;
+    internal static readonly nint HwndTop = 0;
+    internal const uint RaiseFlags = SwpNoMove | SwpNoSize | SwpNoActivate;
     public nint ForegroundWindow => GetForegroundWindow();
     public string PlacementStatus { get; private set; } = "NotAttempted";
     internal bool DpiChangedDuringPlacement { get; private set; }
@@ -20,8 +24,8 @@ internal sealed class NudgePlatform : INudgePlatform
         // Temporarily prohibit implicit activation on this HWND while positioning;
         // Hold through Show AND deferred WPF DPI/layout, then restore before
         // strict host confirmation and the single explicit focus request.
-        var result = await WithoutImplicitActivationAsync(() => GetWindowLong(hwnd, -20),
-            value => SetWindowLong(hwnd, -20, value), async () =>
+        var result = await WithoutImplicitActivationAsync(() => GetWindowLong(hwnd, GwlExStyle),
+            value => SetWindowLong(hwnd, GwlExStyle, value), async () =>
             {
                 if (!PlaceWithoutActivation(window, foreground)) return false;
                 PlacementStatus = "NonactivatingShow";
@@ -42,7 +46,7 @@ internal sealed class NudgePlatform : INudgePlatform
         Func<Task<bool>> present)
     {
         var style = readStyle();
-        var guarded = style | 0x08000000; // documented WS_EX_NOACTIVATE
+        var guarded = style | WsExNoActivate; // documented WS_EX_NOACTIVATE
         var restored = false;
         var placed = false;
         try
@@ -70,7 +74,7 @@ internal sealed class NudgePlatform : INudgePlatform
         var previousDpi = GetDpiForWindow(hwnd);
         // Seed the HWND on the target monitor without activation, allowing WPF's
         // existing PerMonitorV2 handling to establish that monitor's own DPI.
-        if (!SetWindowPos(hwnd, 0, info.Work.Left, info.Work.Top, 0, 0, 0x0015)) return false;
+        if (!SetWindowPos(hwnd, 0, info.Work.Left, info.Work.Top, 0, 0, SwpNoSize | SwpNoZOrder | SwpNoActivate)) return false;
         PlacementStatus = "Dpi";
         var dpi = GetDpiForWindow(hwnd);
         DpiChangedDuringPlacement = dpi != previousDpi;
@@ -82,7 +86,7 @@ internal sealed class NudgePlatform : INudgePlatform
         window.MaxHeight = (info.Work.Bottom - info.Work.Top) / scale;
         PlacementStatus = "NativeFrame";
         var frame = new Rectangle();
-        if (!AdjustWindowRectExForDpi(ref frame, (uint)GetWindowLong(hwnd, -16), false, (uint)GetWindowLong(hwnd, -20), dpi)) return false;
+        if (!AdjustWindowRectExForDpi(ref frame, (uint)GetWindowLong(hwnd, GwlStyle), false, (uint)GetWindowLong(hwnd, GwlExStyle), dpi)) return false;
         var frameWidth = frame.Right - frame.Left;
         var frameHeight = frame.Bottom - frame.Top;
         var clientWidth = window.Width - frameWidth / scale;
@@ -100,7 +104,7 @@ internal sealed class NudgePlatform : INudgePlatform
         PlacementStatus = "FinalForegroundValidation";
         if (!PresentationForegroundAllowed(GetForegroundWindow(), foreground, hwnd)) return false;
         PlacementStatus = "FinalNonactivatingPosition";
-        if (!SetWindowPos(hwnd, 0, area.X, area.Y, area.Width, area.Height, 0x0014)) return false;
+        if (!SetWindowPos(hwnd, 0, area.X, area.Y, area.Width, area.Height, SwpNoZOrder | SwpNoActivate)) return false;
         PlacementStatus = "Placed";
         return true;
     }
@@ -123,7 +127,27 @@ internal sealed class NudgePlatform : INudgePlatform
         area = (left + ((int)availableWidth - width) / 2, top + ((int)availableHeight - height) / 2, width, height);
         return true;
     }
+    public bool RaiseWithoutActivation(NudgeWindow window)
+    {
+        var hwnd = new WindowInteropHelper(window).Handle;
+        if (hwnd == 0 || !IsWindow(hwnd) || window.Topmost || (GetWindowLong(hwnd, GwlExStyle) & WsExTopmost) != 0) return false;
+        var raised = SetWindowPos(hwnd, HwndTop, 0, 0, 0, 0, RaiseFlags);
+        return raised && (GetWindowLong(hwnd, GwlExStyle) & WsExTopmost) == 0;
+    }
+    public NudgeObservation Observe(NudgeWindow window, nint original)
+    {
+        var hwnd = new WindowInteropHelper(window).Handle;
+        if (hwnd == 0 || !IsWindow(hwnd)) return new();
+        var current = GetForegroundWindow();
+        var dpi = GetDpiForWindow(hwnd);
+        return new(current == 0 ? "Unavailable" : current == hwnd ? "Reminder" : current == original ? "Original" : "Other",
+            IsWindowVisible(hwnd), IsIconic(hwnd), (GetWindowLong(hwnd, GwlExStyle) & WsExTopmost) != 0,
+            original == 0 || MonitorFromWindow(original, 0) == 0 ? null : OnForegroundMonitor(hwnd, original), dpi == 0 ? null : dpi);
+    }
     public bool Activate(NudgeWindow window) => SetForegroundWindow(new WindowInteropHelper(window).Handle);
+    [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool IsWindow(nint window);
+    [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool IsWindowVisible(nint window);
+    [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool IsIconic(nint window);
     [StructLayout(LayoutKind.Sequential)] private struct Rectangle { public int Left, Top, Right, Bottom; }
     [StructLayout(LayoutKind.Sequential)] private struct MonitorInfo { public int Size; public Rectangle Monitor, Work; public uint Flags; }
     [DllImport("user32.dll")] private static extern nint GetForegroundWindow();

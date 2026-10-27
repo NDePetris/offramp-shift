@@ -11,22 +11,41 @@ internal interface INudgePlatform
     nint ForegroundWindow { get; }
     string PlacementStatus => "Unavailable";
     Task<bool> PresentAsync(NudgeWindow window, nint foreground);
+    bool IsVisible(NudgeWindow window) => window.IsVisible;
+    bool RaiseWithoutActivation(NudgeWindow window);
     bool Activate(NudgeWindow window);
+    NudgeObservation Observe(NudgeWindow window, nint original) => new();
 }
 
-// Dispatcher-owned. Only an accepted event may show/activate; Refresh only closes.
+// Identity-free, latest-result-only diagnostics. Native visibility is not proof of unobscured pixels.
+internal sealed record NudgeObservation(string ForegroundRole = "Unavailable", bool? Visible = null,
+    bool? Minimized = null, bool? Topmost = null, bool? OnOriginalMonitor = null, uint? Dpi = null);
+internal sealed record NudgePresentationResult(bool ShowLayout = false, string Authorization = "NotAttempted",
+    string Raise = "NotAttempted", string ForegroundRequest = "NotAttempted",
+    NudgeObservation? AfterShow = null, NudgeObservation? AfterRequest = null);
+
+// Dispatcher-owned. Only an accepted event may show/raise/activate; Refresh only updates/closes.
 internal sealed class NudgePresenter(Func<HostCommand, Task<HostCommandResult>> execute,
     Func<HostSnapshot?> latest, Action<string> reportFailure, INudgePlatform platform,
-    Func<nint, CancellationToken, Task<SwitchCompletion>>? switchToWork = null, Action? openMain = null)
+    Func<nint, CancellationToken, Task<SwitchCompletion>>? switchToWork = null, Action? openMain = null, Func<long>? tickCount = null)
 {
+    private long Now => tickCount?.Invoke() ?? Environment.TickCount64;
     internal NudgeWindow? Window { get; private set; }
     internal string Status { get; private set; } = "No interactive reminder consumed yet.";
+    internal NudgePresentationResult LastPresentation { get; private set; } = new();
+    internal string DiagnosticStatus => Status + $" [show/layout={LastPresentation.ShowLayout}; authorization={LastPresentation.Authorization}; raise={LastPresentation.Raise}; foreground={LastPresentation.ForegroundRequest}; afterShow={LastPresentation.AfterShow}; afterRequest={LastPresentation.AfterRequest}]";
+    internal event Action? OpenStateChanged;
+    internal bool HasOpenReminder => Window is { } window && platform.IsVisible(window) && latest() is { } snapshot && VisibleEligible(snapshot);
     private bool presenting, submitting;
     private long lastSequence;
     private Guid lastEpoch;
     internal void Refresh(bool stopped = false)
     {
-        if (presenting && !stopped) return; // Completion independently revalidates fresh safety.
+        if (presenting && !stopped)
+        {
+            OpenStateChanged?.Invoke(); // Passive hint still follows eligibility while completion is pending.
+            return; // Completion independently revalidates fresh safety.
+        }
         var snapshot = latest();
         if (stopped || snapshot is null || !VisibleEligible(snapshot))
         {
@@ -38,11 +57,12 @@ internal sealed class NudgePresenter(Func<HostCommand, Task<HostCommandResult>> 
             window.SetSwitchAvailability(snapshot.SwitchingUnavailableReason);
             window.ApplyBrand();
         }
+        OpenStateChanged?.Invoke();
     }
-    private static bool VisibleEligible(HostSnapshot value) => value.CanKeepNudgeOpen &&
+    private bool VisibleEligible(HostSnapshot value) => value.CanKeepNudgeOpen &&
         value.Settings.ReminderStyle == ReminderStyle.InteractiveWindow &&
-        Environment.TickCount64 - value.PublishedTick is >= 0 and <= 2_000;
-    internal void Close() { var previous = Window; Window = null; previous?.CloseAutomatically(); }
+        Now - value.PublishedTick is >= 0 and <= 2_000;
+    internal void Close() { var previous = Window; Window = null; previous?.CloseAutomatically(); OpenStateChanged?.Invoke(); }
     internal async Task PresentAsync(ReminderEvent value)
     {
         if (presenting || submitting) return;
@@ -50,6 +70,7 @@ internal sealed class NudgePresenter(Func<HostCommand, Task<HostCommandResult>> 
         if (value.Sequence <= lastSequence) return;
         lastSequence = value.Sequence;
         presenting = true;
+        LastPresentation = new();
         var elapsed = Stopwatch.StartNew(); long beginMs = 0, showMs = 0, confirmMs = 0;
         try
         {
@@ -59,18 +80,18 @@ internal sealed class NudgePresenter(Func<HostCommand, Task<HostCommandResult>> 
             // window/foreground events. Both new and reused HWNDs follow one path.
             var result = await execute(new(HostCommandKind.BeginNudgePresentation) { Reminder = value });
             beginMs = elapsed.ElapsedMilliseconds;
-            if (!result.Succeeded) { Status = "Authorization rejected before creation: " + result.Message; Close(); return; }
+            if (!result.Succeeded) { LastPresentation = LastPresentation with { Authorization = "BeginRejected" }; Status = "Authorization rejected before creation: " + result.Message; Close(); return; }
             var transaction = result.Presentation;
-            if (transaction is null) { Status = "Presentation rejected before creation: MissingTransaction."; Close(); return; }
+            if (transaction is null) { LastPresentation = LastPresentation with { Authorization = "MissingTransaction" }; Status = "Presentation rejected before creation: MissingTransaction."; Close(); return; }
             var rejection = PresentationRejection(transaction, 0);
             if (rejection is not null)
-            { Status = "Presentation rejected before creation: " + rejection + "."; Close(); return; }
+            { LastPresentation = LastPresentation with { Authorization = rejection }; Status = "Presentation rejected before creation: " + rejection + "."; Close(); return; }
             if (Window is null)
             {
                 NudgeWindow? candidate = null;
                 candidate = new(duration => DeferAsync(candidate!, duration), () => SwitchAsync(candidate!), openMain);
                 Window = candidate;
-                candidate.Closed += (_, _) => { if (Window == candidate) Window = null; };
+                candidate.Closed += (_, _) => { if (Window == candidate) Window = null; OpenStateChanged?.Invoke(); };
             }
             var target = Window;
             target.SetSwitchAvailability(latest()?.SwitchingUnavailableReason ?? "Switching availability is unknown.");
@@ -78,15 +99,29 @@ internal sealed class NudgePresenter(Func<HostCommand, Task<HostCommandResult>> 
             var shown = await platform.PresentAsync(target, value.ForegroundWindow);
             showMs = elapsed.ElapsedMilliseconds - beginMs;
             if (!shown) { Status = "Positioning failed: " + platform.PlacementStatus + "."; Close(); return; }
+            LastPresentation = LastPresentation with { ShowLayout = true, AfterShow = Observe(target, value.ForegroundWindow) };
             if (Window != target) { Status = "Window closed during nonactivating show."; Close(); return; }
             result = await execute(new(HostCommandKind.CompleteNudgePresentation) { Presentation = transaction, NudgeWindow = handle });
             confirmMs = elapsed.ElapsedMilliseconds - beginMs - showMs;
-            if (!result.Succeeded) { Status = "Authorization rejected after show: " + result.Message; Close(); return; }
-            rejection = Window != target ? "WindowClosed" : PresentationRejection(transaction, handle);
+            if (!result.Succeeded) { LastPresentation = LastPresentation with { Authorization = "CompletionRejected" }; Status = "Authorization rejected after show: " + result.Message; Close(); return; }
+            rejection = TargetRejection(target, handle, transaction);
             if (rejection is not null)
-            { Status = "Presentation rejected before focus: " + rejection + "."; Close(); return; }
-            Status = platform.Activate(target) ? "Window shown; foreground request accepted." :
-                "Window shown; Windows denied focus. Click an action, or use its taskbar button and keyboard navigation.";
+            { LastPresentation = LastPresentation with { Authorization = rejection }; Status = "Presentation rejected before raise: " + rejection + "."; Close(); return; }
+            LastPresentation = LastPresentation with { Authorization = "Allowed", Raise = "Attempted" };
+            // No await/yield: one ordinary non-topmost raise, then fresh checks before focus.
+            bool raised;
+            try { raised = platform.RaiseWithoutActivation(target); }
+            catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception or System.Runtime.InteropServices.ExternalException)
+            { raised = false; }
+            LastPresentation = LastPresentation with { Raise = raised ? "Succeeded" : "Failed" };
+            rejection = TargetRejection(target, handle, transaction);
+            if (rejection is not null)
+            { LastPresentation = LastPresentation with { Authorization = rejection }; Status = "Presentation rejected after raise: " + rejection + "."; Close(); return; }
+            LastPresentation = LastPresentation with { ForegroundRequest = "Attempted" };
+            var accepted = platform.Activate(target);
+            LastPresentation = LastPresentation with { ForegroundRequest = accepted ? "Accepted" : "Refused", AfterRequest = Observe(target, value.ForegroundWindow) };
+            Status = "Show/layout completed; foreground request " + (accepted ? "accepted" : "refused") +
+                ". Visibility and focus are best effort; select its taskbar button to interact.";
         }
         catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception or System.Runtime.InteropServices.ExternalException)
         { Status = "Presentation failed: window or native operation unavailable."; Close(); reportFailure(Status + " Wait for the next eligible reminder."); }
@@ -94,14 +129,22 @@ internal sealed class NudgePresenter(Func<HostCommand, Task<HostCommandResult>> 
         {
             Status += $" [begin={beginMs}ms; show/layout={showMs}ms; confirm={confirmMs}ms; total={elapsed.ElapsedMilliseconds}ms]";
             presenting = false;
+            OpenStateChanged?.Invoke();
         }
     }
+    private NudgeObservation Observe(NudgeWindow target, nint original)
+    {
+        try { return platform.Observe(target, original); }
+        catch (Exception) { return new(); } // Diagnostics never authorize, fail presentation or change accounting.
+    }
+    private string? TargetRejection(NudgeWindow target, nint handle, NudgePresentation transaction) =>
+        Window != target || new WindowInteropHelper(target).Handle != handle ? "WindowClosed" : PresentationRejection(transaction, handle);
     private string? PresentationRejection(NudgePresentation value, nint candidate)
     {
-        if (Environment.TickCount64 > value.ExpiresTick) return "PresentationExpired";
+        if (Now > value.ExpiresTick) return "PresentationExpired";
         var snapshot = latest();
         if (snapshot is null) return "SnapshotUnavailable";
-        if (Environment.TickCount64 - snapshot.PublishedTick is < 0 or > 2_000) return "SnapshotExpired";
+        if (Now - snapshot.PublishedTick is < 0 or > 2_000) return "SnapshotExpired";
         if (snapshot.Settings.ReminderStyle != ReminderStyle.InteractiveWindow) return "ReminderStyleChanged";
         if (snapshot.State?.Paused == true) return "Paused";
         if (!snapshot.CanKeepNudgeOpen) return "FreshPersonalContextUnavailable";
@@ -111,7 +154,7 @@ internal sealed class NudgePresenter(Func<HostCommand, Task<HostCommandResult>> 
         return NudgePlatform.PresentationForegroundAllowed(platform.ForegroundWindow, value.OriginalForeground, candidate) ? null : "ExternalForeground";
     }
     private bool Eligible(ReminderEvent value) => value.Style == ReminderStyle.InteractiveWindow &&
-        Environment.TickCount64 <= value.ExpiresTick && latest() is { } snapshot && VisibleEligible(snapshot) &&
+        Now <= value.ExpiresTick && latest() is { } snapshot && VisibleEligible(snapshot) &&
         snapshot.ReminderGeneration == value.Generation && snapshot.ReminderEpoch == value.Epoch &&
         snapshot.Settings.Personal == value.PersonalDesktop && platform.ForegroundWindow == value.ForegroundWindow;
     private async Task<HostCommandResult> DeferAsync(NudgeWindow target, long duration)
