@@ -110,7 +110,8 @@ public sealed class DurableMonitoringSession : IDisposable
         configuration.Validate();
         return Apply(() => coordinator.ChangeConfiguration(configuration));
     }
-    public TransitionResult SetPaused(bool paused, DateTimeOffset? pauseUntilUtc = null) => Apply(() => coordinator.SetPaused(paused, pauseUntilUtc));
+    public TransitionResult SetPaused(bool paused, DateTimeOffset? pauseUntilUtc = null) =>
+        Apply(() => coordinator.SetPaused(paused, pauseUntilUtc), allowPauseSelectionRejection: true);
     public TransitionResult ResumeIfPauseExpired() => Apply(coordinator.ResumeIfPauseExpired);
     public TransitionResult Snooze() => Apply(() => coordinator.Snooze());
     public TransitionResult DeferInteractive(long durationMs)
@@ -125,15 +126,17 @@ public sealed class DurableMonitoringSession : IDisposable
     }
     public TransitionResult ResetUsage() => Apply(() => coordinator.ResetUsage());
 
-    private TransitionResult Apply(Func<TransitionResult> transition)
+    private TransitionResult Apply(Func<TransitionResult> transition, bool allowPauseSelectionRejection = false)
     {
         lock (gate)
         {
             RequireReady();
             operationInProgress = true;
+            var transitionCompleted = false;
             try
             {
                 var result = transition();
+                transitionCompleted = true;
                 if (result.State.Recovery == RecoveryStatus.Required)
                 {
                     SetStartupFailure(new(StorageFailure.InvalidPayload));
@@ -144,6 +147,12 @@ public sealed class DurableMonitoringSession : IDisposable
                 SaveCheckpoint(pending);
                 pending = null;
                 return result;
+            }
+            catch (PauseSelectionRejectedException) when (allowPauseSelectionRejection && !transitionCompleted)
+            {
+                // Only SetPaused's explicit pre-mutation rejection is benign.
+                // Capture/save faults, even this same exception type, fail closed.
+                throw;
             }
             catch (Exception e)
             {

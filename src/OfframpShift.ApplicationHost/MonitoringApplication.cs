@@ -297,6 +297,7 @@ internal sealed class MonitoringApplication : IDisposable
         {
             message = providerFault && command.Kind == HostCommandKind.RetryMonitoring ?
                 "Observation providers could not be restarted. Wait ten seconds, then retry monitoring after Windows settles. Accounting remains unavailable." :
+                e is PauseSelectionRejectedException ? "Choose a future pause end time. The selected time has passed or is invalid." :
                 e is ArgumentException ? "Check the settings: durations must be valid and desktop assignments must be distinct." :
                 e is IOException or UnauthorizedAccessException ? "Windows settings could not be saved. Existing saved settings remain in effect. Check local storage access and try again." : e.Message;
             return HostCommandResult.Failure(message);

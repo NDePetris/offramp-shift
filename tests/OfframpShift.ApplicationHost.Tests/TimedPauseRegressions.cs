@@ -8,6 +8,32 @@ internal static class TimedPauseRegressions
 {
     internal static void Run()
     {
+        foreach (var previousPause in new[] { "active", "indefinite", "timed" })
+            Test("deadline crossing between host and Core validation preserves confirmed state: " + previousPause, () =>
+            {
+                using var f = new Fixture(); f.Enable();
+                using (var session = f.Session())
+                {
+                    var start = f.Clock.Now; f.Clock.Now = start with { Milliseconds = 100 };
+                    session.Observe(new(start, f.Clock.Now, DesktopScope.Personal,
+                        SessionState.Active, new("test", true), InputState.Active, MonitoringAvailability.Available, EvidenceConfidence.Confirmed));
+                }
+                using var app = f.App();
+                if (previousPause != "active")
+                    Check(app.Execute(new(HostCommandKind.Pause) { PauseUntilUtc = previousPause == "timed" ? f.Clock.UtcNow.AddHours(1) : null }).Succeeded);
+                var before = app.Snapshot();
+                var checkpointPath = Path.Combine(f.PathName, SqliteCheckpointStore.DatabaseName);
+                var checkpoint = File.ReadAllBytes(checkpointPath);
+                var end = f.Clock.UtcNow.AddMinutes(1); var reads = 0;
+                f.Clock.UtcRead = _ => ++reads == 1 ? end.AddTicks(-1) : end;
+                var result = app.Execute(new(HostCommandKind.Pause) { PauseUntilUtc = end });
+                f.Clock.UtcRead = null;
+                var after = app.Snapshot();
+                Check(reads == 2 && !result.Succeeded && result.Message.Contains("future pause end time", StringComparison.Ordinal));
+                Check(after.Persistence == PersistenceStatus.Ready && after.StorageFailure is null);
+                Check(after.State == before.State && after.Configuration == before.Configuration);
+                Check(checkpoint.SequenceEqual(File.ReadAllBytes(checkpointPath)));
+            });
         foreach (var condition in new[] { "Personal", "Work", "Other", "Idle", "Locked", "Suspended", "Fault", "Missing", "Disabled", "Unsupported" })
             Test("pause expiry is independent of observation: " + condition, () =>
             {

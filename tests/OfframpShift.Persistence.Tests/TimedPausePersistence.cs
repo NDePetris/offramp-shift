@@ -7,6 +7,45 @@ internal static class TimedPausePersistence
 {
     internal static void Run()
     {
+        Test("invalid Pause selections leave ready storage and the entire checkpoint unchanged", () =>
+        {
+            using var f = new Fixture(); using var s = f.Session();
+            s.Observe(f.Clock.Interval(5)); s.SetPaused(true, f.Clock.UtcNow.AddHours(1));
+            var before = s.State; var row = f.Row();
+            foreach (var (paused, end) in new[] {
+                (true, default(DateTimeOffset)), (true, f.Clock.UtcNow), (true, f.Clock.UtcNow.AddTicks(-1)),
+                (true, f.Clock.UtcNow.AddHours(1).ToOffset(TimeSpan.FromHours(1))), (false, f.Clock.UtcNow.AddHours(1)) })
+            {
+                try { s.SetPaused(paused, end); throw new InvalidOperationException("Invalid selection accepted."); }
+                catch (PauseSelectionRejectedException) { }
+                Equal(PersistenceStatus.Ready, s.Status); True(s.Failure is null);
+                Equal(before, s.State); Equal(row, f.Row());
+            }
+            // The rejected command did not leave the session busy or prevent a save.
+            s.SetPaused(false); True(!s.State.Paused); Equal(row.Revision + 1, f.Row().Revision);
+        });
+        Test("selection exception during checkpoint capture still blocks a partial Pause transition", () =>
+        {
+            using var f = new Fixture(); using var s = f.Session();
+            PauseSelectionRejectedException? rejection = null;
+            try { s.SetPaused(true, f.Clock.UtcNow); }
+            catch (PauseSelectionRejectedException e) { rejection = e; }
+            True(rejection is not null); var row = f.Row();
+            // Indefinite Pause performs no UTC selection read, so this fault occurs
+            // only after SetPaused has mutated Core, during checkpoint capture.
+            f.Clock.UtcRead = _ => throw rejection!;
+            Fails(StorageFailure.UnexpectedFailure, () => s.SetPaused(true));
+            f.Clock.UtcRead = null;
+            Equal(PersistenceStatus.Blocked, s.Status); Equal(row, f.Row());
+            Fails(StorageFailure.UnexpectedFailure, () => _ = s.State);
+        });
+        Test("invalid monotonic clock during a valid Pause selection still blocks storage", () =>
+        {
+            using var f = new Fixture(); using var s = f.Session(); var row = f.Row();
+            f.Clock.Now = f.Clock.Now with { Milliseconds = -1 };
+            Fails(StorageFailure.UnexpectedFailure, () => s.SetPaused(true, f.Clock.UtcNow.AddMinutes(1)));
+            Equal(PersistenceStatus.Blocked, s.Status); Equal(row, f.Row());
+        });
         foreach (var stage in new[] { StorageFault.BeforeUpdate, StorageFault.AfterUpdate, StorageFault.AfterCommit })
             Test($"v3 to v4 migration at {stage} retains exact payload and original save time", () =>
             {

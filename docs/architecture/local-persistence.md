@@ -12,6 +12,14 @@ SavedUtc, never recomputing a preset deadline. Retry discards delayed effects;
 a still-expired restored Pause is then cleared in a separate acknowledged commit.
 No new file, table, history, automatic storage retry or recovery policy is added.
 
+An invalid/newly expired Pause selection raises Core's explicit
+`PauseSelectionRejectedException` before any command boundary or state mutation.
+Only `SetPaused` permits this rejection to escape the durable transition phase
+without changing Ready state. Checkpoint capture/save exceptions (including the
+same exception type), invalid monotonic clocks, and other transition failures
+retain the existing fail-closed path. Host validation is advisory; Core's later
+deadline check remains authoritative when time advances between the two reads.
+
 
 PR 9 writes payload v3 with shared reminder repeat configuration, retaining the
 original `InteractiveRepeatNudgeMs` field name and exact v3 shape. No additional

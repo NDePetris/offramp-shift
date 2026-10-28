@@ -2,6 +2,15 @@ using System.Collections.Immutable;
 
 namespace OfframpShift.Core;
 
+// Raised only by SetPaused's selection check, before any command boundary or
+// state mutation. Other clock/transition failures are not selection rejections.
+public sealed class PauseSelectionRejectedException : ArgumentException
+{
+    internal PauseSelectionRejectedException() : base(
+        "Choose a future pause end time. The selected time has passed or is invalid.", "pauseUntilUtc")
+    { }
+}
+
 // All entry points serialize through one gate. No callbacks, OS calls or I/O run here.
 public sealed class MonitoringCoordinator
 {
@@ -178,7 +187,7 @@ public sealed class MonitoringCoordinator
         {
             if (state.Recovery == RecoveryStatus.Required) return Result(ActivityKind.Uncertain, "Recovery required.", [], false);
             if (pauseUntilUtc is { } deadline && (!paused || deadline == default || deadline.Offset != TimeSpan.Zero || deadline <= clock.UtcNow))
-                throw new ArgumentException("Choose a future UTC pause end time.", nameof(pauseUntilUtc));
+                throw new PauseSelectionRejectedException();
             if (state.Paused == paused && state.PauseUntilUtc == pauseUntilUtc) return Result(ActivityKind.Uncertain, "Pause unchanged.", [], false);
             CommandBoundary();
             ClearContinuity();

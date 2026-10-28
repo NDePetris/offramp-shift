@@ -6,7 +6,9 @@ using WindowsObservation;
 internal sealed class FakeClock : IMonitoringClock
 {
     public MonotonicTime Now { get; set; } = new(Guid.NewGuid(), 0);
-    public DateTimeOffset UtcNow { get; set; } = new(2026, 10, 14, 12, 0, 0, TimeSpan.Zero);
+    private DateTimeOffset utcNow = new(2026, 10, 14, 12, 0, 0, TimeSpan.Zero);
+    public Func<DateTimeOffset, DateTimeOffset>? UtcRead { get; set; }
+    public DateTimeOffset UtcNow { get => UtcRead?.Invoke(utcNow) ?? utcNow; set => utcNow = value; }
 }
 
 internal sealed class FakeSource(Fixture fixture) : IObservationSource

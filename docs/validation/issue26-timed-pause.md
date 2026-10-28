@@ -36,7 +36,7 @@ All seven required commands passed with SDK **10.0.401** and warnings as errors:
 
 | Command | Automated result |
 |---|---|
-| `./run.ps1 test` | PASS: Core 86 / 40,623 assertions; Persistence 105 / 940; Host 335 / 3,258; WPF 158 / 195; zero failures. |
+| `./run.ps1 test` | PASS: Core 86 / 40,623 assertions; Persistence 108 / 970; Host 338 / 3,272; WPF 158 / 195; zero failures. |
 | `./run.ps1 format` | PASS: verify-no-changes. |
 | `./spikes/VirtualDesktop/run.ps1 test` | PASS: 58 fake-policy cases and owned non-COM isolation checks. |
 | `./spikes/BrowserAttribution/run.ps1 test` | PASS: 2,053 policy/protocol assertions plus extension/transport tests. No real browser attribution matrix. |
@@ -60,6 +60,18 @@ including strict migration, UTC boundaries, replacement/manual resume, restarts,
 clock corrections, lock/suspend/unavailable observation, atomic save faults,
 acknowledgment loss/exact retry, no retroactive credit, conversion and UI controls.
 They do not establish live Windows shell reliability or accessibility.
+
+## Focused Pause-selection race correction
+
+The fake UTC clock crosses the proposed deadline between host validation and
+Core's durable transition check. For active, indefinite-Pause and timed-Pause
+starting states, the command is rejected, persistence stays Ready with no failure,
+and the full confirmed state/configuration and SQLite bytes are unchanged.
+Direct invalid selections are covered too. A reused selection exception during
+checkpoint capture still blocks a partial transition; invalid monotonic clocks
+still block storage. Existing save-fault/uncertain-commit and exact-retry tests
+remain passing. Only the explicit pre-mutation Pause rejection is exempted.
+Correction logs use the ignored `artifacts/issue26-correction-*.log` prefix.
 
 ## Minimal Windows owner smoke — NOT RUN
 
