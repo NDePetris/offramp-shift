@@ -14,6 +14,7 @@ internal static class BestEffortPersistence
             var c = node["Configuration"]!.AsObject(); c.Remove("InteractiveRepeatNudgeMs"); c.Remove("Accounting"); c.Remove("EstimationPolicyVersion");
             var s = node["State"]!.AsObject();
             foreach (var key in new[] { "EstimatedUsageMs", "BreakUncertaintyMs", "ConsecutiveUncertaintyMs" }) s.Remove(key);
+            s.Remove("PauseUntilUtc");
             return node.ToJsonString();
         }
         Test("version-1 migration retains allowance and suppression with one atomic replacement", () =>
@@ -24,7 +25,7 @@ internal static class BestEffortPersistence
             using var migrated = f.Session();
             Equal(PersistenceStatus.Ready, migrated.Status);
             Equal(revision + 1, f.Row().Revision);
-            Equal(3, CheckpointCodec.Decode(f.Row().Payload, f.Clock.UtcNow).Version);
+            Equal(4, CheckpointCodec.Decode(f.Row().Payload, f.Clock.UtcNow).Version);
             Equal(30L, migrated.State.UsageMs); Equal(0L, migrated.State.EstimatedUsageMs);
             Equal(InterventionState.Snoozed, migrated.State.Intervention);
             Equal(0, migrated.Observe(f.Clock.Interval(1)).Effects.Length);

@@ -107,6 +107,7 @@ public sealed record EngineState(
     long ReminderRemainingMs, long SnoozeRemainingMs, long EffectSequence,
     RecoveryStatus Recovery)
 {
+    public DateTimeOffset? PauseUntilUtc { get; init; }
     public long EstimatedUsageMs { get; init; }
     public long BreakUncertaintyMs { get; init; }
     public long ConsecutiveUncertaintyMs { get; init; }

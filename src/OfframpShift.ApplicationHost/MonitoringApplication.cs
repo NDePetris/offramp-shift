@@ -25,6 +25,7 @@ internal sealed class MonitoringApplication : IDisposable
     private long sequence, lastProviderAttempt = -10_000;
     private Guid accountingPresentationEpoch = Guid.NewGuid();
     private SwitchAuthorization? pendingSwitch;
+    private DateTimeOffset? confirmedPauseUntilUtc;
     internal BreakReminderMailbox Reminders { get; } = new();
     internal object? ObservationDiagnostics => runtime?.Diagnostics;
     internal ReminderAuthorizationCapture AuthorizationCapture { get; }
@@ -46,6 +47,7 @@ internal sealed class MonitoringApplication : IDisposable
         if (settingsStore.Status == SettingsStatus.Ready && settings.SwitchingConsent && !settings.HasSwitchingConsent(build))
             SaveSettings(settings with { SwitchingConsent = false, SwitchingConsentBuild = "", SwitchingConsentFamily = "" });
         session = openSession();
+        ReconcilePause();
         EnsureRuntime();
     }
 
@@ -70,6 +72,7 @@ internal sealed class MonitoringApplication : IDisposable
 
     public void Step()
     {
+        if (ReconcilePause()) return;
         EnsureRuntime();
         if (runtime is null || providerFault) { Reminders.Invalidate(); return; }
         try
@@ -78,6 +81,28 @@ internal sealed class MonitoringApplication : IDisposable
             runtime.RevalidateSwitchAuthorization();
         }
         catch { runtime.InvalidateSwitch(); Reminders.Invalidate(); providerFault = true; message = "Observation or cleanup failed. Accounting stopped. Retry monitoring explicitly."; }
+    }
+
+    // This belongs to the serialized application owner, independently of native
+    // providers and accounting eligibility. Failed saves retain exact retry only.
+    private bool ReconcilePause()
+    {
+        if (!Ready) return false;
+        confirmedPauseUntilUtc = session.State.PauseUntilUtc;
+        if (confirmedPauseUntilUtc is not { } deadline || clock.UtcNow < deadline) return false;
+        pendingSwitch?.Revoke(); pendingSwitch = null;
+        Reminders.Invalidate(); runtime?.RevokePresentation(); runtime?.InvalidateSwitch();
+        try
+        {
+            if (session.ResumeIfPauseExpired().CheckpointRequired)
+            {
+                confirmedPauseUntilUtc = null;
+                runtime?.ResetConfiguration();
+                message = "Pause ended and saved. Fresh evidence is required before accounting.";
+            }
+        }
+        catch (CheckpointStorageException e) { message = StorageDetail(session.Status, e.Failure); }
+        return true;
     }
 
     private void SaveSettings(WindowsSettings value) { settingsStore.Save(value); settings = value; }
@@ -119,15 +144,21 @@ internal sealed class MonitoringApplication : IDisposable
                 case HostCommandKind.Pause:
                 case HostCommandKind.Resume:
                     Require(Ready, "Storage is unavailable.");
-                    if (command.Kind == HostCommandKind.Resume)
-                        Require(CanAccount && BindingsValid(), "Monitoring setup or providers are unavailable.");
-                    session.SetPaused(command.Kind == HostCommandKind.Pause);
+                    Require(command.Kind != HostCommandKind.Resume || command.PauseUntilUtc is null, "Resume cannot include a pause end time.");
+                    Require(command.PauseUntilUtc is not { } end || end != default && end.Offset == TimeSpan.Zero && end > clock.UtcNow,
+                        "Choose a future pause end time. The selected time has passed or is invalid.");
+                    session.SetPaused(command.Kind == HostCommandKind.Pause, command.PauseUntilUtc);
+                    confirmedPauseUntilUtc = session.State.PauseUntilUtc;
+                    message = command.Kind == HostCommandKind.Resume ?
+                        "Pause ended and saved. Monitoring still requires valid setup and fresh evidence." : "Pause saved.";
                     runtime?.ResetConfiguration(); break;
                 case HostCommandKind.RetrySave:
                     Require(session.Status == PersistenceStatus.PendingCommit, "No pending commit.");
                     accountingPresentationEpoch = Guid.NewGuid();
                     session.RetryPendingCommit();
-                    runtime?.ResetConfiguration(); EnsureRuntime(); break;
+                    runtime?.ResetConfiguration(); ReconcilePause();
+                    Require(Ready, StorageDetail(session.Status, session.Failure));
+                    EnsureRuntime(); break;
                 case HostCommandKind.RetryMonitoring:
                     Require(CanObserve, "Observation requires a supported build, consent and available storage.");
                     Require(elapsed() - lastProviderAttempt >= 10_000 && (runtime?.RetryInMs ?? 0) == 0,
@@ -165,7 +196,7 @@ internal sealed class MonitoringApplication : IDisposable
                     ResetRuntime();
                     SaveSettings(replacement);
                     // Reuse restoration to clear unfinished Core continuity; do not invent a domain command.
-                    session.Dispose(); session = openSession(); EnsureRuntime();
+                    session.Dispose(); session = openSession(); ReconcilePause(); EnsureRuntime();
                     message = "Desktop assignment saved. Start monitoring when both assignments are ready.";
                     break;
                 case HostCommandKind.ChangeDurations:
@@ -252,7 +283,7 @@ internal sealed class MonitoringApplication : IDisposable
                 case HostCommandKind.ReopenStorage:
                     Require(session.Status == PersistenceStatus.Blocked, "Reopen is only available for blocked storage.");
                     accountingPresentationEpoch = Guid.NewGuid();
-                    ResetRuntime(); session.Dispose(); session = openSession(); EnsureRuntime(); break;
+                    ResetRuntime(); session.Dispose(); session = openSession(); ReconcilePause(); EnsureRuntime(); break;
                 case HostCommandKind.Recover:
                     Require(command.Confirmed && session.Status == PersistenceStatus.RecoveryRequired,
                         "Explicit recovery confirmation is required; recovery is unavailable in this state.");
@@ -274,6 +305,7 @@ internal sealed class MonitoringApplication : IDisposable
         {
             message = providerFault && command.Kind == HostCommandKind.RetryMonitoring ?
                 "Observation providers could not be restarted. Wait ten seconds, then retry monitoring after Windows settles. Accounting remains unavailable." :
+                e is PauseSelectionRejectedException ? "Choose a future pause end time. The selected time has passed or is invalid." :
                 e is ArgumentException ? "Check the settings: durations must be valid and desktop assignments must be distinct." :
                 e is IOException or UnauthorizedAccessException ? "Windows settings could not be saved. Existing saved settings remain in effect. Check local storage access and try again." : e.Message;
             return HostCommandResult.Failure(message);
@@ -302,6 +334,11 @@ internal sealed class MonitoringApplication : IDisposable
     public HostSnapshot Snapshot()
     {
         var state = Ready ? session.State : null;
+        if (Ready) confirmedPauseUntilUtc = state!.PauseUntilUtc;
+        var pauseRecovery = !Ready && confirmedPauseUntilUtc is { } deadline && clock.UtcNow >= deadline ?
+            session.Status == PersistenceStatus.PendingCommit ?
+                "Pause end reached; ending Pause is not confirmed. Accounting is stopped. Select Retry save." :
+                "Pause end reached; ending Pause is not confirmed. Accounting is stopped. Resolve accounting storage below." : "";
         var config = Ready ? session.Configuration : null;
         var point = runtime?.Latest;
         var bindings = BindingsValid();
@@ -339,7 +376,7 @@ internal sealed class MonitoringApplication : IDisposable
             CanAccount && !providerFault && settings.ReminderStyle == ReminderStyle.InteractiveWindow && runtime?.CanKeepNudgeOpen == true,
             runtime?.ReminderGeneration ?? 0, runtime?.ReminderEpoch ?? Guid.Empty,
             runtime?.ReminderStatus ?? "Observation unavailable; no reminder delivery.", runtime?.PresentationId ?? Guid.Empty)
-        { SwitchingUnavailableReason = SwitchingUnavailableReason, AccountingPresentationEpoch = accountingPresentationEpoch };
+        { SwitchingUnavailableReason = SwitchingUnavailableReason, AccountingPresentationEpoch = accountingPresentationEpoch, PauseRecoveryDetail = pauseRecovery };
     }
 
     private string SwitchingUnavailableReason =>

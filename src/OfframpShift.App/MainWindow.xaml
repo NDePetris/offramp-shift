@@ -72,7 +72,11 @@
     <TextBlock Text="{Binding RecordedQualifier}" Style="{StaticResource RecordedText}" FontSize="12"/>
     <ProgressBar Style="{StaticResource ThinProgress}" Value="{Binding BreakProgress, Mode=OneWay}" Maximum="100" Height="4" Foreground="{DynamicResource ShiftAccent}" Background="{DynamicResource ShiftTrack}" AutomationProperties.Name="Recorded qualifying break" AutomationProperties.HelpText="{Binding BreakValue}"/>
     <TextBlock Text="{Binding BreakExplanation}" Foreground="{DynamicResource ShiftSupporting}" FontSize="12" Margin="0,8,0,16"/>
-    <Button x:Name="MonitoringButton" Content="{Binding MonitoringActionLabel}" Click="ToggleMonitoring" HorizontalAlignment="Left" IsEnabled="{Binding CanToggleMonitoring}" Visibility="{Binding ShowMonitoringAction, Converter={StaticResource BooleanToVisibility}}" Margin="0,0,0,16"/>
+    <TextBlock x:Name="PauseStatusText" Text="{Binding PauseStatus}" Style="{StaticResource RecordedText}" AutomationProperties.LiveSetting="Polite"/>
+    <WrapPanel Margin="0,0,0,16">
+     <Button x:Name="MonitoringButton" Content="{Binding MonitoringActionLabel}" Click="ToggleMonitoring" IsEnabled="{Binding CanToggleMonitoring}" Visibility="{Binding ShowMonitoringAction, Converter={StaticResource BooleanToVisibility}}"/>
+     <Button Content="Change pause…" Click="ChangePause" IsEnabled="{Binding CanChangePause}" Visibility="{Binding ShowChangePause, Converter={StaticResource BooleanToVisibility}}"/>
+    </WrapPanel>
     <TextBlock Text="{Binding Health}" Foreground="{DynamicResource ShiftSupporting}" FontSize="12"/>
     <StackPanel Visibility="{Binding ShowHealthDetail, Converter={StaticResource BooleanToVisibility}}" Margin="0,8,0,0">
      <TextBlock Text="{Binding Detail}" FontSize="12"/>
@@ -206,7 +210,7 @@
       <CheckBox x:Name="CloseInput" AutomationProperties.Name="Keep running in the tray when I close the window" Margin="0,16,0,8">
        <TextBlock Text="Keep running in the tray when I close the window"/>
       </CheckBox>
-      <TextBlock Text="Tray Exit always stops the app. Pause is preserved across restart." Foreground="{DynamicResource ShiftSupporting}" Margin="0,0,0,16"/>
+      <TextBlock Text="Tray Exit always stops the app. Pause is saved across restart; a timed Pause ends at its saved deadline." Foreground="{DynamicResource ShiftSupporting}" Margin="0,0,0,16"/>
       <WrapPanel>
        <Button Content="Save changes" Click="SaveAppearance" IsEnabled="{Binding CanEditReminders}"/>
        <Button Content="Cancel" Click="CancelDraft"/>

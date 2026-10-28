@@ -189,7 +189,7 @@ internal static class Program
                 {
                     using var f = new Fixture();
                     f.Initialize();
-                    if (domain) f.Payload(f.Row().Payload.Replace("\"Version\":3", "\"Version\":4", StringComparison.Ordinal));
+                    if (domain) f.Payload(f.Row().Payload.Replace("\"Version\":4", "\"Version\":5", StringComparison.Ordinal));
                     else f.Sql("PRAGMA user_version=2");
                     var bytes = File.ReadAllBytes(f.FilePath("checkpoint.db"));
                     using var s = f.Session();
@@ -267,7 +267,7 @@ internal static class Program
                     File.WriteAllText(f.FilePath("initialized"), "bad");
                     using var session = f.Session();
                     Equal(PersistenceStatus.RecoveryRequired, session.Status);
-                    if (domain) f.Payload("{\"Version\":4,\"FutureLayout\":true}");
+                    if (domain) f.Payload("{\"Version\":5,\"FutureLayout\":true}");
                     else f.Sql("PRAGMA user_version=2");
                     var original = File.ReadAllBytes(f.FilePath("checkpoint.db"));
                     Fails(StorageFailure.UnsupportedVersion, () => session.Reinitialize(Fixture.Small));
@@ -354,6 +354,7 @@ internal static class Program
             ResetUsagePersistence.Run();
             BestEffortPersistence.Run();
             InteractivePersistence.Run();
+            TimedPausePersistence.Run();
             if (OperatingSystem.IsWindows()) ProcessTermination.Run();
             else Console.WriteLine("Windows process-termination checks NOT RUN on this platform.");
             Console.WriteLine($"Persistence: {tests} tests, {assertions} assertions passed (real local SQLite; exception injection and forced termination reported separately).");
@@ -381,12 +382,13 @@ internal static class Program
                 foreach (var wrong in new[] { "null", "\"wrong\"", "[]", "{}" })
                 {
                     if (name == "Applications" && wrong == "[]") continue;
+                    if (name == "PauseUntilUtc" && wrong == "null") continue;
                     var changed = JsonNode.Parse(payload)!;
                     (parent == "" ? changed.AsObject() : changed[parent]!.AsObject())[name] = JsonNode.Parse(wrong);
                     Fails(StorageFailure.InvalidPayload, () => CheckpointCodec.Decode(changed.ToJsonString(), f.Clock.UtcNow));
                 }
                 var token = "\"" + name + "\":";
-                var duplicate = payload.Replace(token, token + obj[name]!.ToJsonString() + "," + token, StringComparison.Ordinal);
+                var duplicate = payload.Replace(token, token + (obj[name]?.ToJsonString() ?? "null") + "," + token, StringComparison.Ordinal);
                 Fails(StorageFailure.InvalidPayload, () => CheckpointCodec.Decode(duplicate, f.Clock.UtcNow));
             }
         }

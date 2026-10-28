@@ -11,7 +11,7 @@ public interface ICheckpointStore
 public sealed record MonitoringCheckpoint(
     int Version, DateTimeOffset SavedUtc, MonitoringConfiguration Configuration, EngineState State)
 {
-    public const int CurrentVersion = 3;
+    public const int CurrentVersion = 4;
 
     public bool IsValid(DateTimeOffset now)
     {
@@ -20,7 +20,7 @@ public sealed record MonitoringCheckpoint(
         catch (ArgumentException) { return false; }
         var s = State;
         // Age alone never expires confirmed usage. Future/default metadata is unusable.
-        return (Version is CurrentVersion or 2 || Version == 1 && Configuration.Accounting == AccountingMode.CertifiedOnly &&
+        return (Version is CurrentVersion or 3 or 2 || Version == 1 && Configuration.Accounting == AccountingMode.CertifiedOnly &&
                 s.EstimatedUsageMs == 0 && s.BreakUncertaintyMs == 0 && s.ConsecutiveUncertaintyMs == 0) &&
             SavedUtc != default && SavedUtc <= now &&
             s.EstimatedUsageMs >= 0 && s.EstimatedUsageMs <= s.UsageMs &&
@@ -35,6 +35,7 @@ public sealed record MonitoringCheckpoint(
             (!s.BreakCompleted || s.UsageMs == 0) &&
             s.IdleProgressMs >= 0 && s.IdleProgressMs <= Configuration.IdleThresholdMs &&
             (!s.Paused || (s.BreakProgressMs == 0 && s.IdleProgressMs == 0)) &&
+            (s.PauseUntilUtc is null || Version >= 4 && s.Paused && s.PauseUntilUtc != default(DateTimeOffset) && s.PauseUntilUtc.Value.Offset == TimeSpan.Zero) &&
             s.EffectSequence >= 0 &&
             s.ReminderRemainingMs >= 0 && s.SnoozeRemainingMs >= 0 &&
             (s.Exhausted

@@ -117,7 +117,7 @@ internal static class HomeShellInspection
             window.ReportAction("");
         }
         window.Model.SetCommandPending(false); window.Apply(value with { Sequence = ++valueSequence, PublishedTick = Environment.TickCount64 });
-        using (var tray = new TrayService(() => { }, () => { }, _ => Task.FromResult(HostCommandResult.Success()), () => Task.CompletedTask))
+        using (var tray = new TrayService(() => { }, () => { }, _ => Task.FromResult(HostCommandResult.Success()), () => Task.CompletedTask, () => Task.CompletedTask))
         { tray.Apply(window.Model.Snapshot!, window.Model); tray.ApplyBrand(true); tray.ApplyBrand(false); }
         window.Hide();
         Console.WriteLine("PASS: native WPF initial size, resize, light/dark, routed settings navigation and transient tray create/update/dispose (synthetic state; no live monitoring, physical keyboard, Narrator or tray-menu interaction acceptance).");

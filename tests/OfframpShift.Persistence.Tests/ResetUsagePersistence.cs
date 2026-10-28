@@ -21,7 +21,7 @@ internal static class ResetUsagePersistence
             Equal(System.Text.Json.JsonSerializer.Serialize(Fixture.Small), System.Text.Json.JsonSerializer.Serialize(restored.Configuration));
             Equal(0L, restored.State.UsageMs);
             True(restored.State.Paused); Equal(sequence, restored.State.EffectSequence);
-            Equal(3, CheckpointCodec.Decode(f.Row().Payload, f.Clock.UtcNow).Version);
+            Equal(4, CheckpointCodec.Decode(f.Row().Payload, f.Clock.UtcNow).Version);
         });
         foreach (var stage in new[] { StorageFault.BeforeUpdate, StorageFault.AfterUpdate, StorageFault.AfterCommit })
             Test("reset failed save retains exact pending checkpoint: " + stage, () =>

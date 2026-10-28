@@ -15,6 +15,7 @@ public partial class MainWindow : Window
     private readonly Func<bool> confirmUsageReset;
     internal Func<bool, bool>? SetDiagnosticsEnabled { get; set; }
     internal Action? OpenDiagnosticsAction { get; set; }
+    internal Func<Task>? RequestPause { get; set; }
     internal void ShowDiagnosticsPreference(bool enabled, string error)
     { DiagnosticsInput.IsChecked = enabled; OpenDiagnosticsButton.IsEnabled = enabled; DiagnosticsPreferenceResult.Text = error; }
     private void ChangeDiagnostics(object sender, RoutedEventArgs e) => SetDiagnosticsEnabled?.Invoke(DiagnosticsInput.IsChecked == true);
@@ -60,8 +61,15 @@ public partial class MainWindow : Window
     internal void Apply(HostSnapshot snapshot, bool ownerStopped = false)
     {
         if (ownerStopped) { Model.MarkUnavailable("The monitoring owner stopped. Exit and restart the app."); return; }
+        var wasPaused = Model.Snapshot?.State?.Paused == true;
+        var previousPauseStatus = Model.PauseStatus;
         Model.Apply(snapshot, Environment.TickCount64);
         if (!ReferenceEquals(Model.Snapshot, snapshot)) return;
+        if (Model.PauseStatus != previousPauseStatus && Model.PauseStatus.Length > 0)
+            System.Windows.Automation.Peers.UIElementAutomationPeer.CreatePeerForElement(PauseStatusText)?
+                .RaiseAutomationEvent(System.Windows.Automation.Peers.AutomationEvents.LiveRegionChanged);
+        if (wasPaused && snapshot.State?.Paused == false)
+            ReportAction("Pause ended and saved. Monitoring still requires valid setup and fresh evidence.");
         RefreshDrafts(snapshot);
     }
 
@@ -144,7 +152,12 @@ public partial class MainWindow : Window
             target.Focus();
         }
     }
-    private async void ToggleMonitoring(object sender, RoutedEventArgs e) => await Run(new(Model.Snapshot?.State?.Paused == true ? HostCommandKind.Resume : HostCommandKind.Pause));
+    private async void ToggleMonitoring(object sender, RoutedEventArgs e)
+    {
+        if (Model.Snapshot?.State?.Paused == true) await Run(new(HostCommandKind.Resume));
+        else if (RequestPause is not null) await RequestPause();
+    }
+    private async void ChangePause(object sender, RoutedEventArgs e) { if (RequestPause is not null) await RequestPause(); }
     private async void Start(object sender, RoutedEventArgs e) => await Run(new(HostCommandKind.Start));
     private async void Pause(object sender, RoutedEventArgs e) => await Run(new(HostCommandKind.Pause));
     private async void Resume(object sender, RoutedEventArgs e) => await Run(new(HostCommandKind.Resume));
