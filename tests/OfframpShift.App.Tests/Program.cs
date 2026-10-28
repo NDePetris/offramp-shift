@@ -248,6 +248,11 @@ internal static class Program
         var xaml = System.Xml.Linq.XDocument.Load(Path.GetFullPath("src/OfframpShift.App/App.xaml"));
         var resources = xaml.Descendants().First(x => x.Name.LocalName == "ResourceDictionary");
         app.Resources = (ResourceDictionary)System.Windows.Markup.XamlReader.Parse(resources.ToString());
+        if (args is ["--render-pause", var pauseOutput])
+        {
+            TimedPauseRegressions.Render(pauseOutput, Snapshot());
+            return 0;
+        }
         Test("canonical symbols and all seven native icon sizes decode from packaged resources", () =>
         {
             foreach (var dark in new[] { false, true })
@@ -316,6 +321,7 @@ internal static class Program
             window.ReportAction("Desktop assignment rejected. Choose another desktop in Task View.");
             Check(window.ActionResult.Text == window.SettingsResult.Text && window.SettingsResult.Text.Contains("Task View"));
         });
+        TimedPauseRegressions.Run(Test, () => Snapshot());
         Pr8UiRegressions.Run(Test, () => Snapshot());
         SettingsDiagnosticsRegressions.Run(Test, () => Snapshot());
         PresentationRegressions.Views(Test, () => Snapshot());

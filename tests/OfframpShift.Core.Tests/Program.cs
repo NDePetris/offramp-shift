@@ -540,6 +540,7 @@ Test("deterministic mixed sequences enforce invariants", () =>
     }
 });
 
+TimedPauseRegressions.Run(Test, value => Check(value));
 ResetUsageRegressions.Run(Test, value => Check(value));
 InteractiveRegressions.Run(Test, value => Check(value));
 BestEffortRegressions.Run(Test, value => Check(value));

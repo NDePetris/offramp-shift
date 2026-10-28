@@ -75,7 +75,7 @@ internal static class BestEffortRegressions
         {
             var f = Make(); f.Send(1_000, confidence: EvidenceConfidence.Estimated);
             f.Send(1_000, DesktopScope.Work); Gap(f, 100);
-            var cp = f.Engine.CreateCheckpoint(); check(cp.Version == 3 && cp.IsValid(f.Clock.UtcNow));
+            var cp = f.Engine.CreateCheckpoint(); check(cp.Version == 4 && cp.IsValid(f.Clock.UtcNow));
             f.Restart(cp);
             check(f.Engine.State.EstimatedUsageMs == 1_000 && f.Engine.State.BreakUncertaintyMs == 0 && f.Engine.State.BreakProgressMs == 0);
         });

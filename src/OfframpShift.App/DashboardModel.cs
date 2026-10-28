@@ -55,6 +55,9 @@ public sealed class DashboardModel : INotifyPropertyChanged
     public bool CanStart { get; private set; }
     public bool CanPause { get; private set; }
     public bool CanResume { get; private set; }
+    public bool CanChangePause { get; private set; }
+    public bool ShowChangePause { get; private set; }
+    public string PauseStatus { get; private set; } = "";
     public bool CanRetrySave { get; private set; }
     public bool CanRetryMonitoring { get; private set; }
     public bool CanRecover { get; private set; }
@@ -80,6 +83,7 @@ public sealed class DashboardModel : INotifyPropertyChanged
         CanStart = CanPause = CanResume = CanRetrySave = CanRetryMonitoring = CanRecover = CanReopen = CanRepairSettings = CanEdit = false;
         CanConsent = CanAssign = false;
         CanResetUsage = CanEditReminders = false;
+        CanChangePause = ShowChangePause = false; PauseStatus = "";
         NeedsSetup = true;
         ConsentStatus = "Experimental monitoring consent: Unavailable";
         PersonalStatus = AssignmentText("Personal", Snapshot?.Settings.Personal, AssignmentStatus.Unavailable);
@@ -122,7 +126,13 @@ public sealed class DashboardModel : INotifyPropertyChanged
         CanStart = CanEdit && snapshot.ObservationAllowed && snapshot.CanAssign && snapshot.BindingsValid && snapshot.Settings.Complete &&
             (!snapshot.Settings.MonitoringEnabled || snapshot.Configuration?.Accounting != OfframpShift.Core.AccountingMode.BestEffort);
         CanPause = CanEdit && snapshot.State?.Paused == false && snapshot.Settings.MonitoringEnabled;
-        CanResume = CanEdit && snapshot.State?.Paused == true && snapshot.Settings.MonitoringEnabled && snapshot.Available;
+        CanResume = CanEdit && snapshot.State?.Paused == true;
+        CanChangePause = CanResume;
+        ShowChangePause = snapshot.State?.Paused == true;
+        PauseStatus = snapshot.PauseRecoveryDetail.Length > 0 ? snapshot.PauseRecoveryDetail :
+            committed.Recorded?.State is { Paused: true } paused ?
+                (stale || snapshot.Persistence != PersistenceStatus.Ready ? "Last confirmed: " : "") +
+                PauseSelection.Status(paused.PauseUntilUtc, DateTimeOffset.UtcNow, TimeZoneInfo.Local) : "";
         CanRetrySave = !commandPending && !stale && snapshot.Persistence == PersistenceStatus.PendingCommit;
         CanRetryMonitoring = CanEdit && snapshot.ObservationAllowed && snapshot.RetryInMs == 0;
         CanRecover = !commandPending && !stale && snapshot.Persistence == PersistenceStatus.RecoveryRequired;
@@ -170,8 +180,8 @@ public sealed class DashboardModel : INotifyPropertyChanged
             snapshot.State?.Paused == true ? "Monitoring paused · Timers are not advancing" :
             !snapshot.Settings.MonitoringEnabled || snapshot.Configuration?.Accounting != AccountingMode.BestEffort ? "Monitoring is not started" : "Monitoring enabled · Observations current";
         ShowHealthDetail = stale || snapshot.Persistence != PersistenceStatus.Ready || !snapshot.Available || NeedsSetup;
-        ShowMonitoringAction = snapshot.Settings.MonitoringEnabled;
-        MonitoringActionLabel = snapshot.State?.Paused == true ? "Resume monitoring" : "Pause monitoring";
+        ShowMonitoringAction = snapshot.Settings.MonitoringEnabled || snapshot.State?.Paused == true;
+        MonitoringActionLabel = snapshot.State?.Paused == true ? "Resume now" : "Pause monitoring";
         var held = stale || !snapshot.Available || snapshot.Persistence != PersistenceStatus.Ready ||
             snapshot.State is null || snapshot.Configuration is null || snapshot.State.Paused || NeedsSetup || commandPending;
         RecordedQualifier = committed.Recorded is not null && held ? "Last recorded" : "";

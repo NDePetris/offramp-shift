@@ -15,6 +15,7 @@ internal sealed class TrayService : IDisposable
     private readonly Forms.ToolStripMenuItem allowance = new(TraySummary.Starting.Allowance) { Enabled = false };
     private readonly Forms.ToolStripMenuItem qualifyingBreak = new(TraySummary.Starting.Break) { Enabled = false };
     private readonly Forms.ToolStripMenuItem pause;
+    private readonly Forms.ToolStripMenuItem changePause;
     private readonly Forms.ToolStripMenuItem retry;
     private readonly Forms.ToolStripMenuItem save;
     private readonly Forms.ToolStripMenuItem personal;
@@ -28,7 +29,7 @@ internal sealed class TrayService : IDisposable
     private readonly System.Drawing.Icon darkIcon;
     private bool darkSelected;
     private TraySummary summary = TraySummary.Starting;
-    public TrayService(Action open, Action settings, Func<HostCommand, Task<HostCommandResult>> execute, Func<Task> exit)
+    public TrayService(Action open, Action settings, Func<HostCommand, Task<HostCommandResult>> execute, Func<Task> exit, Func<Task> choosePause)
     {
         async Task Run(HostCommand command)
         {
@@ -53,8 +54,14 @@ internal sealed class TrayService : IDisposable
         feedbackItem.Click += (_, _) => ShowFeedback();
         menu.Items.Add("Open Offramp Shift", null, (_, _) => open());
         pause = new("Pause");
-        pause.Click += async (_, _) => await Run(new(snapshot?.State?.Paused == true ? HostCommandKind.Resume : HostCommandKind.Pause));
+        pause.Click += async (_, _) =>
+        {
+            if (snapshot?.State?.Paused == true) await Run(new(HostCommandKind.Resume));
+            else await choosePause();
+        };
         menu.Items.Add(pause);
+        changePause = new("Change pause…");
+        changePause.Click += async (_, _) => await choosePause(); menu.Items.Add(changePause);
         retry = Action("Retry monitoring", HostCommandKind.RetryMonitoring); menu.Items.Add(retry);
         save = Action("Retry save", HostCommandKind.RetrySave); menu.Items.Add(save);
         menu.Items.Add(new Forms.ToolStripSeparator());
@@ -115,8 +122,9 @@ internal sealed class TrayService : IDisposable
     {
         snapshot = value;
         ApplySummary(model.Tray);
-        pause.Text = value.State?.Paused == true ? "Resume" : "Pause";
+        pause.Text = value.State?.Paused == true ? "Resume now" : "Pause monitoring…";
         pause.Enabled = value.State?.Paused == true ? model.CanResume : model.CanPause;
+        changePause.Visible = model.ShowChangePause; changePause.Enabled = model.CanChangePause;
         retry.Enabled = model.CanRetryMonitoring; retry.Text = model.RetryLabel;
         save.Enabled = model.CanRetrySave;
         personal.Enabled = work.Enabled = model.CanAssign;
@@ -149,6 +157,6 @@ internal sealed class TrayService : IDisposable
     {
         SetReminderOpen(false);
         ApplySummary(summary.Unavailable());
-        pause.Enabled = retry.Enabled = save.Enabled = personal.Enabled = work.Enabled = false;
+        pause.Enabled = changePause.Enabled = retry.Enabled = save.Enabled = personal.Enabled = work.Enabled = false;
     }
 }

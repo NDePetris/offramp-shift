@@ -205,3 +205,15 @@ foreground/session/idle coverage, missed events, elevated apps, pinned windows,
 lock/suspend, shell restart, and monitor configurations require separate live
 Windows validation. Neither successful core simulations nor future adapter work
 authorizes automatic switching or production website attribution.
+
+## Timed Pause (issue #26)
+
+`EngineState.PauseUntilUtc` is nullable UTC: active state has no deadline; paused
+state without a deadline is indefinite. `SetPaused(bool, DateTimeOffset?)` validates
+new deadlines as future UTC instants and permits replacement while already paused.
+`ResumeIfPauseExpired()` compares only injected UTC with the saved deadline and
+uses the ordinary command boundary to clear both fields. It emits no effects.
+Pause transitions retain usage/intervention remainders and clear continuity as
+before; Reset usage preserves both Pause fields. Restoration never expires state
+in memory: the application owner requests and commits expiry before accounting.
+Payload v4 permits an already expired deadline for safe startup reconciliation.

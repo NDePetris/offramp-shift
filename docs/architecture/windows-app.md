@@ -44,7 +44,7 @@ See [PR C validation and screenshots](../validation/pr-c-visual-polish.md).
 
 `OfframpShift.ApplicationHost` references ActivityMonitoring, WindowsObservation
 and Persistence. PR 8 adds an explicit durable Core usage-reset operation; the
-checkpoint format is now version 3 for PR 9 interactive cadence. The probe
+checkpoint format is now version 4 for timed Pause (v3 added PR 9 cadence). The probe
 and WPF app share `MonitoringRuntime`; there is no second estimator/accounting
 loop. `Sampler` and anonymous resource instrumentation moved from the probe into
 the host. Probe final JSON now places aggregate counters under `diagnostics`,
@@ -395,3 +395,36 @@ the companion. Recovery stays available in Advanced with Diagnostics off. See
 
 No telemetry, runtime network calls, activity history or automatic diagnostics
 logs are added. Licensing/distribution remain undecided.
+
+## Timed Pause (issue #26)
+
+Home and tray share one accessible Pause dialog with duration presets, an explicit
+local date/time (including future dates), and indefinite Pause. Confirmation
+captures one UTC deadline. Invalid DST times and past selections are rejected;
+ambiguous times require an explicit occurrence. No countdown is displayed.
+
+The quick durations are four compact radio selections styled as native toggle
+buttons, sharing one exclusive group with custom and indefinite choices. Only
+the separate Pause confirmation submits a command. Custom input uses the native
+DatePicker plus hour/minute/AM-PM selectors, including all 60 minutes. It defaults
+to the next future quarter-hour with date rollover; DST ambiguity still requires
+an explicit occurrence. The zone name omits the fixed standard-time offset.
+Content-sized height keeps presets compact and expands for custom input, with
+scrollable fields and pinned validation/actions. Working-area height is capped
+using the current monitor and DPI. These changes affect UI selection only;
+UTC conversion, checkpoint v4, expiry and recovery contracts remain unchanged.
+
+MonitoringApplication reconciles deadline expiry before provider-dependent work,
+at startup and after save retry/reopen. No dedicated timer service is introduced.
+Manual Resume and expiry require ready durable storage, independently of desktop,
+activity, lock or provider availability. Ending Pause is separate from accounting
+availability: setup/build/consent/binding gates and fresh estimator evidence remain
+required. Runtime continuity and pending reminder/switch authorization are reset.
+
+Pending/blocked commits never publish speculative resumption. An expired confirmed
+Pause whose clear cannot be saved has actionable storage feedback. UTC is the
+authority: clock corrections affect expiry; timezone changes only affect display.
+Sleep/exit do not extend deadlines; the next runnable owner turn reconciles them.
+Future checkpoint save timestamps retain conservative clock blocking. No startup
+registration, retroactive accounting, break credit or reminder replay is added.
+See [tests and minimal owner smoke](../validation/issue26-timed-pause.md).
