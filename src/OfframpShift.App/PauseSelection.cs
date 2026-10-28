@@ -5,7 +5,17 @@ namespace OfframpShift.App;
 // Conversion only; the dialog captures now once at confirmation. No scheduler.
 internal static class PauseSelection
 {
-    internal static readonly string[] Choices = ["For 15 minutes", "For 30 minutes", "For 1 hour", "For 2 hours", "Until a specific date and time…", "Until I resume manually"];
+    internal static DateTime NextQuarterHour(DateTimeOffset now, TimeZoneInfo zone)
+    {
+        var local = TimeZoneInfo.ConvertTime(now, zone).DateTime;
+        var quarter = TimeSpan.FromMinutes(15).Ticks;
+        // Advance the instant to the next local quarter, so a DST gap is skipped
+        // and a fall-back default still refers to an actual future instant.
+        return DateTime.SpecifyKind(TimeZoneInfo.ConvertTime(now.AddTicks(quarter - local.Ticks % quarter), zone).DateTime, DateTimeKind.Unspecified);
+    }
+
+    internal static string ZoneLabel(TimeZoneInfo zone) => "Local time · " +
+        zone.StandardName.Replace("Standard Time", "Time", StringComparison.Ordinal);
     internal static DateTimeOffset? Deadline(int choice, DateTime? date, string time, TimeZoneInfo zone,
         TimeSpan? occurrence, DateTimeOffset now)
     {

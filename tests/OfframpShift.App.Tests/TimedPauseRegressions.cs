@@ -2,6 +2,7 @@ using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Automation;
+using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -27,18 +28,18 @@ internal static class TimedPauseRegressions
             foreach (var custom in new[] { false, true })
             {
                 var dialog = new PauseDialog(main, () => now, TimeZoneInfo.FindSystemTimeZoneById("Central Standard Time"));
-                dialog.Choice.SelectedIndex = custom ? 4 : 0;
+                dialog.CustomChoice.IsChecked = custom;
                 if (custom)
                 {
-                    dialog.Date.SelectedDate = new DateTime(2026, 11, 1); dialog.Time.Text = "01:30";
+                    dialog.Date.SelectedDate = new DateTime(2026, 11, 1); dialog.Hour.SelectedIndex = 0; dialog.Minute.SelectedIndex = 30; dialog.Period.SelectedIndex = 0;
                     dialog.Validation.Text = "This clock time occurs twice. Choose the first or second occurrence.";
                 }
-                Capture(dialog, $"{(dark ? "dark" : "light")}-{(custom ? "custom" : "presets")}", 440, custom ? 600 : 500);
+                Capture(dialog, $"{(dark ? "dark" : "light")}-{(custom ? "custom" : "presets")}", 440, custom ? 580 : 330);
                 if (custom)
                 {
-                    Capture(dialog, $"{(dark ? "dark" : "light")}-custom-minimum", 400, 400);
+                    Capture(dialog, $"{(dark ? "dark" : "light")}-custom-minimum", 400, 320);
                     dialog.PauseScroll.ScrollToEnd(); dialog.UpdateLayout();
-                    Capture(dialog, $"{(dark ? "dark" : "light")}-custom-minimum-end", 400, 400);
+                    Capture(dialog, $"{(dark ? "dark" : "light")}-custom-minimum-end", 400, 320);
                 }
                 dialog.Close();
             }
@@ -62,7 +63,8 @@ internal static class TimedPauseRegressions
     internal static void Run(Action<string, Action> test, Func<HostSnapshot> seed)
     {
         var now = new DateTimeOffset(2026, 10, 27, 12, 0, 0, TimeSpan.Zero);
-        void Check(bool condition) { if (!condition) throw new InvalidOperationException("Timed Pause assertion failed."); }
+        void Check(bool condition, [System.Runtime.CompilerServices.CallerLineNumber] int line = 0)
+        { if (!condition) throw new InvalidOperationException($"Timed Pause assertion failed at line {line}."); }
         void Invalid(Action action) { try { action(); } catch (ArgumentException) { return; } throw new InvalidOperationException("Invalid time accepted."); }
         test("pause presets and custom dates produce one UTC instant", () =>
         {
@@ -120,16 +122,106 @@ internal static class TimedPauseRegressions
             Check(model.PauseStatus == pending.PauseRecoveryDetail && model.Tray.Status == model.PauseStatus);
             Check(!model.CanResume && !model.CanChangePause && model.CanRetrySave);
         });
-        test("shared Pause dialog cancels without a command and labels date/time controls", () =>
+        test("Pause choices are exclusive and require confirmation", () =>
         {
-            var main = new MainWindow(_ => Task.FromResult(HostCommandResult.Success()), () => Task.CompletedTask, () => Task.CompletedTask);
-            var dialog = new PauseDialog(main, () => now, TimeZoneInfo.Utc);
-            Check(dialog.Selection is null && dialog.Choice.Items.Count == 6);
-            dialog.Choice.SelectedIndex = 4;
-            Check(dialog.Custom.Visibility == Visibility.Visible);
-            Check(AutomationProperties.GetName(dialog.Date) == "Resume date");
-            Check(AutomationProperties.GetName(dialog.Time) == "Resume local clock time");
-            dialog.Close(); Check(dialog.Selection is null); main.Close();
+            var main = Main();
+            var clock = now;
+            var dialog = new PauseDialog(main, () => clock, TimeZoneInfo.Utc);
+            RadioButton[] choices = [dialog.FifteenMinutes, dialog.ThirtyMinutes, dialog.OneHour, dialog.TwoHours, dialog.CustomChoice, dialog.ManualChoice];
+            Check(choices.Count(choice => choice.IsChecked == true) == 1 && dialog.FifteenMinutes.IsChecked == true);
+            foreach (var choice in choices.Reverse().Concat(choices))
+            {
+                choice.IsChecked = true;
+                Check(choices.Count(option => option.IsChecked == true) == 1 && choice.IsChecked == true);
+                Check(dialog.Selection is null);
+                Check(dialog.Custom.Visibility == (choice == dialog.CustomChoice ? Visibility.Visible : Visibility.Collapsed));
+            }
+            dialog.ThirtyMinutes.IsChecked = true; clock = now.AddMinutes(2);
+            Check(dialog.TryConfirmSelection());
+            Check(dialog.Selection?.PauseUntilUtc == clock.AddMinutes(30));
+            dialog.Close();
+            var canceled = new PauseDialog(main, () => now, TimeZoneInfo.Utc);
+            canceled.CustomChoice.IsChecked = true; canceled.Minute.SelectedIndex = 17; canceled.Close();
+            Check(canceled.Selection is null); main.Close();
         });
+        test("custom selectors keep all minutes and correctly convert midnight and noon", () =>
+        {
+            var main = Main();
+            foreach (var (hour, period, expectedHour) in new[] { (12, 0, 0), (12, 1, 12), (1, 1, 13), (11, 0, 11) })
+            {
+                var dialog = new PauseDialog(main, () => now, TimeZoneInfo.Utc);
+                dialog.CustomChoice.IsChecked = true; dialog.Date.SelectedDate = now.Date.AddDays(1);
+                dialog.Hour.SelectedIndex = hour - 1; dialog.Minute.SelectedIndex = 17; dialog.Period.SelectedIndex = period;
+                Check(dialog.Hour.Items.Count == 12 && dialog.Minute.Items.Count == 60 && dialog.Period.Items.Count == 2);
+                Check(!dialog.Hour.IsEditable && !dialog.Minute.IsEditable && !dialog.Period.IsEditable);
+                Check(dialog.Minute.Items[0].ToString() == "00" && dialog.Minute.Items[59].ToString() == "59");
+                Check(dialog.TryConfirmSelection());
+                Check(dialog.Selection?.PauseUntilUtc == new DateTimeOffset(now.Date.AddDays(1).AddHours(expectedHour).AddMinutes(17), TimeSpan.Zero));
+                dialog.Close();
+            }
+            var manual = new PauseDialog(main, () => now, TimeZoneInfo.Utc);
+            manual.ManualChoice.IsChecked = true;
+            Check(manual.TryConfirmSelection() && manual.Selection is { Kind: HostCommandKind.Pause, PauseUntilUtc: null });
+            manual.Close(); main.Close();
+        });
+        test("custom default is the next future quarter-hour including date and DST rollover", () =>
+        {
+            foreach (var (instant, expected) in new[] {
+                (now, now.Date.AddHours(12.25)), (now.AddMinutes(1), now.Date.AddHours(12.25)),
+                (now.AddMinutes(15), now.Date.AddHours(12.5)),
+                (new DateTimeOffset(2026, 12, 31, 23, 59, 59, TimeSpan.Zero), new DateTime(2027, 1, 1)) })
+                Check(PauseSelection.NextQuarterHour(instant, TimeZoneInfo.Utc) == expected);
+            var central = TimeZoneInfo.FindSystemTimeZoneById("Central Standard Time");
+            Check(PauseSelection.NextQuarterHour(new(2026, 3, 8, 7, 59, 0, TimeSpan.Zero), central) == new DateTime(2026, 3, 8, 3, 0, 0));
+            Check(PauseSelection.NextQuarterHour(new(2026, 11, 1, 6, 59, 0, TimeSpan.Zero), central) == new DateTime(2026, 11, 1, 1, 0, 0));
+            var main = Main(); var dialog = new PauseDialog(main, () => new DateTimeOffset(2026, 12, 31, 23, 59, 59, TimeSpan.Zero), TimeZoneInfo.Utc);
+            dialog.CustomChoice.IsChecked = true;
+            Check(dialog.Date.SelectedDate == new DateTime(2027, 1, 1) && dialog.Hour.SelectedIndex == 11 && dialog.Minute.SelectedIndex == 0 && dialog.Period.SelectedIndex == 0);
+            Check(dialog.TryConfirmSelection() && dialog.Selection?.PauseUntilUtc == new DateTimeOffset(2027, 1, 1, 0, 0, 0, TimeSpan.Zero));
+            Check(PauseSelection.ZoneLabel(central) == "Local time \u00b7 Central Time");
+            Check(!PauseSelection.ZoneLabel(central).Contains("UTC", StringComparison.Ordinal));
+            dialog.Close(); main.Close();
+        });
+        test("custom selector validation rejects gaps and past times and requires a DST occurrence", () =>
+        {
+            var main = Main(); var central = TimeZoneInfo.FindSystemTimeZoneById("Central Standard Time");
+            var dialog = new PauseDialog(main, () => new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), central);
+            dialog.CustomChoice.IsChecked = true;
+            dialog.Date.SelectedDate = new DateTime(2026, 3, 8); dialog.Hour.SelectedIndex = 1; dialog.Minute.SelectedIndex = 30; dialog.Period.SelectedIndex = 0;
+            Check(!dialog.TryConfirmSelection() && dialog.Selection is null && dialog.Validation.Text.Contains("does not exist", StringComparison.Ordinal));
+            dialog.Date.SelectedDate = new DateTime(2026, 11, 1); dialog.Hour.SelectedIndex = 0;
+            Check(dialog.Ambiguity.Visibility == Visibility.Visible && dialog.Occurrence.Items.Count == 2 && dialog.Occurrence.SelectedIndex == -1);
+            Check(!dialog.TryConfirmSelection() && dialog.Selection is null);
+            dialog.Occurrence.SelectedIndex = 0;
+            Check(dialog.TryConfirmSelection() && dialog.Selection?.PauseUntilUtc == new DateTimeOffset(2026, 11, 1, 6, 30, 0, TimeSpan.Zero));
+            dialog.Close();
+            var past = new PauseDialog(main, () => now, TimeZoneInfo.Utc);
+            past.CustomChoice.IsChecked = true; past.Date.SelectedDate = now.Date.AddDays(-1);
+            Check(!past.TryConfirmSelection() && past.Selection is null && past.Validation.Text.Contains("future", StringComparison.Ordinal));
+            past.Close(); main.Close();
+        });
+        test("Pause controls preserve accessible names focus conventions and compact expanded layouts", () =>
+        {
+            var main = Main(); var dialog = new PauseDialog(main, () => now, TimeZoneInfo.Utc);
+            Check(dialog.SizeToContent == SizeToContent.Height && dialog.MinWidth >= 400 && dialog.MinHeight >= 300);
+            Check(dialog.PauseButton.IsDefault && dialog.CancelButton.IsCancel);
+            Check(AutomationProperties.GetName(dialog.Date) == "Resume date");
+            foreach (var control in new[] { dialog.Hour, dialog.Minute, dialog.Period })
+                Check(control.Focusable && control.IsTabStop && AutomationProperties.GetName(control).StartsWith("Resume", StringComparison.Ordinal));
+            Check(System.Windows.Automation.Peers.UIElementAutomationPeer.CreatePeerForElement(dialog.FifteenMinutes)?.GetAutomationControlType() == AutomationControlType.RadioButton);
+            var content = (FrameworkElement)dialog.Content;
+            content.Measure(new(440, double.PositiveInfinity)); var compact = content.DesiredSize.Height;
+            dialog.CustomChoice.IsChecked = true;
+            content.UpdateLayout(); content.InvalidateMeasure(); content.Measure(new(440, double.PositiveInfinity));
+            if (content.DesiredSize.Height <= compact + 100)
+                throw new InvalidOperationException($"Expected custom expansion: compact={compact}, custom={content.DesiredSize.Height}, fields={dialog.Custom.DesiredSize.Height}.");
+            content.Measure(new(400, 320)); content.Arrange(new(0, 0, 400, 320)); content.UpdateLayout();
+            Check(dialog.QuickDurations.ActualWidth > 240 && dialog.PauseScroll.ScrollableHeight > 0);
+            Check(dialog.PauseButton.ActualWidth > 0 && dialog.CancelButton.ActualWidth > 0);
+            dialog.ManualChoice.IsChecked = true;
+            content.Measure(new(440, double.PositiveInfinity)); Check(Math.Abs(content.DesiredSize.Height - compact) < 1);
+            dialog.Close(); main.Close();
+        });
+        MainWindow Main() => new(_ => Task.FromResult(HostCommandResult.Success()), () => Task.CompletedTask, () => Task.CompletedTask);
     }
 }

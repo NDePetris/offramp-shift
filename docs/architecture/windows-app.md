@@ -403,6 +403,17 @@ local date/time (including future dates), and indefinite Pause. Confirmation
 captures one UTC deadline. Invalid DST times and past selections are rejected;
 ambiguous times require an explicit occurrence. No countdown is displayed.
 
+The quick durations are four compact radio selections styled as native toggle
+buttons, sharing one exclusive group with custom and indefinite choices. Only
+the separate Pause confirmation submits a command. Custom input uses the native
+DatePicker plus hour/minute/AM-PM selectors, including all 60 minutes. It defaults
+to the next future quarter-hour with date rollover; DST ambiguity still requires
+an explicit occurrence. The zone name omits the fixed standard-time offset.
+Content-sized height keeps presets compact and expands for custom input, with
+scrollable fields and pinned validation/actions. Working-area height is capped
+using the current monitor and DPI. These changes affect UI selection only;
+UTC conversion, checkpoint v4, expiry and recovery contracts remain unchanged.
+
 MonitoringApplication reconciles deadline expiry before provider-dependent work,
 at startup and after save retry/reopen. No dedicated timer service is introduced.
 Manual Resume and expiry require ready durable storage, independently of desktop,
