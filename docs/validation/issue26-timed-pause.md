@@ -100,6 +100,11 @@ Correction logs use the ignored `artifacts/issue26-correction-*.log` prefix.
 
 ## Minimal Windows owner smoke — NOT RUN
 
+Implementation merged in PR #29 on October 28, 2026. The owner authorized merge
+without additional live Pause testing as a prerequisite; issue #26 remains open
+pending this acceptance. The separate successful PR #29/#30 authorization capture
+does not complete these Pause checks or relabel historical NOT RUN results.
+
 Record the tested commit, exact approved Windows build/x64, and display scaling.
 
 1. Open Pause from Home. Choose a custom local end time a few minutes ahead.

@@ -28,6 +28,7 @@ internal sealed class MonitoringApplication : IDisposable
     private DateTimeOffset? confirmedPauseUntilUtc;
     internal BreakReminderMailbox Reminders { get; } = new();
     internal object? ObservationDiagnostics => runtime?.Diagnostics;
+    internal ReminderAuthorizationCapture AuthorizationCapture { get; }
     internal long Elapsed => elapsed();
     internal long NextSamplingDeadline => runtime?.NextSamplingDeadline ?? long.MaxValue;
 
@@ -38,6 +39,7 @@ internal sealed class MonitoringApplication : IDisposable
         this.clock = clock; this.newEpoch = newEpoch; this.elapsed = elapsed;
         this.providers = providers; this.openSession = openSession; this.settingsStore = settingsStore;
         this.supported = supported; this.build = build;
+        AuthorizationCapture = new(build);
         this.switchConfiguration = switchConfiguration ?? (() => new(build, "Unsupported", -1, 0));
         settings = settingsStore.Load();
         // Persist revocation before opening accounting on a different consent scope.
@@ -245,11 +247,17 @@ internal sealed class MonitoringApplication : IDisposable
                     session.ChangeInteractiveRepeat(command.DurationMs);
                     runtime?.RefreshInterventionConfiguration(); break;
                 case HostCommandKind.BeginNudgePresentation:
-                    Require(CanAccount && !providerFault && settings.ReminderStyle == ReminderStyle.InteractiveWindow &&
-                        command.Reminder is not null && runtime is not null, "Monitoring or reminder style is no longer eligible.");
-                    var presentation = runtime!.BeginNudgePresentation(command.Reminder!);
-                    Require(presentation is not null, runtime.NudgeAuthorizationFailure);
-                    return HostCommandResult.Success() with { Presentation = presentation };
+                    var capture = AuthorizationCapture.TryBegin();
+                    try
+                    {
+                        Require(CanAccount && !providerFault && settings.ReminderStyle == ReminderStyle.InteractiveWindow &&
+                            command.Reminder is not null && runtime is not null, "Monitoring or reminder style is no longer eligible.");
+                        var presentation = runtime!.BeginNudgePresentation(command.Reminder!, capture);
+                        Require(presentation is not null, runtime.NudgeAuthorizationFailure);
+                        if (capture is not null) { capture.Authorized = true; capture.Stage = AuthorizationCaptureStage.Authorized; }
+                        return HostCommandResult.Success() with { Presentation = presentation };
+                    }
+                    finally { if (capture is not null) AuthorizationCapture.Complete(capture); }
                 case HostCommandKind.CompleteNudgePresentation:
                     Require(CanAccount && !providerFault && settings.ReminderStyle == ReminderStyle.InteractiveWindow &&
                         command.Presentation is not null && runtime is not null, "Monitoring or reminder style is no longer eligible.");
@@ -387,5 +395,5 @@ internal sealed class MonitoringApplication : IDisposable
         _ => $"Storage is blocked ({failure}). Correct clock, access or competing-owner problems, then reopen storage. No accounting or reset is available."
     };
 
-    public void Dispose() { pendingSwitch?.Revoke(); Reminders.Invalidate(); try { ResetRuntime(); } finally { session.Dispose(); } }
+    public void Dispose() { AuthorizationCapture.Stop(); pendingSwitch?.Revoke(); Reminders.Invalidate(); try { ResetRuntime(); } finally { session.Dispose(); } }
 }

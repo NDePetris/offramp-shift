@@ -16,9 +16,16 @@ internal sealed class DiagnosticsWindow : Window
     private readonly Grid columns = new();
     private readonly StackPanel actions = new();
     private readonly TextBlock feedback = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 12, 0, 0) };
+    private readonly Func<AuthorizationCaptureSnapshot>? captureSnapshot;
+    private readonly Func<bool>? armCapture;
+    private AuthorizationCaptureSnapshot? lastCapture;
+    private readonly Button captureButton = new() { Content = "Capture next reminder check", MinHeight = 36, Margin = new Thickness(0, 12, 0, 0) };
+    private readonly TextBox captureResult = new() { IsReadOnly = true, TextWrapping = TextWrapping.Wrap, MinHeight = 100, MaxHeight = 360, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
 
-    internal DiagnosticsWindow(MainWindow main, CommandCoordinator commands, Action showHome)
+    internal DiagnosticsWindow(MainWindow main, CommandCoordinator commands, Action showHome,
+        Func<AuthorizationCaptureSnapshot>? captureSnapshot = null, Func<bool>? armCapture = null)
     {
+        this.captureSnapshot = captureSnapshot; this.armCapture = armCapture;
         this.main = main; this.commands = commands;
         Title = "Offramp Shift — Diagnostics"; Width = 880; Height = 650; MinWidth = 640; MinHeight = 480;
         FontFamily = main.FontFamily; FontSize = 14; DataContext = main.Model;
@@ -45,8 +52,14 @@ internal sealed class DiagnosticsWindow : Window
         var technical = new Expander { Header = "Technical identifiers", Margin = new Thickness(0, 12, 0, 0) };
         var technicalBody = new StackPanel(); AddSection(technicalBody, "Runtime details", ["Observation consent", "Provider availability", "Recorded allowance", "Intervention", "Storage failure", "Windows settings", "Configuration", "Sequence / epoch", "Reminder generation", "Switching availability", "Engine state", "Desktop GUIDs"]);
         technical.Content = technicalBody; detail.Children.Add(technical); columns.Children.Add(detail);
+        detail.Children.Add(new TextBlock { Text = "One reminder authorization check", FontSize = 16, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 16, 0, 8) });
+        detail.Children.Add(new TextBlock { Text = "Explicit capture only. After arming, return to an ordinary app on Personal and wait for the next normal interactive reminder. No reminder is forced.", TextWrapping = TextWrapping.Wrap });
+        System.Windows.Automation.AutomationProperties.SetName(captureResult, "Reminder authorization capture result");
+        detail.Children.Add(captureResult);
+        captureButton.Click += (_, _) => { armCapture?.Invoke(); Refresh(); };
         actions.Children.Add(new TextBlock { Text = "Available actions", FontSize = 16, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 8) });
         actions.Children.Add(new TextBlock { Text = "Actions follow current host eligibility.", TextWrapping = TextWrapping.Wrap });
+        actions.Children.Add(captureButton);
         foreach (var (label, kind, gate) in new[] {
             ("Retry monitoring", HostCommandKind.RetryMonitoring, nameof(DashboardModel.CanRetryMonitoring)),
             ("Retry save", HostCommandKind.RetrySave, nameof(DashboardModel.CanRetrySave)),
@@ -101,6 +114,13 @@ internal sealed class DiagnosticsWindow : Window
     {
         Icon = main.Icon;
         var model = main.Model; var snapshot = model.Snapshot; var recorded = model.Recorded;
+        var capture = captureSnapshot?.Invoke();
+        captureButton.IsEnabled = armCapture is not null && capture?.State is AuthorizationCaptureState.Idle or AuthorizationCaptureState.Complete;
+        if (capture != lastCapture || captureResult.Text.Length == 0)
+        {
+            lastCapture = capture;
+            captureResult.Text = capture?.ToJson() ?? "Capture unavailable in this view.";
+        }
         void Set(string label, object? value)
         {
             var text = value?.ToString() ?? "Not exposed by this runtime";
@@ -147,6 +167,10 @@ internal sealed class DiagnosticsCompanion(UiPreferences preferences, Func<Diagn
     internal void Open()
     {
         if (!preferences.ShowDiagnostics) return;
+        OpenTransient();
+    }
+    internal void OpenTransient()
+    {
         if (Window is null)
         {
             Window = create();

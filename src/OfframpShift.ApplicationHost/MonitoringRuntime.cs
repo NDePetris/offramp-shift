@@ -99,17 +99,27 @@ public sealed class MonitoringRuntime : IDisposable
         p.Input == Capability.Available && !p.InputDiscontinuity && p.IdleAgeMs is >= 0 && p.IdleAgeMs < configuration.IdleThresholdMs &&
         p.Foreground == Capability.Available && p.CollectionMs is >= 0 and <= 500;
 
-    internal NudgePresentation? BeginNudgePresentation(ReminderEvent value)
+    internal NudgePresentation? BeginNudgePresentation(ReminderEvent value, AuthorizationCaptureAttempt? capture = null)
     {
+        if (capture is not null) capture.Stage = AuthorizationCaptureStage.EventBeforeDesktopCheck;
         NudgeAuthorizationFailure = "Reminder eligibility changed or expired.";
         presentation = null;
         Drain(); RefreshHealth();
         if (!ValidEvent(value)) return null;
         // Validate the ORIGINAL foreground before any WPF construction. A new
         // candidate has no shell identity yet and is verified strictly after Show.
-        var membership = source.CheckNudgePresentation(value.ForegroundWindow, value.ForegroundWindow, personal, false);
+        NudgeDesktopCheck membership;
+        if (capture is null) membership = source.CheckNudgePresentation(value.ForegroundWindow, value.ForegroundWindow, personal, false);
+        else
+        {
+            capture.Stage = AuthorizationCaptureStage.WorkerCheck;
+            var response = source.CaptureNudgePresentation(value.ForegroundWindow, value.ForegroundWindow, personal, work);
+            capture.Worker = response.Diagnostic;
+            membership = response.Result;
+        }
         if (membership != NudgeDesktopCheck.Allowed)
         { NudgeAuthorizationFailure = "Desktop check: " + membership + "."; return null; }
+        if (capture is not null) capture.Stage = AuthorizationCaptureStage.EventAfterDesktopCheck;
         Drain(); RefreshHealth();
         if (!ValidEvent(value)) return null;
         // Consume the event exactly once. Layout now has a separate bounded contract;

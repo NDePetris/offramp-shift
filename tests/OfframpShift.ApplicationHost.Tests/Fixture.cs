@@ -39,6 +39,22 @@ internal sealed class FakeSource(Fixture fixture) : IObservationSource
     public NudgeDesktopCheck? NudgeCheckOverride { get; set; }
     public List<bool> NudgeCheckPhases { get; } = [];
     public Action? OnNudgeCheck { get; set; }
+    public int CapturedNudgeChecks { get; private set; }
+    public NudgeCheckResponse CaptureNudgePresentation(nint nudge, nint foreground, Guid personal, Guid work)
+    {
+        CapturedNudgeChecks++;
+        var result = CheckNudgePresentation(nudge, foreground, personal, false);
+        return new(result, new()
+        {
+            Result = result,
+            Stage = result == NudgeDesktopCheck.Allowed ? NudgeCheckStage.Allowed : NudgeCheckStage.CandidateIdentity,
+            CurrentBefore = DesktopIdentityCategory.Personal,
+            CurrentMembershipCode = 0,
+            OnCurrent = true,
+            HostingIdentityCode = 0,
+            HostingIdentity = result == NudgeDesktopCheck.Allowed ? DesktopIdentityCategory.Personal : DesktopIdentityCategory.Work
+        });
+    }
     public bool CheckNudgeDesktop(nint nudge, nint foreground, Guid personal)
     { OnNudgeCheck?.Invoke(); return NudgeDesktopValid && nudge != 0 && foreground == Window && (Current ?? fixture.Personal) == personal; }
     public NudgeDesktopCheck CheckNudgePresentation(nint nudge, nint foreground, Guid personal, bool prepareOnly)

@@ -5,6 +5,7 @@
     <!-- Compile the existing ABI privately; no production visibility or policy change. -->
     <Compile Include="../../../src/OfframpShift.WindowsObservation/DesktopWorker.cs" Link="Existing/DesktopWorker.cs" />
     <Compile Include="../../../src/OfframpShift.WindowsObservation/Evidence.cs" Link="Existing/Evidence.cs" />
+    <Compile Include="../../../src/OfframpShift.WindowsObservation/NudgeDesktopDiagnostic.cs" Link="Existing/NudgeDesktopDiagnostic.cs" />
     <Compile Include="../../../src/OfframpShift.WindowsObservation/Native.cs" Link="Existing/Native.cs" />
     <Compile Include="../Probe/UserObservationGate.cs" Link="Existing/UserObservationGate.cs" />
   </ItemGroup>

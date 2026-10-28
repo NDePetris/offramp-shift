@@ -39,7 +39,7 @@ $inputs = @(
     Get-Item (Join-Path $taskRoot 'global.json')
     Get-ChildItem (Join-Path $taskRoot 'src/OfframpShift.Core') -File
     Get-Item (Join-Path $taskRoot 'src/Directory.Build.props')
-    foreach ($name in @('DesktopWorker.cs', 'Evidence.cs', 'Native.cs')) {
+    foreach ($name in @('DesktopWorker.cs', 'Evidence.cs', 'Native.cs', 'NudgeDesktopDiagnostic.cs')) {
         Get-Item (Join-Path $taskRoot "src/OfframpShift.WindowsObservation/$name")
     }
 ) | Sort-Object FullName

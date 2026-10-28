@@ -11,6 +11,7 @@ internal static class Program
     {
         if (args.Length != 0) return 2; // A broken spawn guard must not recursively run tests.
         var cases = 0;
+        NudgeCaptureRegressions.Run();
         var personal = Guid.NewGuid();
         var missing = unchecked((int)0x8002802B);
         if (WindowDesktopMembership.CheckCandidate(true, missing, Guid.Empty, personal, true, false) != NudgeDesktopCheck.Allowed ||
@@ -27,6 +28,8 @@ internal static class Program
             using var worker = new DesktopWorker();
             if (worker.OwnedProcess is not null || worker.Read().Health != Capability.Unsupported ||
                 DesktopWorker.Run() != 2 || worker.CheckNudge(1, 2, Guid.NewGuid()) || Native.Calls != 0) return 1;
+            var capture = worker.CaptureNudgeStatus(1, 1, Guid.NewGuid(), Guid.NewGuid());
+            if (capture.Result != NudgeDesktopCheck.WorkerUnavailable || capture.Diagnostic?.Stage != NudgeCheckStage.Unsupported || Native.Calls != 0) return 1;
             cases++;
         }
         foreach (var build in new[] { "26200.9457", "26200.9711", "26300.9711", "26300.9712" })
@@ -54,6 +57,13 @@ internal static class Program
             cases++;
         }
         Console.WriteLine($"PASS: {cases} unsupported-build/process/OS-architecture constructor/worker-entry cases rejected without child or native activation; exact/family matrices passed (test-only registry/runtime/native stubs).");
+        RuntimeInformation.OSArchitecture = Architecture.X64;
+        Registry.Build = "26300.9711";
+        // Child rejects its unrecognized argument before any native call; this is not a COM worker exercise.
+        using var unavailableWorker = new DesktopWorker("--capture-test-exit");
+        var unavailable = unavailableWorker.CaptureNudgeStatus(1, 1, Guid.NewGuid(), Guid.NewGuid());
+        if (unavailable.Result != NudgeDesktopCheck.WorkerUnavailable || unavailable.Diagnostic?.Stage != NudgeCheckStage.WorkerUnavailable || Native.Calls != 0) return 1;
+        Console.WriteLine("PASS: unavailable owned capture worker reports terminal unavailability without query retry or native activation.");
         return 0;
     }
 }
