@@ -6,6 +6,10 @@ Its categorical result is exposed in Diagnostics; it does not issue a host comma
 save preferences, repeat membership queries or change authorization/presentation.
 The `--open-diagnostics` launch option opens this view temporarily without arming
 capture or changing its saved visibility preference.
+PR #30 integrates PR #29's checkpoint v4 without a storage or authorization change.
+The [combined-build owner report](../validation/interactive-reminder-authorization-capture.md#combined-build-owner-report--october-28-2026)
+records successful Personal membership capture on 26300.9711/x64 separately from
+unexplained CandidateWrongDesktop rejections and intermittent reminder visibility.
 
 This is the first launchable WPF/tray app, not production readiness, certified
 accounting or approval for unattended daily use. Explorer recovery [#8](https://github.com/NDePetris/offramp-shift/issues/8)

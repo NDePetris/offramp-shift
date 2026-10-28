@@ -14,17 +14,17 @@ new evidence.
 
 ## Owner procedure
 
-Use a build containing this PR. Exit the incumbent app normally before launching
-another build; do not kill it, reset accounting, repair stores or change assignments
-to make the diagnostic run. Live validation is **NOT RUN** until the owner supplies
-the captured result.
+Use a build containing both PR #29 and PR #30. Any future owner-run launch must
+follow a normal incumbent-app exit; do not kill it, reset accounting, repair stores
+or change assignments to make the diagnostic run. Repository cleanup does not
+launch or stop the app or open the owner store.
 
-**Storage compatibility:** this PR targets main and excludes draft PR #29. Main
-uses checkpoint v3; PR #29's timed-Pause branch uses v4. If the current app has
-written v4, a main-only build cannot read it. Use a separate local integration of
-this capture commit onto that existing app revision; do not downgrade or reset the
-store. Such an owner-evaluation integration does not belong in either PR. An
-incompatible/blocked app cannot produce the next ordinary reminder.
+**Storage compatibility:** PR #30 now integrates main containing merged PR #29.
+The combined code retains timed Pause and checkpoint v4; SQLite schema/user_version
+remains 1. Strict v1/v2/v3 migration, expiry, recovery and fail-closed persistence
+are unchanged by capture. Never run a v3-only executable against the owner's v4
+store, downgrade it or reset it. An incompatible/blocked app cannot produce the
+next ordinary reminder.
 
 From a compatible checkout, build into isolated outputs in PowerShell:
 
@@ -140,8 +140,9 @@ unsupported builds/architectures; owned unavailable non-COM worker; privacy; UI
 activation without a host command; and temporary opening without saved preferences.
 Fakes, disposable storage and owned WPF/non-COM processes do not prove live shell
 membership or accounting accuracy. All seven required results are recorded in the
-PR. **Live validation: NOT RUN.** No authorization exception, merge, release or
-deployment is included.
+PR. The original capture-only validation below was automated; live validation was
+**NOT RUN at that stage**. The later bounded owner report is recorded separately
+below. No authorization exception, release or deployment is included.
 
 All seven required checks passed with SDK **10.0.401**, warnings as errors:
 
@@ -162,3 +163,56 @@ some existing runners execute fixed DLL paths. The final compatibility log
 explicitly confirms execution of the new captured/uncaptured sequence regressions
 and the unavailable owned capture-worker check. Existing owner instances were
 not stopped or changed. `git diff --check` also passed.
+
+## Combined-build owner report — October 28, 2026
+
+The owner reported a successful one-shot authorization capture on **Windows
+26300.9711/x64** from local combined build
+**bd4f9fc29ee58036b77a3a3f798f290d66079e03** (PR #29 head 7349469 plus PR #30 head
+8e42c93). It retained checkpoint v4 and showed valid Personal desktop membership.
+This is bounded owner-reported live success, not an agent-executed acceptance run.
+No new hardware, monitor/scaling or privilege matrix was supplied with this report.
+
+One reminder remained behind Chrome after foreground activation was refused.
+Subsequent reminders appeared in front of Chrome and Codex, including tests across
+desktops. Visibility has improved after PR #28 but remains intermittent; issue
+[#22](https://github.com/NDePetris/offramp-shift/issues/22) stays open.
+
+The successful capture did **not** reproduce or explain the earlier
+`CandidateWrongDesktop` failures. Track that separately in
+[#31](https://github.com/NDePetris/offramp-shift/issues/31). Future investigation
+requires an explicitly armed one-shot capture of an actual rejecting invocation.
+No application-specific, pinned-window or Windows API cause is established and no
+authorization change is justified.
+
+Timed Pause's three-step Windows owner smoke remains **NOT RUN**, as do the
+previously deferred PR 5 Tests 8–12. This report does not establish sustained
+monitoring accuracy, recovery, accessibility or unattended daily-use readiness.
+
+## Repository integration checks — October 28, 2026
+
+Main containing merged PR #29 was merged into the existing PR #30 branch without
+rewriting history. Git merged the four overlapping files cleanly; manual review
+confirmed both behaviors are retained. Before documentation updates, the merged
+tree exactly matched bd4f9fc's tree (cebd5c2f52f642158114943376c431f97dba83e2).
+Only the three validation/architecture documents changed afterward.
+
+All seven required commands passed with pinned SDK **10.0.401**, warnings as errors:
+
+| Command | Integrated automated result |
+|---|---|
+| `./run.ps1 test` | PASS: Core 86; Persistence 108 / 970 assertions; Host 343 / 3,312; App 164 / 195; zero failures |
+| `./run.ps1 format` | PASS: verify-no-changes |
+| `./spikes/VirtualDesktop/run.ps1 test` | PASS: 58 fake-policy cases and owned non-COM isolation |
+| `./spikes/BrowserAttribution/run.ps1 test` | PASS: synthetic policy/protocol/extension/transport |
+| `./spikes/WindowsObservation/run.ps1 test` | PASS: 41 tests / 10,300 assertions |
+| `./spikes/WindowsObservation/compatibility.ps1 test` | PASS: unsupported-entry guards, capture regressions and 16 synthetic/owned-process groups; no COM |
+| `./spikes/WindowsObservation/run.ps1 format` | PASS: verify-no-changes |
+
+Application checks used environment-only `UseArtifactsOutput=true` and isolated
+`artifacts/repository-cleanup-checks`; probe checks used their established outputs.
+Logs use ignored `artifacts/cleanup-*.log`. Tests exercise fake providers/clocks,
+disposable SQLite and owned synthetic WPF/non-COM processes. They do not perform
+owner acceptance. The running owner app and its isolated combined-build outputs
+were preserved; cleanup did not open or modify owner data. Checkpoint payload
+version remains 4 and SQLite schema/user_version remains 1.
