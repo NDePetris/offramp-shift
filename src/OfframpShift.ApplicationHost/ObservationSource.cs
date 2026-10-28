@@ -21,6 +21,11 @@ public interface IObservationSource : IDisposable
     bool CheckNudgeDesktop(nint nudge, nint foreground, Guid personal) => false;
     NudgeDesktopCheck CheckNudgePresentation(nint nudge, nint foreground, Guid personal, bool prepareOnly) =>
         CheckNudgeDesktop(nudge, foreground, personal) ? NudgeDesktopCheck.Allowed : NudgeDesktopCheck.QueryUnavailable;
+    NudgeCheckResponse CaptureNudgePresentation(nint nudge, nint foreground, Guid personal, Guid work)
+    {
+        var result = CheckNudgePresentation(nudge, foreground, personal, false);
+        return new(result, new() { Result = result }); // Provider has no diagnostic instrumentation.
+    }
     object Diagnostics => new { };
 }
 
@@ -73,6 +78,9 @@ public sealed class WindowsObservationSource : IObservationSource
     public bool CheckNudgeDesktop(nint nudge, nint foreground, Guid personal) => worker?.CheckNudge(nudge, foreground, personal) == true;
     public NudgeDesktopCheck CheckNudgePresentation(nint nudge, nint foreground, Guid personal, bool prepareOnly) =>
         worker?.CheckNudgeStatus(nudge, foreground, personal, prepareOnly) ?? NudgeDesktopCheck.WorkerUnavailable;
+    public NudgeCheckResponse CaptureNudgePresentation(nint nudge, nint foreground, Guid personal, Guid work) =>
+        worker?.CaptureNudgeStatus(nudge, foreground, personal, work) ?? new(NudgeDesktopCheck.WorkerUnavailable,
+            new() { Stage = NudgeCheckStage.WorkerUnavailable });
     public void ReplaceDesktopWorker()
     {
         resources.Retire(worker?.OwnedProcess); worker?.Dispose(); worker = null;

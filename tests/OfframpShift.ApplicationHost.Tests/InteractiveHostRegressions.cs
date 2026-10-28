@@ -27,6 +27,76 @@ internal static class InteractiveHostRegressions
     }
     internal static void Run()
     {
+        Test("authorization capture is off by default and arming does not mutate accounting settings or eligibility", () =>
+        {
+            using var f = new Fixture(); using var app = Interactive(f);
+            var before = app.Snapshot(); var settings = File.ReadAllBytes(Path.Combine(f.PathName, "windows-settings.json"));
+            Check(app.AuthorizationCapture.Snapshot.State == AuthorizationCaptureState.Idle);
+            Check(app.AuthorizationCapture.Arm() && !app.AuthorizationCapture.Arm());
+            var after = app.Snapshot();
+            Check(before.State == after.State && before.ReminderGeneration == after.ReminderGeneration && before.Settings == after.Settings);
+            Check(settings.SequenceEqual(File.ReadAllBytes(Path.Combine(f.PathName, "windows-settings.json"))));
+            var begin = app.Execute(Authorize(Take(app))); Check(begin.Succeeded);
+            var captured = app.AuthorizationCapture.Snapshot;
+            Check(captured.State == AuthorizationCaptureState.Complete && captured.Report is { Authorized: true, Stage: AuthorizationCaptureStage.Authorized });
+            Check(captured.Report!.Worker is { Role: NudgeWindowRole.OriginalForeground, Result: NudgeDesktopCheck.Allowed });
+            Check(captured.Report.Provenance.RunningApplicationRevision == "Unknown"); // Entry is the test runner, not the app.
+            Check(f.Source!.CapturedNudgeChecks == 1);
+            Check(app.Execute(new(HostCommandKind.CompleteNudgePresentation) { Presentation = begin.Presentation, NudgeWindow = 2 }).Succeeded);
+            Check(f.Source.CapturedNudgeChecks == 1 && app.AuthorizationCapture.Snapshot == captured);
+        });
+        Test("authorization capture records the actual worker rejection once without altering the result", () =>
+        {
+            using var f = new Fixture(); using var app = Interactive(f);
+            var reminder = Take(app); f.Source!.NudgeCheckOverride = NudgeDesktopCheck.CandidateWrongDesktop;
+            Check(app.AuthorizationCapture.Arm());
+            var rejected = app.Execute(Authorize(reminder));
+            Check(!rejected.Succeeded && rejected.Message == "Desktop check: CandidateWrongDesktop.");
+            var captured = app.AuthorizationCapture.Snapshot;
+            Check(captured.Report is { Authorized: false, Stage: AuthorizationCaptureStage.WorkerCheck });
+            Check(captured.Report!.Worker is
+            {
+                Result: NudgeDesktopCheck.CandidateWrongDesktop, HostingIdentity: DesktopIdentityCategory.Work,
+                ShellStable: DiagnosticCheck.NotEvaluated, ForegroundAfter: DiagnosticCheck.NotEvaluated
+            });
+            app.Execute(Authorize(reminder)); Check(f.Source.CapturedNudgeChecks == 1 && app.AuthorizationCapture.Snapshot == captured);
+            var json = captured.ToJson();
+            Check(!json.Contains(f.Personal.ToString(), StringComparison.OrdinalIgnoreCase) && !json.Contains(f.Work.ToString(), StringComparison.OrdinalIgnoreCase));
+            Check(!json.Contains(f.PathName, StringComparison.Ordinal) && !json.Contains("opaque-test", StringComparison.Ordinal));
+        });
+        Test("authorization capture consumes rejected host and event attempts with no fabricated worker evidence", () =>
+        {
+            using var f = new Fixture(); using var app = Interactive(f);
+            var reminder = Take(app); Check(app.AuthorizationCapture.Arm());
+            Check(!app.Execute(Authorize(reminder with { ExpiresTick = Environment.TickCount64 - 1 })).Succeeded);
+            Check(app.AuthorizationCapture.Snapshot.Report is { Worker: null, Stage: AuthorizationCaptureStage.EventBeforeDesktopCheck });
+            Check(f.Source!.CapturedNudgeChecks == 0);
+            Check(app.AuthorizationCapture.Arm());
+            Check(!app.Execute(new(HostCommandKind.BeginNudgePresentation)).Succeeded);
+            Check(app.AuthorizationCapture.Snapshot.Report is { Worker: null, Stage: AuthorizationCaptureStage.HostPrerequisites });
+        });
+        Test("authorization capture handles concurrent consumption stop and process-local restart", () =>
+        {
+            var capture = new ReminderAuthorizationCapture("26300.9711"); Check(capture.Arm());
+            var attempts = Enumerable.Range(0, 16).AsParallel().Select(_ => capture.TryBegin()).Where(x => x is not null).ToArray();
+            Check(attempts.Length == 1 && !capture.Arm());
+            capture.Stop(); capture.Complete(attempts[0]!);
+            Check(capture.Snapshot.State == AuthorizationCaptureState.Stopped && capture.Snapshot.Report is null && !capture.Arm());
+            Check(new ReminderAuthorizationCapture("26300.9711").Snapshot.State == AuthorizationCaptureState.Idle);
+            Check(ReminderAuthorizationCapture.EmbeddedRevision(null) == "Unknown");
+        });
+        Test("controller capture is independent of host commands and clears on shutdown", () =>
+        {
+            using var f = new Fixture(); var controller = new MonitoringController(() => f.App(supported: false));
+            try
+            {
+                Check(SpinWait.SpinUntil(() => controller.Latest is not null, 5_000));
+                Check(controller.ArmAuthorizationCapture() && controller.AuthorizationCapture.State == AuthorizationCaptureState.Armed);
+                Check(controller.StopAsync().Wait(5_000));
+                Check(!controller.ArmAuthorizationCapture() && controller.AuthorizationCapture.State == AuthorizationCaptureState.Stopped);
+            }
+            finally { controller.StopAsync().GetAwaiter().GetResult(); }
+        });
         Test("destroying the nudge during fresh deferral authorization rejects without granting time", () =>
         {
             using var f = new Fixture(); using var app = Interactive(f);

@@ -193,5 +193,38 @@ internal static class SettingsDiagnosticsRegressions
             main.Apply(seed with { Sequence = 4, State = seed.State! with { UsageMs = 120_000 } });
             Check(main.Model.Tray.Allowance.Contains(main.Model.HeroValue));
         });
+        test("Diagnostics capture action is explicit in-memory and separate from accounting commands", () =>
+        {
+            var calls = 0;
+            var main = new MainWindow(_ => { calls++; return Task.FromResult(HostCommandResult.Success()); }, () => Task.CompletedTask, () => Task.CompletedTask);
+            main.Apply(snapshot());
+            var capture = new ReminderAuthorizationCapture("26300.9711");
+            var diagnostics = new DiagnosticsWindow(main, new CommandCoordinator(), () => { }, () => capture.Snapshot, capture.Arm)
+            { ShowActivated = false, ShowInTaskbar = false };
+            diagnostics.Show(); diagnostics.UpdateLayout();
+            var button = HomeShellInspection.Descendants((DependencyObject)diagnostics.Content).OfType<Button>()
+                .Single(x => x.Content is string text && text == "Capture next reminder check");
+            Check(button.IsEnabled && capture.Snapshot.State == AuthorizationCaptureState.Idle);
+            button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Check(!button.IsEnabled && capture.Snapshot.State == AuthorizationCaptureState.Armed && calls == 0);
+            var result = HomeShellInspection.Descendants((DependencyObject)diagnostics.Content).OfType<TextBox>()
+                .Single(x => System.Windows.Automation.AutomationProperties.GetName(x) == "Reminder authorization capture result");
+            Check(result.IsReadOnly && result.Text.Contains("Armed", StringComparison.Ordinal));
+            diagnostics.Close();
+        });
+        test("temporary Diagnostics opening never changes its saved preference or arms capture", () =>
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "offramp-transient-diagnostics-" + Guid.NewGuid().ToString("N"));
+            var preferences = new UiPreferences(directory); preferences.Load();
+            var capture = new ReminderAuthorizationCapture("26300.9711");
+            var main = new MainWindow(_ => throw new InvalidOperationException("No host command expected"), () => Task.CompletedTask, () => Task.CompletedTask);
+            main.Apply(snapshot());
+            using var companion = new DiagnosticsCompanion(preferences,
+                () => new DiagnosticsWindow(main, new CommandCoordinator(), () => { }, () => capture.Snapshot, capture.Arm) { ShowActivated = false, ShowInTaskbar = false });
+            companion.Open(); Check(companion.Window is null);
+            companion.OpenTransient();
+            Check(companion.Window is not null && !preferences.ShowDiagnostics && !Directory.Exists(directory));
+            Check(capture.Snapshot.State == AuthorizationCaptureState.Idle);
+        });
     }
 }

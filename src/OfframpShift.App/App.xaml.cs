@@ -8,6 +8,7 @@ namespace OfframpShift.App;
 public partial class ShiftApplication : Application
 {
     private readonly SingleInstance instance = null!;
+    private readonly bool openDiagnostics;
     private MonitoringController? controller;
     private MainWindow? window;
     private TrayService? tray;
@@ -20,14 +21,16 @@ public partial class ShiftApplication : Application
     private DiagnosticsCompanion? diagnostics;
     private readonly CommandCoordinator commands = new();
     public ShiftApplication() { InitializeComponent(); }
-    internal ShiftApplication(SingleInstance instance) : this() { this.instance = instance; }
+    internal ShiftApplication(SingleInstance instance, bool openDiagnostics = false) : this()
+    { this.instance = instance; this.openDiagnostics = openDiagnostics; }
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
         controller = WindowsApplication.Start();
         window = new(Execute, ExitAsync, CloseAsync); MainWindow = window;
         uiPreferences = new(SqliteCheckpointStore.DefaultDirectory); uiPreferences.Load();
-        diagnostics = new(uiPreferences, () => new DiagnosticsWindow(window, commands, () => Open(false)));
+        diagnostics = new(uiPreferences, () => new DiagnosticsWindow(window, commands, () => Open(false),
+            () => controller.AuthorizationCapture, controller.ArmAuthorizationCapture));
         window.ShowDiagnosticsPreference(uiPreferences.ShowDiagnostics, uiPreferences.Error);
         window.SetDiagnosticsEnabled = enabled =>
         {
@@ -55,6 +58,7 @@ public partial class ShiftApplication : Application
         timer.Tick += (_, _) => Refresh(); timer.Start();
         Microsoft.Win32.SystemEvents.DisplaySettingsChanged += DisplaySettingsChanged;
         window.Show();
+        if (openDiagnostics) diagnostics.OpenTransient();
         SessionEnding += (_, _) => controller.StopAsync();
     }
     private void DisplaySettingsChanged(object? sender, EventArgs e) => Dispatcher.BeginInvoke(() => nudges?.Close());

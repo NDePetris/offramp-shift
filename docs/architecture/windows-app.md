@@ -1,5 +1,12 @@
 # Owner-evaluation Windows app
 
+An explicitly armed, process-local [reminder authorization capture](../validation/interactive-reminder-authorization-capture.md)
+can retain one real initial authorization check from the existing isolated worker.
+Its categorical result is exposed in Diagnostics; it does not issue a host command,
+save preferences, repeat membership queries or change authorization/presentation.
+The `--open-diagnostics` launch option opens this view temporarily without arming
+capture or changing its saved visibility preference.
+
 This is the first launchable WPF/tray app, not production readiness, certified
 accounting or approval for unattended daily use. Explorer recovery [#8](https://github.com/NDePetris/offramp-shift/issues/8)
 and sustained accuracy/reliability [#9](https://github.com/NDePetris/offramp-shift/issues/9)

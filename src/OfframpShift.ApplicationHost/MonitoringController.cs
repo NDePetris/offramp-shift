@@ -10,6 +10,13 @@ public sealed class MonitoringController
     private readonly object submissionGate = new();
     private HostSnapshot? latest;
     private object? finalDiagnostics;
+    private ReminderAuthorizationCapture? authorizationCapture;
+    public AuthorizationCaptureSnapshot AuthorizationCapture => Volatile.Read(ref authorizationCapture)?.Snapshot ?? new(AuthorizationCaptureState.Idle, null);
+    public bool ArmAuthorizationCapture()
+    {
+        lock (submissionGate)
+            return !stopping && !stopped.Task.IsCompleted && Volatile.Read(ref authorizationCapture)?.Arm() == true;
+    }
     // Published once after a graceful owner-loop stop; never polls a live owner.
     public object? FinalDiagnostics => Volatile.Read(ref finalDiagnostics);
     private BreakReminderMailbox? reminders;
@@ -99,6 +106,7 @@ public sealed class MonitoringController
         lock (submissionGate)
         {
             stopping = true; Volatile.Read(ref reminders)?.Invalidate();
+            Volatile.Read(ref authorizationCapture)?.Stop();
             activeSwitchAuthorization?.Revoke();
             // The owner can stop immediately, but graceful UI shutdown must keep
             // the independent supervisor alive until its bounded cleanup finishes.
@@ -112,6 +120,7 @@ public sealed class MonitoringController
         try
         {
             using var application = create();
+            Volatile.Write(ref authorizationCapture, application.AuthorizationCapture);
             Volatile.Write(ref reminders, application.Reminders);
             var turns = new OperationTiming(); var commandTiming = new OperationTiming(); var publicationTiming = new OperationTiming();
             void Publish()
@@ -161,6 +170,7 @@ public sealed class MonitoringController
             lock (submissionGate)
             {
                 stopping = true;
+                Volatile.Read(ref authorizationCapture)?.Stop();
                 Volatile.Read(ref reminders)?.Invalidate();
                 while (commands.TryTake(out var pending)) pending.Completion.TrySetResult(HostCommandResult.Failure("The monitoring owner stopped."));
             }
